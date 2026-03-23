@@ -1,0 +1,42 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--bg-primary);
+}
+
+.main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.editor {
+    flex: 1;
+    height: 100%;
+    background-color: var(--bg-primary);
+}
+
+.panel {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-lg);
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+}
+
+.panelContent {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.panelBody {
+    flex: 1;
+    overflow: auto;
+    padding: var(--spacing-md);
+}
+
+.middleGroup {
+    flex: 1;
+}

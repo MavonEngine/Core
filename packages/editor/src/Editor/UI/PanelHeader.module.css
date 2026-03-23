@@ -1,0 +1,15 @@
+.panelHeader {
+    height: 28px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--spacing-md);
+    background-color: var(--bg-header);
+    font-family: var(--font-ui);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    user-select: none;
+}

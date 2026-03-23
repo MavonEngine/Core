@@ -1,0 +1,38 @@
+.statusBar {
+    height: 22px;
+    min-height: 22px;
+    background-color: var(--bg-statusbar);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--spacing-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-bright);
+}
+
+.section {
+    display: flex;
+    gap: var(--spacing-xl);
+    align-items: center;
+}
+
+.stat {
+    display: flex;
+    gap: var(--spacing-sm);
+    font-family: var(--font-mono);
+}
+
+.statLabel {
+    opacity: 0.7;
+    font-family: var(--font-mono);
+}
+
+.branch {
+    font-family: var(--font-ui);
+    font-weight: 500;
+}
+
+.engineName {
+    font-family: var(--font-ui);
+    font-weight: 600;
+}

@@ -1,0 +1,290 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Object name header row */
+.nameRow {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    gap: 8px;
+    background-color: var(--bg-panel);
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.nameIcon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.nameText {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--text-bright);
+}
+
+/* Section header (collapsible) */
+.sectionHeader {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.sectionHeader:hover {
+    background-color: var(--bg-hover);
+}
+
+.sectionArrow {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    transition: transform 0.1s ease;
+}
+
+.sectionArrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+.sectionTitle {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Divider */
+.divider {
+    height: 1px;
+    background-color: var(--border-primary);
+    margin: 0;
+}
+
+/* Property row with 3 values (Transform) */
+.propertyRow3 {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    gap: 8px;
+}
+
+.propertyLabel {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    width: 60px;
+    flex-shrink: 0;
+}
+
+.valueInput {
+    width: 52px;
+    height: 20px;
+    padding: 0 6px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    outline: none;
+    box-sizing: border-box;
+}
+
+.valueInput:focus {
+    border-color: var(--accent-blue);
+}
+
+/* Checkbox row */
+.checkboxRow {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    gap: 6px;
+}
+
+.checkbox {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent-blue);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.checkboxLabel {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* Single value property row */
+.propertyRow {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    gap: 8px;
+}
+
+.propertyLabelWide {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    width: 80px;
+    flex-shrink: 0;
+}
+
+.valueDisplay {
+    display: flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    min-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.valueInputWide {
+    flex: 1;
+    height: 20px;
+    padding: 0 6px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    outline: none;
+    box-sizing: border-box;
+}
+
+.valueInputWide:focus {
+    border-color: var(--accent-blue);
+}
+
+/* Slider row */
+.sliderRow {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    gap: 8px;
+}
+
+.sliderTrack {
+    flex: 1;
+    height: 4px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+}
+
+.sliderFill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background-color: var(--accent-blue);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.sliderThumb {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    background-color: var(--text-bright);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.sliderInput {
+    width: 48px;
+    height: 20px;
+    padding: 0 4px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    outline: none;
+    box-sizing: border-box;
+    text-align: right;
+}
+
+.sliderInput:focus {
+    border-color: var(--accent-blue);
+}
+
+/* Draggable value input */
+.draggableInput {
+    width: 52px;
+    height: 20px;
+    padding: 0 6px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    outline: none;
+    box-sizing: border-box;
+    cursor: ew-resize;
+}
+
+.draggableInput:focus {
+    border-color: var(--accent-blue);
+    cursor: text;
+}
+
+/* Empty state */
+.empty {
+    padding: 16px 8px;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: var(--font-size-md);
+    font-style: italic;
+}
+
+/* Color input */
+.colorInput {
+    width: 32px;
+    height: 20px;
+    padding: 1px 2px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-input);
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+/* Prefab section wrapper */
+.prefabSection {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}

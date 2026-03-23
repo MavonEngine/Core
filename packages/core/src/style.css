@@ -1,0 +1,53 @@
+* {
+    margin: 0;
+}
+
+/* Add to your global CSS */
+body {
+  overflow: hidden;
+}
+
+
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+
+.point {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    pointer-events: none;
+}
+
+.point .label {
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: white;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.5);
+    font-family: Helvetica, Arial, sans-serif;
+    line-height: 40px;
+    font-weight: 100;
+    font-size: 14px;
+}
+
+.point .text {
+    position: absolute;
+    top: 30px;
+    width: 200px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    line-height: 1.3rem;
+    font-weight: 100;
+    font-size: 14px;
+    left: -100px;
+    text-align: center;
+    padding: 20px;
+    border-radius: 10px;
+}

@@ -1,0 +1,36 @@
+.activityBar {
+  width: 40px;
+  min-width: 40px;
+  height: 100%;
+  background-color: var(--bg-header);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-md) 0;
+  gap: var(--spacing-xs);
+  border-right: 1px solid var(--border-primary);
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.1s ease;
+}
+
+.icon:hover {
+  background-color: var(--bg-hover);
+}
+
+.icon.active {
+  background-color: var(--accent-blue);
+}
+
+.icon svg {
+  width: 16px;
+  height: 16px;
+}

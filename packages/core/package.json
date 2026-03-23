@@ -1,0 +1,73 @@
+{
+  "name": "@mavonengine/core",
+  "type": "module",
+  "version": "0.0.6",
+  "description": "",
+  "author": "",
+  "license": "ISC",
+  "keywords": [
+    "game-engine",
+    "3d",
+    "three",
+    "threejs",
+    "webgl",
+    "typescript",
+    "vite",
+    "rapier",
+    "physics",
+    "multiplayer"
+  ],
+  "files": [
+    "dist",
+    "vite.config.js"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./vite.config": "./vite.config.js",
+    "./*.glsl": "./dist/*.glsl",
+    "./*.css": "./dist/*.css",
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json && find src -name '*.glsl' -o -name '*.css' | while read f; do mkdir -p dist/$(dirname ${f#src/}) && cp $f dist/${f#src/}; done",
+    "dev": "rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest",
+    "test:ui": "vitest --ui --coverage.enabled true --coverage.reporter html",
+    "test:coverage": "vitest --coverage.enabled true --coverage.reporter json-summary",
+    "test:dev": "vitest"
+  },
+  "peerDependencies": {
+    "@dimforge/rapier3d-compat": "0.18.2",
+    "@geckos.io/client": "^3.0.2",
+    "@geckos.io/server": "^3.0.0",
+    "express": "5.1.0",
+    "three": "^0.176.0",
+    "vite": "^6.3.5",
+    "winston": "3.17.0"
+  },
+  "dependencies": {
+    "alea": "^1.0.1"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-compat": "0.18.2",
+    "@geckos.io/server": "^3.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@types/express": "^5.0.3",
+    "@types/three": "^0.176.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "jsdom": "^28.1.0",
+    "three": "^0.176.0",
+    "typescript": "5.9.2",
+    "vite": "^6.3.5",
+    "vite-plugin-glsl": "^1.4.1",
+    "vitest": "^3.2.4"
+  }
+}

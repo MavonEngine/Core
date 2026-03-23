@@ -1,0 +1,31 @@
+.stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    flex-shrink: 0;
+    width: 90px;
+    border-left: 1px solid var(--border-primary);
+    padding: 0 var(--spacing-lg);
+    justify-content: center;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.label {
+    font-family: var(--font-ui);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.value {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}

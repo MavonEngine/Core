@@ -1,0 +1,52 @@
+.player {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    height: 100%;
+}
+
+.main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    flex: 1;
+    min-width: 0;
+}
+
+.waveform {
+    flex: 1;
+    min-height: 0;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-shrink: 0;
+}
+
+.playButton {
+    background: none;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.playButton:hover {
+    background-color: var(--bg-hover);
+}
+
+.time {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
