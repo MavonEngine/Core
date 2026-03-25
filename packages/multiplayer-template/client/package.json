@@ -1,0 +1,23 @@
+{
+  "name": "@template/client",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@geckos.io/client": "^3.0.2",
+    "@template/server": "*"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "three": "^0.176.0",
+    "typescript": "5.9.2",
+    "vite": "^6.3.5",
+    "vite-plugin-glsl": "^1.4.1",
+    "vue": "^3.5.15"
+  }
+}
