@@ -1,7 +1,6 @@
 {
   "name": "@mavonengine/multiplayer-template",
   "version": "0.0.1",
-  "private": true,
   "workspaces": [
     "client",
     "server"
@@ -14,6 +13,7 @@
     "@mavonengine/core": "0.0.6"
   },
   "devDependencies": {
+    "@mavonengine/editor": "0.0.6",
     "concurrently": "^9.1.2",
     "tsup": "^8.5.1",
     "typescript": "5.9.2"
