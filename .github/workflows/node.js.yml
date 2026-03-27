@@ -30,22 +30,16 @@ jobs:
           package-lock.json
           packages/multiplayer-template/package-lock.json
     
-    - run: npm ci
-
-    - run: npm run build
-
-    - run: npm run test
+    - run: |
+        npm ci
+        npm run build
+        npm run test
 
     # multiplayer-template has its own nested workspaces (client/server) that npm
     # workspaces does not handle recursively, so we need a separate npm ci here
-    - run: npm ci
-      working-directory: ./packages/multiplayer-template
-
-    - run: npm run lint
-      working-directory: ./packages/multiplayer-template
-
-    - run: npm run typecheck
-      working-directory: ./packages/multiplayer-template
-
-    - run: npm run build
+    - run: |
+        npm ci
+        npm run lint
+        npm run typecheck
+        npm run build
       working-directory: ./packages/multiplayer-template
