@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@geckos.io/client": "^3.0.2",
-    "@template/server": "*"
+    "@template/server": "*",
+    "vue": "^3.5.15"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
     "three": "^0.176.0",
     "typescript": "5.9.2",
     "vite": "^6.3.5",
-    "vite-plugin-glsl": "^1.4.1",
-    "vue": "^3.5.15"
+    "vite-plugin-glsl": "^1.4.1"
   }
 }
