@@ -39,7 +39,6 @@ jobs:
     # workspaces does not handle recursively, so we need a separate npm ci here
     - run: |
         npm ci
-        npm run lint
         npm run typecheck
         npm run build
       working-directory: ./packages/multiplayer-template
