@@ -29,12 +29,14 @@ jobs:
         cache-dependency-path: |
           package-lock.json
           packages/multiplayer-template/package-lock.json
-    - run: npm ci
-
+    
     # multiplayer-template has its own nested workspaces (client/server) that npm
     # workspaces does not handle recursively, so we need a separate npm ci here
+    # run first so deps dont get hoisted up
     - run: npm ci
       working-directory: ./packages/multiplayer-template
+    
+    - run: npm ci
 
     - run: npm run build
 
