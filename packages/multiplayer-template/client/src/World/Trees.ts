@@ -47,9 +47,9 @@ export default class Trees extends GameObject {
         )
 
         for (let i = 0; i < count; i++) {
-          dummy.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
-          dummy.rotation.set(rotations[i * 3], rotations[i * 3 + 1], rotations[i * 3 + 2])
-          dummy.scale.setScalar(scales[i * 3])
+          dummy.position.set(positions[i * 3]!, positions[i * 3 + 1]!, positions[i * 3 + 2]!)
+          dummy.rotation.set(rotations[i * 3]!, rotations[i * 3 + 1]!, rotations[i * 3 + 2]!)
+          dummy.scale.setScalar(scales[i * 3]!)
           dummy.updateMatrix()
           instancedMesh.setMatrixAt(i, dummy.matrix)
         }

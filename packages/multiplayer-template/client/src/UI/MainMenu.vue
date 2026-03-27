@@ -14,7 +14,7 @@ const nameInput = ref(store.value.playerName || RANDOM_NAMES[Math.floor(Math.ran
 const error = ref('')
 
 function join() {
-  const trimmed = nameInput.value.trim()
+  const trimmed = nameInput.value!.trim()
   if (!trimmed) {
     error.value = 'Please enter a name.'
     return

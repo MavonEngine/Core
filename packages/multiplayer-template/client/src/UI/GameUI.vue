@@ -22,7 +22,7 @@ watch(chatMessages, async () => {
 function sendChat() {
   const msg = chatInput.value.trim()
   if (!msg) return
-  NetworkManager.getInstance()?.sendChat(msg)
+  (NetworkManager.getInstance() as NetworkManager)?.sendChat(msg)
   chatInput.value = ''
 }
 
