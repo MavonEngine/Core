@@ -1,0 +1,23 @@
+{
+  "name": "@mavonengine/multiplayer-template",
+  "version": "0.0.1",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "concurrently \"npm run build --prefix server\" \"npm run build --prefix client\"",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client"
+  },
+  "dependencies": {
+    "@mavonengine/core": "0.0.6"
+  },
+  "devDependencies": {
+    "@mavonengine/editor": "0.0.6",
+    "@types/three": "^0.176.0",
+    "concurrently": "^9.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "5.9.2"
+  }
+}

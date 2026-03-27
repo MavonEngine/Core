@@ -1,0 +1,72 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  background: #000;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+/* Player label – overrides the engine's default .point style */
+.player-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.player-name {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.player-name.local {
+  color: #7ef0a0;
+}
+
+.player-chat-bubble {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  max-width: 160px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.player-chat-bubble.hidden {
+  display: none;
+}
+
+.loadingBar {
+  position: absolute;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  background-color: white;
+  transform: scaleX(0);
+  transform-origin: top left;
+  transition: transform 0.5s;
+  will-change: transform;
+}
+
+.loadingBar.ended {
+  transform-origin: top right;
+  transition: transform ease-in-out 1.0s;
+  transition-delay: 0.5s;
+}

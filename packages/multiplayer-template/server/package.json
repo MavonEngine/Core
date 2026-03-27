@@ -1,0 +1,24 @@
+{
+  "name": "@template/server",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "LOG_LEVEL=debug node ./dist/index.js",
+    "dev": "tsup --watch --onSuccess \"npm run start\"",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.18.2",
+    "@geckos.io/server": "^3.0.2",
+    "express": "5.1.0",
+    "three": "^0.176.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0"
+  }
+}

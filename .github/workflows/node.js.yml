@@ -26,6 +26,21 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-    - run: npm ci
-    - run: npm run test
-    - run: npm run build
+        cache-dependency-path: |
+          package-lock.json
+          packages/multiplayer-template/package-lock.json
+    
+    - name: Build and test
+      run: |
+        npm ci
+        npm run build
+        npm run test
+
+    # multiplayer-template has its own nested workspaces (client/server) that npm
+    # workspaces does not handle recursively, so we need a separate npm ci here
+    - name: Build multiplayer-template
+      run: |
+        npm ci
+        npm run typecheck
+        npm run build
+      working-directory: ./packages/multiplayer-template
