@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@mavonengine/editor": "0.0.6",
+    "@types/three": "^0.176.0",
     "concurrently": "^9.1.2",
     "tsup": "^8.5.1",
     "typescript": "5.9.2"

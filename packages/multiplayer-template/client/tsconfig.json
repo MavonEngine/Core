@@ -8,6 +8,10 @@
     ],
     "useDefineForClassFields": true,
     "baseUrl": ".",
+    "paths": {
+      "@template/server": ["../server/src"],
+      "@template/server/*": ["../server/src/*"]
+    },
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,

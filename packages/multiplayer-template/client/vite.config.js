@@ -60,6 +60,7 @@ export default {
     alias: {
       ...(existsSync(editorSrc) ? { '@mavonengine/editor': editorSrc } : {}),
       ...(existsSync(coreSrc) ? { '@mavonengine/core': coreSrc } : {}),
+      '@template/server': resolve(templateRoot, 'server/src'),
     },
     dedupe: ['@mavonengine/core', 'three', 'vue', '@dimforge/rapier3d-compat'],
   },

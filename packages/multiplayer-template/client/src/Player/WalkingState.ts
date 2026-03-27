@@ -1,5 +1,5 @@
 import type Character from '../Entities/Player'
-import ServerWalkingState from '@template/server/src/Player/WalkingState'
+import ServerWalkingState from '@template/server/Player/WalkingState'
 
 export default class WalkingState extends ServerWalkingState {
   declare entity: Character

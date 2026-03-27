@@ -1,3 +1,3 @@
-import BaseTree from '@template/server/src/Base/Vegetation/Tree'
+import BaseTree from '@template/server/Base/Vegetation/Tree'
 
 export default class Tree extends BaseTree {}

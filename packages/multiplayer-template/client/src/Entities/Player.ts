@@ -1,4 +1,4 @@
-import BasePlayer from '@template/server/src/Base/Player'
+import BasePlayer from '@template/server/Base/Player'
 import { syncStateStack } from '@mavonengine/core/Networking/syncState'
 import { Vector3 } from 'three'
 import IdleState from '../Player/IdleState'

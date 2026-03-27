@@ -1,5 +1,5 @@
-import { ServerCommand } from '@template/server/src/Commands'
-import type { SV_CHAT, SV_TREES } from '@template/server/src/Commands/Server'
+import { ServerCommand } from '@template/server/Commands'
+import type { SV_CHAT, SV_TREES } from '@template/server/Commands/Server'
 import type GameObjectInterface from '@mavonengine/core/World/GameObjectInterface'
 import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'

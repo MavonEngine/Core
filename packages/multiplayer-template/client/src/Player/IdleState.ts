@@ -1,5 +1,5 @@
 import type Character from '../Entities/Player'
-import ServerIdleState from '@template/server/src/Player/IdleState'
+import ServerIdleState from '@template/server/Player/IdleState'
 
 export default class IdleState extends ServerIdleState {
   declare entity: Character

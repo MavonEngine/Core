@@ -1,5 +1,5 @@
-import { ClientCommand } from '@template/server/src/Commands'
-import type { CL_MOVE } from '@template/server/src/Commands/Client'
+import { ClientCommand } from '@template/server/Commands'
+import type { CL_MOVE } from '@template/server/Commands/Client'
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
 import { Vector3 } from 'three'
