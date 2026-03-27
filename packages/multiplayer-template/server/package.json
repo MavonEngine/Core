@@ -7,7 +7,8 @@
   "scripts": {
     "start": "LOG_LEVEL=debug node ./dist/index.js",
     "dev": "tsup --watch --onSuccess \"npm run start\"",
-    "build": "tsup"
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.18.2",

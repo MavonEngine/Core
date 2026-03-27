@@ -7,7 +7,8 @@
   ],
   "scripts": {
     "dev": "concurrently --kill-others -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "build": "concurrently \"npm run build --prefix server\" \"npm run build --prefix client\""
+    "build": "concurrently \"npm run build --prefix server\" \"npm run build --prefix client\"",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client"
   },
   "dependencies": {
     "@mavonengine/core": "0.0.6"
