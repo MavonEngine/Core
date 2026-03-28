@@ -10,6 +10,8 @@ A ready-to-use multiplayer 3D game template built on the [MavonEngine](https://m
 
 **Stack:** Vue 3 + Three.js (client) · Node.js + Three.js (server) · RAPIER physics · geckos.io networking all tied together with MavonEngine
 
+> **Note:** This template has only been tested with Node.js 24.
+
 **Links:**
 - [Website](https://mavonengine.com/)
 - [Getting Started](https://mavonengine.com/getting-started)
