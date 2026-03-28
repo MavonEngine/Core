@@ -1,6 +1,6 @@
 {
   "name": "@mavonengine/create-bootstrap",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Bootstrap a MavonEngine multiplayer project",
   "type": "module",
   "bin": {
