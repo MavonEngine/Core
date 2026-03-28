@@ -1,0 +1,31 @@
+{
+  "name": "@mavonengine/create-bootstrap",
+  "version": "0.0.1",
+  "description": "Bootstrap a MavonEngine multiplayer project",
+  "type": "module",
+  "bin": {
+    "create-bootstrap": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.check.json"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsup": "^8.5.1",
+    "typescript": "5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

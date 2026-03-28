@@ -2,6 +2,7 @@
   "name": "mavon-engine-monorepo",
   "private": true,
   "workspaces": [
+    "packages/bootstrap",
     "packages/core",
     "packages/editor"
   ],
