@@ -28,6 +28,7 @@ jobs:
         cache: 'npm'
         cache-dependency-path: |
           package-lock.json
+          packages/bootstrap/package-lock.json
           packages/multiplayer-template/package-lock.json
     
     - name: Build and test
@@ -35,6 +36,10 @@ jobs:
         npm ci
         npm run build
         npm run test
+
+    - name: Typecheck bootstrap
+      run: npm run typecheck
+      working-directory: ./packages/bootstrap
 
     # multiplayer-template has its own nested workspaces (client/server) that npm
     # workspaces does not handle recursively, so we need a separate npm ci here
