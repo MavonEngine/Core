@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.check.json"
   },
+  "license": "MIT",
   "dependencies": {
     "adm-zip": "^0.5.16"
   },

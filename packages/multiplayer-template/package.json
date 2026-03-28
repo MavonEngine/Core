@@ -13,6 +13,7 @@
   "dependencies": {
     "@mavonengine/core": "0.0.6"
   },
+  "license": "MIT",
   "devDependencies": {
     "@mavonengine/editor": "0.0.6",
     "@types/three": "^0.176.0",
