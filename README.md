@@ -4,6 +4,18 @@ A TypeScript game engine with support for single and multiplayer games with an a
 
 > **Early WIP** — things will change. For documentation visit [mavonengine.com](https://mavonengine.com).
 
+## Getting started
+
+```bash
+npx @mavonengine/create-bootstrap
+```
+| URL | Description |
+|-----|-------------|
+| http://localhost:5173/ | Client Game |
+| http://localhost:8050/api/game/health | Server health endpoint |
+
+The multiplayer template includes the authoritative server setup, networking boilerplate, and a working client/server split out of the box.
+
 ## What is this?
 
 MavonEngine is a TypeScript game engine built on top of [Three.js](https://threejs.org/) for rendering, [Rapier3D](https://rapier.rs/) for physics, and [geckos.io](https://github.com/geckosio/geckos.io) for WebRTC-based UDP networking. It provides a set of abstractions for the things that come up repeatedly when building 3D games — entity management, state machines, world/chunk streaming, input handling, resource loading, and multiplayer networking.
