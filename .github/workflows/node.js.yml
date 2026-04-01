@@ -41,11 +41,16 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/bootstrap
 
+    - name: npm link core locally
+      run: |
+        npm link
+      working-directory: ./packages/core
+
     # multiplayer-template has its own nested workspaces (client/server) that npm
     # workspaces does not handle recursively, so we need a separate npm ci here
     - name: Build multiplayer-template
       run: |
-        npm ci
+        npm link @mavonengine/core
         npm run typecheck
         npm run build
       working-directory: ./packages/multiplayer-template
