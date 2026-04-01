@@ -1,24 +1,44 @@
-import type { Vector3 } from 'three'
+import type { Vector3Like } from 'three'
 import type NetworkedEntity from './NetworkedEntity'
 import GameObject from '../World/GameObject'
 
-export default abstract class NetworkedGameObject extends GameObject implements NetworkedEntity {
+type AbstractCtor<T = object> = abstract new (...args: any[]) => T
+
+export function NetworkedGameObjectMixin<TBase extends AbstractCtor<GameObject>>(Base: TBase) {
+  abstract class NetworkedGameObjectBase
+    extends Base
+    implements NetworkedEntity {
+    abstract $typeName: string
+
+    previousStateHash = ''
+    needsSync = true
+
+    updateFromNetwork(data: Record<string, unknown>): void {
+      Object.entries(this.networkedFieldCallbacks()).forEach(([name, cb]) => {
+        if (name in data) {
+          cb(data[name])
+        }
+      })
+    }
+
+    networkedFieldCallbacks(): Record<string, (value: unknown) => void> {
+      return {
+        position: (pos) => this.position.set((pos as Vector3Like).x, (pos as Vector3Like).y, (pos as Vector3Like).z),
+        rotation: (rot) => this.rotation.set((rot as Vector3Like).x, (rot as Vector3Like).y, (rot as Vector3Like).z),
+        scale: (scale) => this.scale.set((scale as Vector3Like).x, (scale as Vector3Like).y, (scale as Vector3Like).z),
+      }
+    }
+
+    markSyncd() {
+      this.needsSync = false
+    }
+  }
+
+  return NetworkedGameObjectBase
+}
+
+export default abstract class NetworkedGameObject extends NetworkedGameObjectMixin(GameObject) {
   abstract $typeName: string
-
-  previousStateHash = ''
-  needsSync = true
-
-  constructor(id?: string, position?: Vector3, rotation?: Vector3, scale?: Vector3) {
-    super(id, position, rotation, scale)
-  }
-
-  updateFromNetwork(_data: object): void {
-    throw new Error('Not implemented')
-  }
-
-  markSyncd() {
-    this.needsSync = false
-  }
 
   /**
    * We need this so we can use instanceof on these instances
@@ -36,24 +56,4 @@ export default abstract class NetworkedGameObject extends GameObject implements 
       && typeof candidate.needsSync === 'boolean'
       && typeof candidate.previousStateHash === 'string'
   }
-}
-
-type AbstractCtor<T = object> = abstract new (...args: any[]) => T
-
-export function NetworkedGameObjectMixin<TBase extends AbstractCtor<GameObject>>(Base: TBase) {
-  abstract class NetworkedGameObjectBase
-    extends Base
-    implements NetworkedEntity {
-    abstract $typeName: string
-    abstract updateFromNetwork(data: object): void
-
-    previousStateHash = ''
-    needsSync = true
-
-    markSyncd() {
-      this.needsSync = false
-    }
-  }
-
-  return NetworkedGameObjectBase
 }

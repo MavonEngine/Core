@@ -15,5 +15,4 @@ export default abstract class NetworkedActor extends NetworkedGameObjectMixin(Ac
     return `${super.message} - ${this.$typeName}`
   }
 
-  abstract updateFromNetwork: (data: object) => void
 }
