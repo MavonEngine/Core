@@ -62,6 +62,6 @@ export default {
       ...(existsSync(coreSrc) ? { '@mavonengine/core': coreSrc } : {}),
       '@template/server': resolve(templateRoot, 'server/src'),
     },
-    dedupe: ['@mavonengine/core', 'three', 'vue', '@dimforge/rapier3d-compat'],
+    dedupe: ['@mavonengine/core', 'three', 'vue', 'react', 'react-dom', '@dimforge/rapier3d-compat'],
   },
 }

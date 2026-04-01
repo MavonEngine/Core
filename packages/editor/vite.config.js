@@ -89,6 +89,18 @@ export default defineConfig(({ command }) => ({
     },
     rollupOptions: {
       external: (id) => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
+      plugins: [
+        {
+          name: 'inject-css-into-mount-chunk',
+          generateBundle(_, bundle) {
+            const cssFile = Object.keys(bundle).find(k => k.endsWith('.css'))
+            // Inject into the dynamic mount chunk so CSS only loads when new Editor() is called
+            const mountChunk = Object.values(bundle).find(chunk => chunk.type === 'chunk' && chunk.isDynamicEntry)
+            if (cssFile && mountChunk)
+              mountChunk.code = `import './${cssFile}';\n${mountChunk.code}`
+          },
+        },
+      ],
     },
   },
   test: {
