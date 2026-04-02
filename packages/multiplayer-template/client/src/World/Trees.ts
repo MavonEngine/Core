@@ -1,4 +1,4 @@
-import type { Material, Mesh } from 'three'
+import type { Material, Mesh, MeshStandardMaterial } from 'three'
 import type { GLTF } from 'three/examples/jsm/Addons.js'
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
@@ -39,6 +39,14 @@ export default class Trees extends GameObject {
 
       for (const sourceMesh of meshes) {
         sourceMesh.geometry.rotateX((90 * Math.PI) / 180)
+
+        const mat = sourceMesh.material as MeshStandardMaterial
+        mat.depthTest = true
+        mat.depthWrite = true
+        if (mat.transparent) {
+          mat.transparent = false
+          mat.alphaTest = 0.5
+        }
 
         const instancedMesh = new InstancedMesh(
           sourceMesh.geometry,

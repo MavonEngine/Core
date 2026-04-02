@@ -1,3 +1,6 @@
+import type {
+  Material,
+} from 'three'
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
 import {
@@ -49,7 +52,6 @@ export default class GameWorld extends GameObject {
 
     const sun = new DirectionalLight(0xFFF4E0, 1.2)
     sun.position.set(20, 40, 20)
-    sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     sun.shadow.camera.near = 0.5
     sun.shadow.camera.far = 200
@@ -71,8 +73,11 @@ export default class GameWorld extends GameObject {
 
     // Grid overlay for spatial reference
     const grid = new GridHelper(200, 40, 0x000000, 0x000000)
-    ;(grid.material as { opacity: number, transparent: boolean }).opacity = 0.08
-    ;(grid.material as { opacity: number, transparent: boolean }).transparent = true
+    const gridMat = grid.material as Material
+    gridMat.opacity = 0.5
+    gridMat.transparent = true
+    gridMat.depthWrite = false
+    grid.renderOrder = -1
     Game.instance().scene.add(grid)
   }
 

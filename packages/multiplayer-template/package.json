@@ -14,7 +14,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@mavonengine/core": "0.0.7"
+    "@mavonengine/core": "0.0.8"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
