@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { createInterface } from 'node:readline'
 
 export function promptProjectName(): Promise<string> {

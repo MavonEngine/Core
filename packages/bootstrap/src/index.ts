@@ -1,5 +1,8 @@
+import process from 'node:process'
 import { createProject } from './create.js'
 import { promptProjectName } from './prompt.js'
+
+const PROJECT_NAME_RE = /^[\w@./-][\w@./\- ]*$/
 
 async function main(): Promise<void> {
   let projectName = process.argv[2]?.trim()
@@ -13,7 +16,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  if (!/^[\w@./-][\w@./\- ]*$/.test(projectName)) {
+  if (!PROJECT_NAME_RE.test(projectName)) {
     console.error('Error: invalid project name')
     process.exit(1)
   }

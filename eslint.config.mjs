@@ -11,4 +11,13 @@ export default antfu(
     {
         files: ['**/*.{ts,tsx}'],
     },
+    {
+        /**
+         * Allow console logs in bootstrap package
+         */
+        files: ['packages/bootstrap/**'],
+        rules: {
+            'no-console': 'off',
+        },
+    },
 )

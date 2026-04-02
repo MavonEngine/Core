@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import process from 'node:process'
 import { TAG_URL, TEMPLATE_SUBPATH } from './config.js'
 import { downloadZip } from './downloader.js'
 import { extractTemplate } from './extractor.js'
