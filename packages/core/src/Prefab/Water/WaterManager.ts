@@ -1,7 +1,7 @@
 import type { BindingApi, ContainerApi } from '@tweakpane/core'
 import type Water from './Water'
-import Game from '../../Game'
 import { Vector2, Vector3 } from 'three'
+import Game from '../../Game'
 
 export default class WaterManager {
   uBigwavesElevation = 0.2

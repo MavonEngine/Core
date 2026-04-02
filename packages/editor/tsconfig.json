@@ -1,26 +1,26 @@
 {
   "compilerOptions": {
-    "jsx": "react-jsx",
     "composite": true,
     "target": "es2020",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
       "@mavonengine/core": ["../core/src/index"],
       "@mavonengine/core/*": ["../core/src/*"]
     },
     "allowUmdGlobalAccess": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
     "emitDeclarationOnly": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
   "references": [
     { "path": "../core" }
-  ]
+  ],
+  "include": ["src"]
 }

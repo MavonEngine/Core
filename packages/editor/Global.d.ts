@@ -1,4 +1,4 @@
-import type Game from '../core/dist/Game'
+import type Game from '../core/src/Game'
 
 declare global {
   interface Window {

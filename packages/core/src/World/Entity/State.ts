@@ -37,7 +37,7 @@ export default abstract class EntityState {
      * Enter the previous state again
      */
     if (this.entity.state.length) {
-      this.entity.state[this.entity.state.length - 1].enter()
+      this.entity.state.at(-1).enter()
     }
   }
 

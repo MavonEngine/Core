@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from '@testing-library/react'
-import { Object3D, Scene, Vector3 } from 'three'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-import Assets from '../../../src/Editor/UI/Assets/Assets'
-import SceneExplorer from '../../../src/Editor/UI/SceneExplorer'
 import Game from '@mavonengine/core/Game'
 import EventEmitter from '@mavonengine/core/Utils/EventEmitter'
+import { act, cleanup, render, screen } from '@testing-library/react'
+
+import { Object3D, Scene, Vector3 } from 'three'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Assets from '../../../src/Editor/UI/Assets/Assets'
+import SceneExplorer from '../../../src/Editor/UI/SceneExplorer'
 
 vi.mock('../../../src/Editor/UI/SceneExplorer.module.css', () => ({ default: {} }))
 vi.mock('../../../src/Editor/UI/Assets/Assets.module.css', () => ({ default: {} }))

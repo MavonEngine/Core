@@ -15,13 +15,13 @@ export function NetworkedGameObjectMixin<TBase extends AbstractCtor<GameObject>>
 
     /**
      * This is the reverse of serialize on GameObject.
-     * This way we can parse the values back from the network serialization into our 
+     * This way we can parse the values back from the network serialization into our
      * current entity.
-     * 
+     *
      * Once it gets the data in from the server it loops through the entities networkedFieldCallbacks
-     * and assigns the values. 
-     * 
-     * After the values have been set you can then do what you need to do 
+     * and assigns the values.
+     *
+     * After the values have been set you can then do what you need to do
      * in the entity.update() method.
      */
     updateFromNetwork(data: Record<string, unknown>): void {
@@ -34,9 +34,9 @@ export function NetworkedGameObjectMixin<TBase extends AbstractCtor<GameObject>>
 
     networkedFieldCallbacks(): Record<string, (value: unknown) => void> {
       return {
-        position: (pos) => this.position.set((pos as Vector3Like).x, (pos as Vector3Like).y, (pos as Vector3Like).z),
-        rotation: (rot) => this.rotation.set((rot as Vector3Like).x, (rot as Vector3Like).y, (rot as Vector3Like).z),
-        scale: (scale) => this.scale.set((scale as Vector3Like).x, (scale as Vector3Like).y, (scale as Vector3Like).z),
+        position: pos => this.position.set((pos as Vector3Like).x, (pos as Vector3Like).y, (pos as Vector3Like).z),
+        rotation: rot => this.rotation.set((rot as Vector3Like).x, (rot as Vector3Like).y, (rot as Vector3Like).z),
+        scale: scale => this.scale.set((scale as Vector3Like).x, (scale as Vector3Like).y, (scale as Vector3Like).z),
       }
     }
 

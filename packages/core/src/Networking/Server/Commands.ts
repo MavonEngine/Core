@@ -3,7 +3,7 @@ export enum ServerCommand {
   SV_REMOVE_ENTITY = 'sv_remove_entity',
 }
 
-export type CommandPacket<T extends ServerCommand> = {
+export interface CommandPacket<T extends ServerCommand> {
   cmd: T
   data: unknown
 }

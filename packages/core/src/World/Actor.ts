@@ -12,7 +12,7 @@ export default abstract class Actor extends GameObject {
 
   update(delta: number): void {
     if (this.state.length) {
-      const res = this.state[this.state.length - 1].update(delta)
+      const res = this.state.at(-1).update(delta)
 
       if (res instanceof EntityState) {
         this.state.push(res)

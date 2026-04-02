@@ -1,7 +1,7 @@
 import { bench, describe } from 'vitest'
 import BandwidthTracker from '../../../../src/Networking/Server/Stats/BandwidthTracker'
 
-describe('BandwidthTracker', () => {
+describe('bandwidthTracker', () => {
   bench('recordSent — single id', () => {
     const tracker = new BandwidthTracker()
     tracker.recordSent('client-1', 128)

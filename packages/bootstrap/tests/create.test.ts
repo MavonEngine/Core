@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import AdmZip from 'adm-zip'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TAG_URL } from '../src/config.ts'
+
+import { createProject } from '../src/create.ts'
+import { downloadZip } from '../src/downloader.ts'
+import { runCommand } from '../src/runner.ts'
 
 vi.mock('../src/downloader.ts', () => ({
   downloadZip: vi.fn(),
@@ -12,10 +16,6 @@ vi.mock('../src/downloader.ts', () => ({
 vi.mock('../src/runner.ts', () => ({
   runCommand: vi.fn(),
 }))
-
-import { downloadZip } from '../src/downloader.ts'
-import { runCommand } from '../src/runner.ts'
-import { createProject } from '../src/create.ts'
 
 function createFakeZip(destPath: string): void {
   const zip = new AdmZip()

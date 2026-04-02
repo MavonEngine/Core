@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { extractZipRootFolder, downloadZip } from '../src/downloader.ts'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { downloadZip, extractZipRootFolder } from '../src/downloader.ts'
 
 describe('extractZipRootFolder', () => {
   it('returns the root folder name from a list of zip entries', () => {

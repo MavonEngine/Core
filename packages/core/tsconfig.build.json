@@ -1,11 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dist",
     "rootDir": "./src",
+    "resolveJsonModule": true,
     "declaration": true,
     "emitDeclarationOnly": false,
-    "resolveJsonModule": true
+    "outDir": "./dist"
   },
   "include": ["src", "Global.d.ts"],
   "exclude": ["tests", "**/*.test.ts"]

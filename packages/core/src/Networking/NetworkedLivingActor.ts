@@ -31,7 +31,7 @@ export default abstract class NetworkedLivingActor extends NetworkedGameObjectMi
   networkedFieldCallbacks(): Record<string, (value: unknown) => void> {
     return {
       ...super.networkedFieldCallbacks(),
-      health: (health) => this.health = health as number
+      health: health => this.health = health as number,
     }
   }
 

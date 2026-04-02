@@ -1,7 +1,7 @@
 import { bench, describe } from 'vitest'
 import EventEmitter from '../../src/Utils/EventEmitter'
 
-describe('EventEmitter', () => {
+describe('eventEmitter', () => {
   bench('trigger — unknown event (no listeners)', () => {
     const emitter = new EventEmitter()
     emitter.trigger('tick')

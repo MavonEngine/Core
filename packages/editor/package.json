@@ -16,18 +16,18 @@
     "vite",
     "tweakpane"
   ],
-  "files": [
-    "dist"
-  ],
-  "main": "./dist/Editor.mjs",
-  "types": "./dist/Editor.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/Editor.mjs",
-      "types": "./dist/Editor.d.ts"
+      "types": "./dist/Editor.d.ts",
+      "import": "./dist/Editor.mjs"
     },
     "./dist/Editor.css": "./dist/Editor.css"
   },
+  "main": "./dist/Editor.mjs",
+  "types": "./dist/Editor.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.build.json",
     "lint": "eslint .",
@@ -51,8 +51,8 @@
     "wavesurfer.js": "^7.12.1"
   },
   "devDependencies": {
-    "@mavonengine/core": "*",
     "@dimforge/rapier3d-compat": "0.18.2",
+    "@mavonengine/core": "*",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.10",
@@ -61,11 +61,11 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
+    "glob": "^10.5.0",
     "jsdom": "^28.1.0",
     "three": "^0.176.0",
     "typescript": "5.9.2",
     "vite": "^6.3.5",
-    "glob": "^10.5.0",
     "vite-plugin-glsl": "^1.4.1",
     "vitest": "^3.2.4"
   }

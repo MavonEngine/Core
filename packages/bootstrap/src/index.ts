@@ -13,7 +13,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  if (!/^[a-z0-9@._/-][a-z0-9@._/\- ]*$/i.test(projectName)) {
+  if (!/^[\w@./-][\w@./\- ]*$/.test(projectName)) {
     console.error('Error: invalid project name')
     process.exit(1)
   }
@@ -21,7 +21,8 @@ async function main(): Promise<void> {
   try {
     const dir = await createProject({ projectName })
     console.log(`\nDone! Your project is ready at ${dir}`)
-  } catch (err) {
+  }
+  catch (err) {
     console.error(`\nError: ${(err as Error).message}`)
     process.exit(1)
   }

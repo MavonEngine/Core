@@ -50,7 +50,7 @@ export default defineConfig(({ command }) => ({
           if (!ASSETS_RE.test(id))
             return null
           const files = await findParticleFiles(projectRoot)
-          const coreSrc = coreRoot.replaceAll('\\', '/') + '/src/'
+          const coreSrc = `${coreRoot.replaceAll('\\', '/')}/src/`
           const injected = files.map((f) => {
             const normalized = f.replaceAll('\\', '/')
             if (normalized.startsWith(coreSrc)) {
@@ -88,7 +88,7 @@ export default defineConfig(({ command }) => ({
       formats: ['es'],
     },
     rollupOptions: {
-      external: (id) => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
+      external: id => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
       plugins: [
         {
           name: 'inject-css-into-mount-chunk',

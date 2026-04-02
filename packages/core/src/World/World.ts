@@ -1,6 +1,6 @@
-import Environment from './Environment'
 import Game from '../Game'
 import BaseWorld from './BaseWorld'
+import Environment from './Environment'
 
 export default class World extends BaseWorld {
   environment: Environment

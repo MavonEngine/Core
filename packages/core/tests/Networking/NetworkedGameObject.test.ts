@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import { Vector3 } from 'three'
+import { describe, expect, it } from 'vitest'
 import NetworkedGameObject from '../../src/Networking/NetworkedGameObject'
 
 class TestNetworkedGameObject extends NetworkedGameObject {
@@ -7,11 +7,11 @@ class TestNetworkedGameObject extends NetworkedGameObject {
   update(_delta: number): void { }
 }
 
-describe('NetworkedGameObject', () => {
+describe('networkedGameObject', () => {
   describe('updateFromNetwork', () => {
     it('updates position from network data', () => {
       const obj = new TestNetworkedGameObject()
-      expect(obj.position).toStrictEqual(new Vector3)
+      expect(obj.position).toStrictEqual(new Vector3())
 
       obj.updateFromNetwork({ position: new Vector3(1, 2, 3) })
       expect(obj.position).toStrictEqual(new Vector3(1, 2, 3))
@@ -19,7 +19,7 @@ describe('NetworkedGameObject', () => {
 
     it('updates rotation from network data', () => {
       const obj = new TestNetworkedGameObject()
-      expect(obj.rotation).toStrictEqual(new Vector3)
+      expect(obj.rotation).toStrictEqual(new Vector3())
 
       obj.updateFromNetwork({ rotation: new Vector3(0.1, 0.2, 0.3) })
       expect(obj.rotation).toStrictEqual(new Vector3(0.1, 0.2, 0.3))

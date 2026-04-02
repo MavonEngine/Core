@@ -1,10 +1,6 @@
 import type { ContainerApi } from '@tweakpane/core'
 import type { BufferGeometry } from 'three'
 import type { GLTF } from 'three/examples/jsm/Addons.js'
-import { WithEditorHelper } from '../../Editor/WithEditorHelper'
-import Game from '../../Game'
-import { randRange } from '../../Utils/Math'
-import Entity3D from '../../World/Entity3D'
 import {
   Box3,
   DoubleSide,
@@ -16,6 +12,10 @@ import {
   Vector3,
 } from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { WithEditorHelper } from '../../Editor/WithEditorHelper'
+import Game from '../../Game'
+import { randRange } from '../../Utils/Math'
+import Entity3D from '../../World/Entity3D'
 import FragmentShader from './Fragment.glsl'
 import VertexShader from './Vertex.glsl'
 

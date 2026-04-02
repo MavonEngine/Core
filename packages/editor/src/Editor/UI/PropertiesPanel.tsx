@@ -1,9 +1,9 @@
 import type { ContainerApi } from '@tweakpane/core'
 import type { Object3D } from 'three'
+import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mesh, PlaneGeometry } from 'three'
 import { Pane } from 'tweakpane'
-import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import styles from './PropertiesPanel.module.css'
 
 interface PrefabPaneConfig {
@@ -502,7 +502,7 @@ export default function PropertiesPanel() {
       )}
 
       {/* Prefab panes (still use tweakpane for addon-contributed UI) */}
-      {[...prefabPanes.values()].map(config => <PrefabPane key={config.label} config={config} />)}
+      {Array.from(prefabPanes.values(), config => <PrefabPane key={config.label} config={config} />)}
     </div>
   )
 }

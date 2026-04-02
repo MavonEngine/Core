@@ -1,8 +1,9 @@
 {
   "name": "@mavonengine/create-bootstrap",
+  "type": "module",
   "version": "0.0.3",
   "description": "Bootstrap a MavonEngine multiplayer project",
-  "type": "module",
+  "license": "MIT",
   "bin": {
     "create-bootstrap": "./dist/index.js"
   },
@@ -19,7 +20,6 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
-  "license": "MIT",
   "dependencies": {
     "adm-zip": "^0.5.16"
   },

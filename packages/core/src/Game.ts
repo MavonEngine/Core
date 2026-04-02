@@ -1,6 +1,6 @@
 import type { World } from '@dimforge/rapier3d-compat'
-import type IEditor from './Types/IEditor'
 import type { Asset } from './Types/Asset'
+import type IEditor from './Types/IEditor'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
 import Camera from './Camera'
