@@ -24,7 +24,7 @@ export function syncStateStack(
 
       // Remove all states from index i onwards (they don't match)
       while (entity.state.length > i) {
-        entity.state.at(-1).leave()
+        entity.state.at(-1)!.leave()
       }
 
       // Get the previous state (if any) for suspending
@@ -46,6 +46,6 @@ export function syncStateStack(
 
   // Remove any extra states beyond what the server has
   while (entity.state.length > networkStates.length) {
-    entity.state.at(-1).leave()
+    entity.state.at(-1)!.leave()
   }
 }

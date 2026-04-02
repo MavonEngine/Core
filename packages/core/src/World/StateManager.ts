@@ -6,7 +6,7 @@ export default class StateManager {
 
   update(delta: number, entity: GameObject): void {
     if (this.state.length) {
-      const res = this.state.at(-1).update(delta, entity)
+      const res = this.state.at(-1)!.update(delta, entity)
 
       if (res instanceof EntityState) {
         this.state.push(res)

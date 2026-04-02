@@ -68,7 +68,7 @@ export default class TrailComponent implements GameObjectInterface {
     const lastPoint = this.points.at(-1)
     const currentPosition = this.entity.position
 
-    if (currentPosition.distanceTo(lastPoint.position) >= 1) {
+    if (lastPoint && currentPosition.distanceTo(lastPoint.position) >= 1) {
       const newPoint = currentPosition.clone()
       this.points.push({
         position: newPoint,
