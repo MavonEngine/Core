@@ -40,14 +40,14 @@ export default class GameWorld extends GameObject {
   }
 
   private setupLighting() {
-    const skyColor = new Color(0x87ceeb)
+    const skyColor = new Color(0x87CEEB)
     Game.instance().scene.background = skyColor
     Game.instance().scene.fog = new FogExp2(skyColor, 0.012)
 
-    const ambient = new AmbientLight(0xffffff, 0.6)
+    const ambient = new AmbientLight(0xFFFFFF, 0.6)
     Game.instance().scene.add(ambient)
 
-    const sun = new DirectionalLight(0xfff4e0, 1.2)
+    const sun = new DirectionalLight(0xFFF4E0, 1.2)
     sun.position.set(20, 40, 20)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
@@ -63,7 +63,7 @@ export default class GameWorld extends GameObject {
   private setupGround() {
     // Large flat plane
     const geo = new PlaneGeometry(200, 200)
-    const mat = new MeshStandardMaterial({ color: 0x4a7c59 })
+    const mat = new MeshStandardMaterial({ color: 0x4A7C59 })
     const plane = new Mesh(geo, mat)
     plane.rotation.x = -Math.PI / 2
     plane.receiveShadow = true
@@ -71,8 +71,8 @@ export default class GameWorld extends GameObject {
 
     // Grid overlay for spatial reference
     const grid = new GridHelper(200, 40, 0x000000, 0x000000)
-    ;(grid.material as { opacity: number; transparent: boolean }).opacity = 0.08
-    ;(grid.material as { opacity: number; transparent: boolean }).transparent = true
+    ;(grid.material as { opacity: number, transparent: boolean }).opacity = 0.08
+    ;(grid.material as { opacity: number, transparent: boolean }).transparent = true
     Game.instance().scene.add(grid)
   }
 

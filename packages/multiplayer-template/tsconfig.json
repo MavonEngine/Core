@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
+    "composite": true,
     "target": "es2020",
     "module": "NodeNext",
     "moduleResolution": "nodenext",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
     "strict": true,
-    "composite": true
+    "esModuleInterop": true,
+    "skipLibCheck": true
   }
 }

@@ -1,5 +1,5 @@
-import type { Object3D } from 'three'
 import type GameObject from '@mavonengine/core/World/GameObject'
+import type { Object3D } from 'three'
 import ObjectLabel from '@mavonengine/core/ui/ObjectLabel'
 import { Vector3 } from 'three'
 

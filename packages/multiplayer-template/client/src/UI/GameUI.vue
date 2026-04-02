@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
 import { nextTick, ref, watch } from 'vue'
+import NetworkManager from '../NetworkManager'
 import useChat from './composables/useChat'
 import useNetworkState from './composables/useNetworkState'
-import NetworkManager from '../NetworkManager'
-import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
 
 const { chatMessages } = useChat()
 const { networkState } = useNetworkState()
@@ -21,13 +21,15 @@ watch(chatMessages, async () => {
 
 function sendChat() {
   const msg = chatInput.value.trim()
-  if (!msg) return
+  if (!msg)
+    return
   (NetworkManager.getInstance() as NetworkManager)?.sendChat(msg)
   chatInput.value = ''
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') sendChat()
+  if (e.key === 'Enter')
+    sendChat()
   // Prevent game from receiving keystrokes while typing
   e.stopPropagation()
 }
@@ -37,7 +39,7 @@ function onKeydown(e: KeyboardEvent) {
   <div class="game-ui">
     <!-- HUD top-left -->
     <div class="hud">
-      <span :class="['status-dot', networkState.connected ? 'online' : 'offline']" />
+      <span class="status-dot" :class="[networkState.connected ? 'online' : 'offline']" />
       <span class="hud-text">
         {{ networkState.connected ? `${networkState.players + 1} online · ${networkState.ping}ms` : 'Connecting…' }}
       </span>
@@ -54,7 +56,7 @@ function onKeydown(e: KeyboardEvent) {
         <div
           v-for="msg in chatMessages"
           :key="msg.id"
-          :class="['msg', msg.isSystem ? 'system' : '']"
+          class="msg" :class="[msg.isSystem ? 'system' : '']"
         >
           <span v-if="!msg.isSystem" class="msg-name">{{ msg.playerName }}</span>
           <span class="msg-text">{{ msg.isSystem ? msg.message : `: ${msg.message}` }}</span>
@@ -69,13 +71,17 @@ function onKeydown(e: KeyboardEvent) {
           @keydown="onKeydown"
           @focus="inputFocused = true"
           @blur="inputFocused = false"
-        />
-        <button class="send-btn" @click="sendChat">↵</button>
+        >
+        <button class="send-btn" @click="sendChat">
+          ↵
+        </button>
       </div>
     </div>
 
     <!-- Controls hint -->
-    <div class="controls-hint">WASD · move</div>
+    <div class="controls-hint">
+      WASD · move
+    </div>
   </div>
 </template>
 

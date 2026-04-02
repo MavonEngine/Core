@@ -13,10 +13,14 @@ export default class WalkingState extends NetworkedEntityState {
     const keys = this.entity.keysPressed
     const moveDir = new Vector3()
 
-    if (keys.has('KeyW')) moveDir.z -= 1
-    if (keys.has('KeyS')) moveDir.z += 1
-    if (keys.has('KeyA')) moveDir.x -= 1
-    if (keys.has('KeyD')) moveDir.x += 1
+    if (keys.has('KeyW'))
+      moveDir.z -= 1
+    if (keys.has('KeyS'))
+      moveDir.z += 1
+    if (keys.has('KeyA'))
+      moveDir.x -= 1
+    if (keys.has('KeyD'))
+      moveDir.x += 1
 
     if (moveDir.lengthSq() === 0) {
       this.leave()

@@ -3,10 +3,26 @@ import { ref } from 'vue'
 import useStore from '../stores/Game'
 
 const RANDOM_NAMES = [
-  'AceRider', 'BlazeFox', 'CrimsonOwl', 'DriftKing', 'EmberWolf',
-  'FrostByte', 'GhostPine', 'HexStorm', 'IronClad', 'JoltSpike',
-  'KryptoZen', 'LunaRift', 'MidnightAsh', 'NovaShard', 'OmegaPulse',
-  'PrismFang', 'QuickSilver', 'RogueComet', 'SteelViper', 'TurboZap',
+  'AceRider',
+  'BlazeFox',
+  'CrimsonOwl',
+  'DriftKing',
+  'EmberWolf',
+  'FrostByte',
+  'GhostPine',
+  'HexStorm',
+  'IronClad',
+  'JoltSpike',
+  'KryptoZen',
+  'LunaRift',
+  'MidnightAsh',
+  'NovaShard',
+  'OmegaPulse',
+  'PrismFang',
+  'QuickSilver',
+  'RogueComet',
+  'SteelViper',
+  'TurboZap',
 ]
 
 const { store } = useStore()
@@ -25,7 +41,8 @@ function join() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') join()
+  if (e.key === 'Enter')
+    join()
 }
 </script>
 
@@ -33,7 +50,9 @@ function onKeydown(e: KeyboardEvent) {
   <div class="main-menu">
     <div class="card">
       <h1>Multiplayer Template</h1>
-      <p class="subtitle">Enter a name and jump in.</p>
+      <p class="subtitle">
+        Enter a name and jump in.
+      </p>
       <input
         v-model="nameInput"
         type="text"
@@ -44,9 +63,13 @@ function onKeydown(e: KeyboardEvent) {
         autofocus
         autocomplete="new-password"
         @keydown="onKeydown"
-      />
-      <p v-if="error" class="error">{{ error }}</p>
-      <button class="join-btn" @click="join">Join</button>
+      >
+      <p v-if="error" class="error">
+        {{ error }}
+      </p>
+      <button class="join-btn" @click="join">
+        Join
+      </button>
     </div>
   </div>
 </template>

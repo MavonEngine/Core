@@ -1,13 +1,13 @@
-import { ServerCommand } from '@template/server/Commands'
-import type { SV_CHAT, SV_TREES } from '@template/server/Commands/Server'
 import type GameObjectInterface from '@mavonengine/core/World/GameObjectInterface'
+import type { SV_CHAT, SV_TREES } from '@template/server/Commands/Server'
+import type NetworkManager from './NetworkManager'
+import type PlayerController from './PlayerController'
 import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
+import { ServerCommand } from '@template/server/Commands'
 import { Vector3 } from 'three'
 import Character from './Entities/Player'
-import type NetworkManager from './NetworkManager'
-import type PlayerController from './PlayerController'
 import useNetworkState from './UI/composables/useNetworkState'
 import Trees from './World/Trees'
 
@@ -35,7 +35,8 @@ export default class GameSyncManager implements GameObjectInterface {
     })
 
     this.networkManager.on(ServerCommand.SV_CHAT, (chat: SV_CHAT) => {
-      if (!chat.playerId) return
+      if (!chat.playerId)
+        return
 
       // Local player is keyed as 'localPlayer', not by socket id
       const isLocal = chat.playerId === this.networkManager.socket.id
@@ -107,7 +108,8 @@ export default class GameSyncManager implements GameObjectInterface {
 
   private handleEntityRemove(entityId: string) {
     const entity = Game.instance().world.entities.items.get(entityId)
-    if (!entity) return
+    if (!entity)
+      return
 
     entity.destroy()
     Game.instance().world.entities.items.delete(entityId)

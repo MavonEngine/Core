@@ -1,5 +1,4 @@
-import type { CommandPacket } from '../Commands'
-import { ClientCommand } from '../Commands'
+import type { ClientCommand, CommandPacket } from '../Commands'
 
 export type CL_INIT = CommandPacket<ClientCommand.CL_INIT> & {
   name: string

@@ -1,11 +1,11 @@
-import { ClientCommand } from '@template/server/Commands'
 import type { CL_MOVE } from '@template/server/Commands/Client'
+import type Character from './Entities/Player'
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
+import { ClientCommand } from '@template/server/Commands'
 import { Vector3 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import NetworkManager from './NetworkManager'
-import type Character from './Entities/Player'
 
 /**
  * Handles local player input and camera.

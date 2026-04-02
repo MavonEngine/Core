@@ -1,5 +1,5 @@
-import type Character from '../Player'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type Character from '../Player'
 import Game from '@mavonengine/core/Game'
 import Entity3D from '@mavonengine/core/World/Entity3D'
 
@@ -16,7 +16,7 @@ export default class PlayerGraphicsComponent extends Entity3D {
       this.initModel(Game.instance().resources.items.character as GLTF)
 
       // Re-enter the current state so animations start now that the model is ready
-      const currentState = this.player.state[this.player.state.length - 1]
+      const currentState = this.player.state.at(-1)
       currentState?.enter()
     }
 
