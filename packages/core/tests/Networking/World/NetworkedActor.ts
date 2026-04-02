@@ -1,5 +1,5 @@
-import NetworkedActor from '../../../src/Networking/NetworkedActor'
 import { describe, expect, it } from 'vitest'
+import NetworkedActor from '../../../src/Networking/NetworkedActor'
 
 class DummyActor extends NetworkedActor {
   updateFromNetwork!: (data: object) => void

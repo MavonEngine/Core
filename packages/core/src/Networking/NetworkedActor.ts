@@ -14,5 +14,4 @@ export default abstract class NetworkedActor extends NetworkedGameObjectMixin(Ac
   get message() {
     return `${super.message} - ${this.$typeName}`
   }
-
 }

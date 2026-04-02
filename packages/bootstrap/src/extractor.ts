@@ -1,6 +1,6 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import AdmZip from 'adm-zip'
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs'
-import { join, dirname } from 'node:path'
 
 export interface ExtractOptions {
   zipPath: string
@@ -29,13 +29,15 @@ export function extractTemplate({ zipPath, templateSubpath, destDir }: ExtractOp
 
   for (const entry of templateEntries) {
     const relativePath = entry.entryName.slice(templatePrefix.length)
-    if (!relativePath) continue
+    if (!relativePath)
+      continue
 
     const outputPath = join(destDir, relativePath)
 
     if (entry.isDirectory) {
       mkdirSync(outputPath, { recursive: true })
-    } else {
+    }
+    else {
       mkdirSync(dirname(outputPath), { recursive: true })
       writeFileSync(outputPath, entry.getData())
     }

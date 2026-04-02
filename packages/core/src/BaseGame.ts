@@ -4,10 +4,11 @@ import type Logger from './Utils/Logger'
 import type GameObjectInterface from './World/GameObjectInterface'
 import { Clock, Raycaster, Scene } from 'three'
 import { version as ENGINE_VERSION } from '../package.json' with { type: 'json' }
-export { ENGINE_VERSION }
 import EventEmitter from './Utils/EventEmitter'
 
 import BaseWorld from './World/BaseWorld'
+
+export { ENGINE_VERSION }
 
 let instance: BaseGame
 

@@ -8,6 +8,7 @@ import glsl from 'vite-plugin-glsl'
 
 const EXTENDS_RE = /\bclass\s+\w+\s+extends\s+(?:ParticleEffect|Emitter)\b/
 const ASSETS_RE = /Assets\.tsx$/
+const TS_EXT_RE = /\.ts$/
 
 const editorRoot = dirname(fileURLToPath(import.meta.url))
 const coreRoot = resolve(editorRoot, '../core')
@@ -50,11 +51,11 @@ export default defineConfig(({ command }) => ({
           if (!ASSETS_RE.test(id))
             return null
           const files = await findParticleFiles(projectRoot)
-          const coreSrc = coreRoot.replaceAll('\\', '/') + '/src/'
+          const coreSrc = `${coreRoot.replaceAll('\\', '/')}/src/`
           const injected = files.map((f) => {
             const normalized = f.replaceAll('\\', '/')
             if (normalized.startsWith(coreSrc)) {
-              const relative = normalized.slice(coreSrc.length).replace(/\.ts$/, '')
+              const relative = normalized.slice(coreSrc.length).replace(TS_EXT_RE, '')
               return `import '@mavonengine/core/${relative}'`
             }
             return `import '${normalized}'`
@@ -88,7 +89,7 @@ export default defineConfig(({ command }) => ({
       formats: ['es'],
     },
     rollupOptions: {
-      external: (id) => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
+      external: id => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
       plugins: [
         {
           name: 'inject-css-into-mount-chunk',

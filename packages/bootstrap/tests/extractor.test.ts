@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { Buffer } from 'node:buffer'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import AdmZip from 'adm-zip'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { extractTemplate } from '../src/extractor.ts'
 
 function createTestZip(destPath: string): void {

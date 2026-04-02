@@ -5,10 +5,10 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "strict": true,
     "outDir": "dist",
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "strict": true
+    "skipLibCheck": true
   },
   "include": [
     "src"

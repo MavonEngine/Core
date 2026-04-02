@@ -1,5 +1,5 @@
-import glsl from 'vite-plugin-glsl'
 import { defineConfig } from 'vite'
+import glsl from 'vite-plugin-glsl'
 
 export default defineConfig({
   plugins: [
@@ -8,8 +8,8 @@ export default defineConfig({
   server: {
     watch: {
       // For local npm link dev mode in @mavonengine/core
-      followSymlinks: true
-    }
+      followSymlinks: true,
+    },
   },
   test: {
     coverage: {

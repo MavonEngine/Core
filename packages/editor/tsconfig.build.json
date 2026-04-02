@@ -1,24 +1,24 @@
 {
   "compilerOptions": {
-    "jsx": "react-jsx",
     "target": "es2020",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "rootDir": "./src",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
       "@mavonengine/core": ["../core/dist/index"],
       "@mavonengine/core/*": ["../core/dist/*"]
     },
     "allowUmdGlobalAccess": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
     "declaration": true,
     "emitDeclarationOnly": true,
+    "outDir": "./dist",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
     "skipLibCheck": true
   },
   "include": ["src", "Global.d.ts"],

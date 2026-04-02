@@ -37,6 +37,9 @@ jobs:
         npm run build
         npm run test
 
+    - name: Lint
+      run: npm run lint
+
     - name: Typecheck bootstrap
       run: npm run typecheck
       working-directory: ./packages/bootstrap
@@ -53,4 +56,5 @@ jobs:
         npm link @mavonengine/core
         npm run typecheck
         npm run build
+        npm run lint
       working-directory: ./packages/multiplayer-template

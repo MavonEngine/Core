@@ -108,5 +108,4 @@ export default class Player extends BasePlayer {
   toJSON() {
     return this.serialize()
   }
-
 }

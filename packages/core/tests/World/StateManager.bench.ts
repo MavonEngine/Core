@@ -24,7 +24,7 @@ class TransitionState extends EntityState {
   }
 }
 
-describe('StateManager.update', () => {
+describe('stateManager.update', () => {
   bench('empty state stack (no-op)', () => {
     const actor = new DummyActor()
     const manager = new StateManager()

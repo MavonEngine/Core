@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import process from 'node:process'
 import { TAG_URL, TEMPLATE_SUBPATH } from './config.js'
 import { downloadZip } from './downloader.js'
 import { extractTemplate } from './extractor.js'
@@ -37,7 +38,7 @@ export async function createProject({
   if (existsSync(pkgJsonPath)) {
     const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
     pkg.name = projectName
-    writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n')
+    writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`)
   }
 
   if (!skipInstall) {

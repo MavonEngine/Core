@@ -1,6 +1,6 @@
-import styles from './StatusBar.module.css'
-import { version } from '../../../package.json' with { type: 'json' }
 import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
+import { version } from '../../../package.json' with { type: 'json' }
+import styles from './StatusBar.module.css'
 import { useSceneStats } from './useSceneStats'
 
 export default function StatusBar() {
@@ -36,7 +36,13 @@ export default function StatusBar() {
           <span className={styles.statLabel}>Textures</span>
           {stats.textures}
         </span>
-        <span className={styles.engineName}>Editor v{version} | MavonEngine v{ENGINE_VERSION}</span>
+        <span className={styles.engineName}>
+          Editor v
+          {version}
+          {' '}
+          | MavonEngine v
+          {ENGINE_VERSION}
+        </span>
       </div>
     </div>
   )

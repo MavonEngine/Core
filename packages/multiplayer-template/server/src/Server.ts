@@ -6,8 +6,8 @@ import type { SV_TREES } from './Commands/Server'
 import BaseServer from '@mavonengine/core/Networking/Server/Server'
 import { randRange } from '@mavonengine/core/Utils/Math'
 import { Vector3 } from 'three'
-import { ClientCommand, ServerCommand } from './Commands'
 import Tree from './Base/Vegetation/Tree'
+import { ClientCommand, ServerCommand } from './Commands'
 import Player from './Server/Entities/Player'
 
 const TREE_COUNT = 15
@@ -89,7 +89,7 @@ export default class Server extends BaseServer<Player> {
     return player
   }
 
-  protected onCommand(command: any, delta: number): void {
+  protected onCommand(command: any, _delta: number): void {
     const player = this.game.world.entities.items.get(command.playerId) as Player | null
     if (!player || player.isDead())
       return

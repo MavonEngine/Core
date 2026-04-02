@@ -4,6 +4,11 @@ import { fileURLToPath } from 'node:url'
 import config from '@mavonengine/core/vite.config'
 import vue from '@vitejs/plugin-vue'
 
+const GLSL_FILTER = /\.glsl$/
+const PACKAGE_JSON_FILTER = /[/\\]package\.json$/
+const ALL_FILTER = /.*/
+const IDENTIFIER_FILTER = /^[a-z_$][\w$]*$/i
+
 const clientRoot = dirname(fileURLToPath(import.meta.url))
 const templateRoot = resolve(clientRoot, '..')
 const coreRoot = resolve(clientRoot, '../../core')
@@ -15,7 +20,7 @@ const editorSrc = resolve(editorRoot, 'src/Editor.ts')
 const glslPlugin = {
   name: 'glsl',
   setup(build) {
-    build.onLoad({ filter: /\.glsl$/ }, (args) => {
+    build.onLoad({ filter: GLSL_FILTER }, (args) => {
       return { contents: `export default ${JSON.stringify(readFileSync(args.path, 'utf8'))}`, loader: 'js' }
     })
   },
@@ -26,11 +31,11 @@ const glslPlugin = {
 const packageJsonPlugin = {
   name: 'package-json',
   setup(build) {
-    build.onResolve({ filter: /[/\\]package\.json$/ }, args => ({ path: args.path, namespace: 'pkg-json' }))
-    build.onLoad({ filter: /.*/, namespace: 'pkg-json' }, (args) => {
+    build.onResolve({ filter: PACKAGE_JSON_FILTER }, args => ({ path: args.path, namespace: 'pkg-json' }))
+    build.onLoad({ filter: ALL_FILTER, namespace: 'pkg-json' }, (args) => {
       const pkg = JSON.parse(readFileSync(args.path, 'utf8'))
       const named = Object.entries(pkg)
-        .filter(([k]) => /^[a-z_$][\w$]*$/i.test(k))
+        .filter(([k]) => IDENTIFIER_FILTER.test(k))
         .map(([k, v]) => `export const ${k} = ${JSON.stringify(v)};`)
         .join('\n')
       return { contents: `${named}\nexport default ${JSON.stringify(pkg)};`, loader: 'js' }

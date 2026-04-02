@@ -1,8 +1,8 @@
+import Game from '@mavonengine/core/Game'
 import { Matrix4, Mesh, Object3D, Vector3 } from 'three'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import Editor from '../src/Editor'
 
-import Game from '@mavonengine/core/Game'
+import Editor from '../src/Editor'
 
 /**
  * Create by claude 4.6
@@ -274,7 +274,7 @@ describe('editor', () => {
     function getDeleteKeydownCallback() {
       // handleItemDelete registers the only keydown listener in the constructor
       const keydownCalls = vi.mocked(mockGame.input.on).mock.calls.filter(([event]) => event === 'keydown')
-      return keydownCalls[keydownCalls.length - 1][1]
+      return keydownCalls.at(-1)[1]
     }
 
     it('removes the active item from the scene on Delete', () => {

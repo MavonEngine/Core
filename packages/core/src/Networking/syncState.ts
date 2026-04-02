@@ -24,11 +24,11 @@ export function syncStateStack(
 
       // Remove all states from index i onwards (they don't match)
       while (entity.state.length > i) {
-        entity.state[entity.state.length - 1].leave()
+        entity.state.at(-1)!.leave()
       }
 
       // Get the previous state (if any) for suspending
-      const prevState = entity.state[entity.state.length - 1]
+      const prevState = entity.state.at(-1)
       // Suspend the previous state when adding a new state on top
       prevState?.suspend()
 
@@ -46,6 +46,6 @@ export function syncStateStack(
 
   // Remove any extra states beyond what the server has
   while (entity.state.length > networkStates.length) {
-    entity.state[entity.state.length - 1].leave()
+    entity.state.at(-1)!.leave()
   }
 }
