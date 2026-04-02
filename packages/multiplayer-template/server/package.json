@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.18.2",
-    "@geckos.io/server": "^3.0.2",
+    "@geckos.io/server": "3.1.0",
     "express": "5.1.0",
     "three": "^0.176.0",
     "winston": "^3.17.0"

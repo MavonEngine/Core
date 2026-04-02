@@ -1,10 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import BaseGame from '@mavonengine/core/BaseGame'
 import BasePlayer from '@mavonengine/core/Networking/Entities/Player'
-import { syncStateStack } from '@mavonengine/core/Networking/syncState'
 import { Vector3 } from 'three'
-import IdleState from '../Player/IdleState'
-import WalkingState from '../Player/WalkingState'
 
 /**
  * Base player class shared between client and server.
@@ -112,33 +109,4 @@ export default class Player extends BasePlayer {
     return this.serialize()
   }
 
-  /**
-   * Applied on the client when server state arrives.
-   * Overridden in client/Entities/Player.ts to also update the mesh.
-   */
-  updateFromNetwork = (data: {
-    position: { x: number; y: number; z: number }
-    rotation?: { x: number; y: number; z: number }
-    state: { stateName: string }[]
-    health: number
-    name?: string
-  }) => {
-    if (this.rigidBody) {
-      this.rigidBody.setTranslation({ x: data.position.x, y: data.position.y, z: data.position.z }, true)
-    }
-    else {
-      this.position.set(data.position.x, data.position.y, data.position.z)
-    }
-    this.health = data.health
-    if (data.name) {
-      this.name = data.name
-    }
-
-    const stateFactories = {
-      idleState: (entity: Player) => new IdleState(entity),
-      walkingState: (entity: Player) => new WalkingState(entity),
-    }
-
-    syncStateStack(this, data.state, stateFactories)
-  }
 }

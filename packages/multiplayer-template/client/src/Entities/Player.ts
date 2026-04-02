@@ -28,36 +28,31 @@ export default class Character extends BasePlayer {
   }
 
   update(delta: number): void {
+    this.rigidBody!.setTranslation({ x: this.position.x, y: this.position.y, z: this.position.z }, true)
+
     this.graphicalComponent.update(delta)
     this.label.update(delta)
   }
 
-  updateFromNetwork = (data: {
-    position: { x: number; y: number; z: number }
-    rotation?: { x: number; y: number; z: number }
-    state: { stateName: string }[]
-    health: number
-    name?: string
-  }) => {
-    this.position.set(data.position.x, data.position.y, data.position.z)
-    this.rigidBody?.setTranslation({ x: data.position.x, y: data.position.y, z: data.position.z }, false)
-    this.health = data.health
-
-    if (!this.isLocalPlayer && data.rotation) {
-      this.rotation.y = data.rotation.y
+  networkedFieldCallbacks(): Record<string, (value: unknown) => void> {
+    return {
+      ...super.networkedFieldCallbacks(),
+      name: (v) => { if (v) this.name = v as string },
     }
+  }
 
-    if (data.name && data.name !== this.name) {
-      this.name = data.name
-      this.label.setName(this.isLocalPlayer ? `You (${data.name})` : data.name)
-    }
+  private stateFactories = {
+    idleState: (entity: BasePlayer) => new IdleState(entity),
+    walkingState: (entity: BasePlayer) => new WalkingState(entity),
+  }
 
-    const stateFactories = {
-      idleState: (entity: BasePlayer) => new IdleState(entity),
-      walkingState: (entity: BasePlayer) => new WalkingState(entity),
-    }
+  /**
+  * Applied on the client when server state arrives.
+  */
+  updateFromNetwork(data: Record<string, unknown>): void {
+    super.updateFromNetwork(data)
 
-    syncStateStack(this, data.state, stateFactories)
+    syncStateStack(this, data.state as { stateName: string }[], this.stateFactories)
   }
 
   destroy(): void {

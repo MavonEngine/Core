@@ -5,3 +5,8 @@ declare module '*.vue' {
   const component: DefineComponent
   export default component
 }
+
+declare module '*.glsl' {
+  const content: string
+  export default content
+}
