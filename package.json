@@ -6,6 +6,10 @@
     "packages/core",
     "packages/editor"
   ],
+  "devDependencies": {
+    "@antfu/eslint-config": "8.0.0",
+    "eslint": "10.1.0"
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
