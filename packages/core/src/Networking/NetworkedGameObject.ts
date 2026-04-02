@@ -13,6 +13,17 @@ export function NetworkedGameObjectMixin<TBase extends AbstractCtor<GameObject>>
     previousStateHash = ''
     needsSync = true
 
+    /**
+     * This is the reverse of serialize on GameObject.
+     * This way we can parse the values back from the network serialization into our 
+     * current entity.
+     * 
+     * Once it gets the data in from the server it loops through the entities networkedFieldCallbacks
+     * and assigns the values. 
+     * 
+     * After the values have been set you can then do what you need to do 
+     * in the entity.update() method.
+     */
     updateFromNetwork(data: Record<string, unknown>): void {
       Object.entries(this.networkedFieldCallbacks()).forEach(([name, cb]) => {
         if (name in data) {
