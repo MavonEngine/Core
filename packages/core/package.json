@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/core",
   "type": "module",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "",
   "author": "",
   "license": "MIT",
@@ -30,6 +30,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "vite",
     "vite.config.js"
   ],
   "scripts": {
