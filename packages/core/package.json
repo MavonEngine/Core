@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/core",
   "type": "module",
-  "version": "0.0.10",
+  "version": "0.0.13",
   "description": "",
   "author": "",
   "license": "MIT",
@@ -34,8 +34,9 @@
     "vite.config.js"
   ],
   "scripts": {
-    "build": "rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json && find src -name '*.glsl' -o -name '*.css' | while read f; do mkdir -p dist/$(dirname ${f#src/}) && cp $f dist/${f#src/}; done",
-    "dev": "rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json --watch",
+    "prepare": "node scripts/generate-version.js",
+    "build": "node scripts/generate-version.js && rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json && find src -name '*.glsl' -o -name '*.css' | while read f; do mkdir -p dist/$(dirname ${f#src/}) && cp $f dist/${f#src/}; done",
+    "dev": "node scripts/generate-version.js && rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "bench": "vitest bench",

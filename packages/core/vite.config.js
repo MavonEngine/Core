@@ -1,13 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import glsl from 'vite-plugin-glsl'
-import { createPackageJsonPlugin } from './vite/plugins/packageJsonPlugin.js'
 
 const GLSL_FILTER = /\.glsl$/
-
-const coreRoot = dirname(fileURLToPath(import.meta.url))
 
 const mavonEngineGlslPlugin = {
   name: 'glsl',
@@ -29,7 +24,6 @@ export default defineConfig({
     esbuildOptions: {
       plugins: [
         mavonEngineGlslPlugin,
-        createPackageJsonPlugin(coreRoot),
       ],
     },
   },
