@@ -38,8 +38,10 @@ export default class Character extends BasePlayer {
     return {
       ...super.networkedFieldCallbacks(),
       name: (v) => {
-        if (v)
+        if (v && !this.name) {
+          this.label.setName(v as string)
           this.name = v as string
+        }
       },
     }
   }
