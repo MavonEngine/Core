@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/core",
   "type": "module",
-  "version": "0.0.16",
+  "version": "0.0.18",
   "description": "",
   "author": "",
   "license": "MIT",
@@ -29,6 +29,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
+    "README.md",
     "dist",
     "vite",
     "vite.config.js"
