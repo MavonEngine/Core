@@ -3,13 +3,14 @@ import type ServerWorld from '../../src/Networking/Server/World'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
+import { ServerCommand } from '../../src/Networking/Server/Commands'
 import Server from '../../src/Networking/Server/Server'
 
 const mockGeckosOnConnection = vi.fn()
 
 const mockGeckosServer = {
   onConnection: mockGeckosOnConnection,
-  connectionsManager: { connections: [] },
+  connectionsManager: { connections: new Map() as Map<string, any> },
   emit: vi.fn(),
 }
 
@@ -152,5 +153,134 @@ describe('server', () => {
     (server as any).runThroughBuffer()
 
     expect(onCommand).toBeCalledWith(testCommand, randomDelta)
+  })
+
+  describe('stateSync', () => {
+    function makeConnection(id: string) {
+      const emit = vi.fn()
+      return {
+        id,
+        emit,
+        channel: { emit },
+      }
+    }
+
+    function addPlayer(server: TestServer, id: string, x = 0) {
+      const player = new TestClient(id)
+      player.position.set(x, 0, 0)
+      server.game.world.entities.items.set(id, player)
+      return player
+    }
+
+    it('emits SV_STATE to each connected player', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 100
+
+      const conn1 = makeConnection('p1')
+      const conn2 = makeConnection('p2')
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['p1', conn1],
+        ['p2', conn2],
+      ])
+
+      const _p1 = addPlayer(server, 'p1', 0)
+      const _p2 = addPlayer(server, 'p2', 5)
+
+      ;(server as any).stateSync()
+
+      expect(conn1.channel.emit).toHaveBeenCalledWith(
+        ServerCommand.SV_STATE,
+        expect.objectContaining({ type: ServerCommand.SV_STATE }),
+      )
+      expect(conn2.channel.emit).toHaveBeenCalledWith(
+        ServerCommand.SV_STATE,
+        expect.objectContaining({ type: ServerCommand.SV_STATE }),
+      )
+    })
+
+    it('only includes entities within the sync distance', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 10
+
+      const conn = makeConnection('p1')
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+
+      const p1 = addPlayer(server, 'p1', 0)
+      const nearby = addPlayer(server, 'nearby', 5)
+      const farAway = addPlayer(server, 'faraway', 50)
+
+      ;(server as any).stateSync()
+
+      const emittedState = conn.channel.emit.mock.calls[0][1]
+      const ids = emittedState.entities.map((e: any) => e.id)
+      expect(ids).toContain(p1.id)
+      expect(ids).toContain(nearby.id)
+      expect(ids).not.toContain(farAway.id)
+    })
+
+    it('calls markSyncd on entities that needed sync', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 100
+
+      const conn = makeConnection('p1')
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+
+      const p1 = addPlayer(server, 'p1', 0)
+      p1.needsSync = true
+
+      const markSyncd = vi.spyOn(p1, 'markSyncd')
+
+      ;(server as any).stateSync()
+
+      expect(markSyncd).toHaveBeenCalled()
+    })
+
+    it('does not call markSyncd on entities that do not need sync and are already tracked', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 100
+
+      const conn = makeConnection('p1')
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+
+      const p1 = addPlayer(server, 'p1', 0)
+      p1.needsSync = false
+      p1.trackedEntities.add(p1.id)
+
+      const markSyncd = vi.spyOn(p1, 'markSyncd')
+
+      ;(server as any).stateSync()
+
+      expect(markSyncd).not.toHaveBeenCalled()
+    })
+
+    it('removes out-of-range entities from player trackedEntities', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 10
+
+      const conn = makeConnection('p1')
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+
+      const p1 = addPlayer(server, 'p1', 0)
+      const farAway = addPlayer(server, 'faraway', 50)
+      p1.trackedEntities.add(farAway.id)
+
+      ;(server as any).stateSync()
+
+      expect(p1.trackedEntities.has(farAway.id)).toBe(false)
+    })
+
+    it('skips a player connection that has no matching entity', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 100
+
+      const conn = makeConnection('ghost')
+      mockGeckosServer.connectionsManager.connections = new Map([['ghost', conn]])
+
+      // no entity added for 'ghost'
+
+      ;(server as any).stateSync()
+
+      expect(conn.channel.emit).not.toHaveBeenCalled()
+    })
   })
 })
