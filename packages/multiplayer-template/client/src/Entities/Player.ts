@@ -1,5 +1,7 @@
 import { syncStateStack } from '@mavonengine/core/Networking/syncState'
 import BasePlayer from '@template/server/Base/Player'
+import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
+import useNetworkState from '../UI/composables/useNetworkState'
 import { Vector3 } from 'three'
 import IdleState from '../Player/IdleState'
 import WalkingState from '../Player/WalkingState'
@@ -20,6 +22,19 @@ export default class Character extends BasePlayer {
     this.graphicalComponent.init()
 
     this.label = new PlayerLabel(this, isLocalPlayer ? 'You' : 'Player', isLocalPlayer)
+
+    if (!isLocalPlayer) {
+      const { networkState } = useNetworkState()
+      networkState.value.players++
+    }
+
+    NetworkedEntityFactory.instance.register(this.$typeName, (data) => {
+      return new Character(data.id as string, false, new Vector3(
+        (data.position as any).x,
+        (data.position as any).y,
+        (data.position as any).z,
+      ))
+    })
   }
 
   /** Called by GameSyncManager when this player sends a chat. */
@@ -61,6 +76,12 @@ export default class Character extends BasePlayer {
   }
 
   destroy(): void {
+
+    if (!this.isLocalPlayer) {
+      const { networkState } = useNetworkState()
+      networkState.value.players--
+    }
+
     this.graphicalComponent.destroy()
     this.label.destroy()
     super.destroy()
