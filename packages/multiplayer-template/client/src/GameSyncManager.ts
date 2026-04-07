@@ -4,13 +4,11 @@ import type NetworkManager from './NetworkManager'
 import type PlayerController from './PlayerController'
 import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
+import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
 import { ServerCommand } from '@template/server/Commands'
-import { Vector3 } from 'three'
 import Character from './Entities/Player'
-import useNetworkState from './UI/composables/useNetworkState'
 import Trees from './World/Trees'
-import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 
 export default class GameSyncManager implements GameObjectInterface {
   private networkManager: NetworkManager

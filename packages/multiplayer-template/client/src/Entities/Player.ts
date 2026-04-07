@@ -1,10 +1,10 @@
+import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import { syncStateStack } from '@mavonengine/core/Networking/syncState'
 import BasePlayer from '@template/server/Base/Player'
-import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
-import useNetworkState from '../UI/composables/useNetworkState'
 import { Vector3 } from 'three'
 import IdleState from '../Player/IdleState'
 import WalkingState from '../Player/WalkingState'
+import useNetworkState from '../UI/composables/useNetworkState'
 import PlayerGraphicsComponent from './Player/PlayerGraphicsComponent'
 import PlayerLabel from './Player/PlayerLabel'
 
@@ -73,7 +73,6 @@ export default class Character extends BasePlayer {
   }
 
   destroy(): void {
-
     if (!this.isLocalPlayer) {
       const { networkState } = useNetworkState()
       networkState.value.players--
