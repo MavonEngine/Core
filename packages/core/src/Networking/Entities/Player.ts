@@ -8,7 +8,7 @@ export default abstract class Player extends NetworkedLivingActor {
 
   trackedEntities = new Set<string>()
 
-  public serialize(): object {
+  public serialize() {
     return {
       ...super.serialize(),
       $typeName: this.$typeName,

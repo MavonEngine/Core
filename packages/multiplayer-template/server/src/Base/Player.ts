@@ -1,7 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import BaseGame from '@mavonengine/core/BaseGame'
 import BasePlayer from '@mavonengine/core/Networking/Entities/Player'
-import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import { Vector3 } from 'three'
 
 /**
@@ -99,7 +98,7 @@ export default class Player extends BasePlayer {
     super.destroy()
   }
 
-  public serialize(): object {
+  public serialize() {
     return {
       ...super.serialize(),
       name: this.name,

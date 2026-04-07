@@ -29,11 +29,8 @@ export default class Character extends BasePlayer {
     }
 
     NetworkedEntityFactory.instance.register(this.$typeName, (data) => {
-      return new Character(data.id as string, false, new Vector3(
-        (data.position as any).x,
-        (data.position as any).y,
-        (data.position as any).z,
-      ))
+      const d = data as ReturnType<BasePlayer['serialize']>
+      return new Character(d.id, false, new Vector3(d.position.x, d.position.y, d.position.z))
     })
   }
 

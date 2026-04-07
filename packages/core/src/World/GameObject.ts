@@ -28,7 +28,7 @@ export default abstract class GameObject extends Entity implements GameObjectInt
 
   abstract update(delta: number): void
 
-  public serialize(): object {
+  public serialize() {
     return {
       id: this.id,
       position: this.position,
