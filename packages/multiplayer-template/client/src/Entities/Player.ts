@@ -3,8 +3,8 @@ import BasePlayer from '@template/server/Base/Player'
 import { Vector3 } from 'three'
 import IdleState from '../Player/IdleState'
 import WalkingState from '../Player/WalkingState'
-import PlayerLabel from './Player/PlayerLabel'
 import PlayerGraphicsComponent from './Player/PlayerGraphicsComponent'
+import PlayerLabel from './Player/PlayerLabel'
 
 export default class Character extends BasePlayer {
   graphicalComponent: PlayerGraphicsComponent
