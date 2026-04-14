@@ -4,11 +4,10 @@ import type NetworkManager from './NetworkManager'
 import type PlayerController from './PlayerController'
 import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
+import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
 import { ServerCommand } from '@template/server/Commands'
-import { Vector3 } from 'three'
 import Character from './Entities/Player'
-import useNetworkState from './UI/composables/useNetworkState'
 import Trees from './World/Trees'
 
 export default class GameSyncManager implements GameObjectInterface {
@@ -60,7 +59,7 @@ export default class GameSyncManager implements GameObjectInterface {
     this.networkManager.destroy()
   }
 
-  update(_delta: number) {}
+  update(_delta: number) { }
 
   private handleStateUpdate(data: any) {
     const updatedEntities: any[] = data.entities
@@ -75,18 +74,9 @@ export default class GameSyncManager implements GameObjectInterface {
         (existing as NetworkedActor).updateFromNetwork(inEntity)
       }
       else if (this.networkManager.socket.id !== inEntity.id) {
-        // Remote player we haven't seen yet
-        if (inEntity.$typeName === 'player') {
-          const { networkState } = useNetworkState()
-          networkState.value.players++
-
-          const newChar = new Character(
-            inEntity.id,
-            false,
-            new Vector3(inEntity.position.x, inEntity.position.y, inEntity.position.z),
-          )
-          Game.instance().world.entities.items.set(inEntity.id, newChar)
-        }
+        const instance = NetworkedEntityFactory.instance.create(inEntity.$typeName, inEntity)
+        if (instance)
+          Game.instance().world.entities.items.set(inEntity.id, instance)
       }
       else {
         // This is our own player coming back from the server
@@ -113,10 +103,5 @@ export default class GameSyncManager implements GameObjectInterface {
 
     entity.destroy()
     Game.instance().world.entities.items.delete(entityId)
-
-    if (entity instanceof Character) {
-      const { networkState } = useNetworkState()
-      networkState.value.players = Math.max(0, networkState.value.players - 1)
-    }
   }
 }

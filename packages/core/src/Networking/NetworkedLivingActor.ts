@@ -35,11 +35,18 @@ export default abstract class NetworkedLivingActor extends NetworkedGameObjectMi
     }
   }
 
-  public serialize(): object {
+  public serialize(): {
+    id: string
+    position: Vector3
+    rotation: Vector3
+    scale: Vector3
+    health: number
+    state: NetworkedEntityState[]
+  } {
     return {
       ...super.serialize(),
       state: this.state,
-    }
+    } as ReturnType<NetworkedLivingActor['serialize']>
   }
 
   isDead(): boolean {
