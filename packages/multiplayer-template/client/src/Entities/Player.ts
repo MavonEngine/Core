@@ -1,10 +1,12 @@
+import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import { syncStateStack } from '@mavonengine/core/Networking/syncState'
 import BasePlayer from '@template/server/Base/Player'
 import { Vector3 } from 'three'
 import IdleState from '../Player/IdleState'
 import WalkingState from '../Player/WalkingState'
-import PlayerLabel from '../ui/PlayerLabel'
+import useNetworkState from '../UI/composables/useNetworkState'
 import PlayerGraphicsComponent from './Player/PlayerGraphicsComponent'
+import PlayerLabel from './Player/PlayerLabel'
 
 export default class Character extends BasePlayer {
   graphicalComponent: PlayerGraphicsComponent
@@ -20,6 +22,16 @@ export default class Character extends BasePlayer {
     this.graphicalComponent.init()
 
     this.label = new PlayerLabel(this, isLocalPlayer ? 'You' : 'Player', isLocalPlayer)
+
+    if (!isLocalPlayer) {
+      const { networkState } = useNetworkState()
+      networkState.value.players++
+    }
+
+    NetworkedEntityFactory.instance.register(this.$typeName, (data) => {
+      const d = data as ReturnType<BasePlayer['serialize']>
+      return new Character(d.id, false, new Vector3(d.position.x, d.position.y, d.position.z))
+    })
   }
 
   /** Called by GameSyncManager when this player sends a chat. */
@@ -38,8 +50,10 @@ export default class Character extends BasePlayer {
     return {
       ...super.networkedFieldCallbacks(),
       name: (v) => {
-        if (v)
+        if (v && !this.name) {
+          this.label.setName(v as string)
           this.name = v as string
+        }
       },
     }
   }
@@ -59,6 +73,11 @@ export default class Character extends BasePlayer {
   }
 
   destroy(): void {
+    if (!this.isLocalPlayer) {
+      const { networkState } = useNetworkState()
+      networkState.value.players--
+    }
+
     this.graphicalComponent.destroy()
     this.label.destroy()
     super.destroy()

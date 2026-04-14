@@ -5,7 +5,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "start": "LOG_LEVEL=debug node ./dist/index.js",
+    "start": "cross-env LOG_LEVEL=debug node ./dist/index.js",
     "dev": "tsup --watch --onSuccess \"npm run start\"",
     "build": "tsup",
     "typecheck": "tsc --noEmit"
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "cross-env": "^10.1.0"
   }
 }

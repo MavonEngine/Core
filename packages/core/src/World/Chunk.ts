@@ -1,10 +1,6 @@
 import GameObject from './GameObject'
 
 export default class Chunk extends GameObject {
-  public serialize(): object {
-    throw new Error('Method not implemented.')
-  }
-
   static CHUNK_SIZE: number
 
   constructor(x: number, y: number) {

@@ -98,7 +98,7 @@ export default class Player extends BasePlayer {
     super.destroy()
   }
 
-  public serialize(): object {
+  public serialize() {
     return {
       ...super.serialize(),
       name: this.name,

@@ -9,7 +9,7 @@ export default abstract class LivingActor extends Actor implements LivingEntity 
   abstract takeDamage(amount: number): void
   abstract heal(amount: number): void
 
-  public serialize(): object {
+  public serialize() {
     return {
       ...super.serialize(),
       health: this.health,

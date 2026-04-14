@@ -3,8 +3,8 @@ import type winston from 'winston'
 import type Logger from './Utils/Logger'
 import type GameObjectInterface from './World/GameObjectInterface'
 import { Clock, Raycaster, Scene } from 'three'
-import { version as ENGINE_VERSION } from '../package.json' with { type: 'json' }
 import EventEmitter from './Utils/EventEmitter'
+import { version as ENGINE_VERSION } from './version'
 
 import BaseWorld from './World/BaseWorld'
 

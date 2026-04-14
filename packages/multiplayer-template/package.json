@@ -1,6 +1,6 @@
 {
   "name": "@mavonengine/multiplayer-template",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "workspaces": [
     "client",
     "server"
@@ -14,7 +14,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@mavonengine/core": "0.0.8"
+    "@mavonengine/core": "0.0.19"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",

@@ -88,7 +88,7 @@ export default abstract class Server<TClient extends GameObject> {
       })
 
       channel.on('command', (data) => {
-        const bytes = Buffer.byteLength(data.toString())
+        const bytes = Buffer.byteLength(JSON.stringify(data))
         this.bandwidthTracker.recordReceived('server', bytes)
 
         this.bufferIncomingCommand(channel, data)
@@ -174,7 +174,7 @@ export default abstract class Server<TClient extends GameObject> {
         type: ServerCommand.SV_STATE,
       }
 
-      this.bandwidthTracker.recordSent('server', Buffer.byteLength(state.toString()))
+      this.bandwidthTracker.recordSent('server', Buffer.byteLength(JSON.stringify(state)))
       con.channel.emit(ServerCommand.SV_STATE, state)
     })
 
