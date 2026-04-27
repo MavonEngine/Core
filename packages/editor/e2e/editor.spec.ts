@@ -52,7 +52,18 @@ test('scene explorer renders initial objects', async ({ page }) => {
   await page.keyboard.press('Insert')
   await expect(page).toHaveTitle('MavonEngine | Editor')
 
-  // AmbientLight is always present in the editor's default scene.
+  // Verify AmbientLight exists in the actual Three.js scene by traversing it.
+  const hasAmbientLight = await page.evaluate(() => {
+    let found = false
+    window.Game?.scene?.traverse((obj) => {
+      if (obj.type === 'AmbientLight')
+        found = true
+    })
+    return found
+  })
+  expect(hasAmbientLight).toBe(true)
+
+  // Also confirm the scene explorer UI reflects it.
   // toBeAttached (not toBeVisible) because the panel ancestor uses overflow:hidden for sizing.
   await expect(page.getByTestId('scene-explorer').getByText('AmbientLight')).toBeAttached()
 })

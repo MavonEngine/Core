@@ -22,5 +22,5 @@
   "references": [
     { "path": "../core" }
   ],
-  "include": ["src"]
+  "include": ["src", "e2e", "Global.d.ts"]
 }
