@@ -1,5 +1,5 @@
 import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import { version } from '../../../package.json' with { type: 'json' }
 import styles from './StatusBar.module.css'
 import { useSceneStats } from './useSceneStats'
@@ -7,7 +7,7 @@ import { useSceneStats } from './useSceneStats'
 export default function StatusBar() {
   const stats = useSceneStats()
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (window.Game.editor) {
       window.Game.editor.ready = true
       window.Game.editor.trigger('ready')
