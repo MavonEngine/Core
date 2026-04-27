@@ -27,6 +27,20 @@ test('editor opens on Insert key press', async ({ page }) => {
 
   // The editor mounts its React UI into #ui and sets the page title
   await expect(page).toHaveTitle('MavonEngine | Editor')
+
+  // Wait for the loading screen fade to fully complete before screenshotting.
+  await page.waitForFunction(() =>
+    new Promise<boolean>((resolve) => {
+      const ls = window.Game?.loadingScreen
+      if (!ls)
+        return
+      if (ls.progress === 0)
+        return resolve(true)
+      ls.on('finished', () => resolve(true))
+    }),
+  )
+
+  await expect(page).toHaveScreenshot('editor-boot.png')
 })
 
 test('editor opens on Period key press', async ({ page }) => {

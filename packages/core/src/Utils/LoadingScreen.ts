@@ -75,6 +75,7 @@ export default class LoadingScreen extends EventEmitter {
       // Optional: remove overlay from scene after fade completes
       if (progress >= 1) {
         Game.instance().scene.remove(this.overlay!)
+        this.trigger('finished')
       }
     }
   }
