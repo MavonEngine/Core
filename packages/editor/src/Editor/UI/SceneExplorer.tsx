@@ -177,7 +177,7 @@ export default function SceneExplorer() {
   }
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-testid="scene-explorer">
       {items.map(item => (
         <SceneNode
           key={item.uuid}

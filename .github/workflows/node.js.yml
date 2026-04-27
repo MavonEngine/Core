@@ -64,3 +64,11 @@ jobs:
       timeout-minutes: 1
       run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"
       working-directory: ./packages/multiplayer-template
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      working-directory: ./packages/editor
+
+    - name: Run editor e2e tests
+      run: npm run test:e2e
+      working-directory: ./packages/editor
