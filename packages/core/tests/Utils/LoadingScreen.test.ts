@@ -83,13 +83,21 @@ describe('loadingScreen', () => {
     expect(loadingScreen.progress).toBeLessThan(1)
   })
 
-  it('emits finished, removes overlay, and zeroes progress when fade completes', () => {
+  it('emits finished, sets finished flag, removes overlay, and zeroes progress when fade completes', () => {
     resources.trigger('loaded')
     const onFinished = vi.fn()
     loadingScreen.on('finished', onFinished)
     loadingScreen.update(3) // past the 2s duration
     expect(onFinished).toHaveBeenCalledOnce()
+    expect(loadingScreen.finished).toBe(true)
     expect(mockScene.remove).toHaveBeenCalled()
     expect(loadingScreen.progress).toBe(0)
+  })
+
+  it('does not emit finished or remove overlay more than once', () => {
+    resources.trigger('loaded')
+    loadingScreen.update(3)
+    loadingScreen.update(1) // extra update after completion
+    expect(mockScene.remove).toHaveBeenCalledOnce()
   })
 })

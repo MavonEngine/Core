@@ -11,6 +11,7 @@ export default class LoadingScreen extends EventEmitter {
   private overlay: Mesh<BufferGeometry, ShaderMaterial> | undefined
 
   loaded = false
+  finished = false
   progress = 0
   duration = 2
 
@@ -73,7 +74,8 @@ export default class LoadingScreen extends EventEmitter {
       Game.instance().uiRoot.style.opacity = `${progress}`
 
       // Optional: remove overlay from scene after fade completes
-      if (progress >= 1) {
+      if (progress >= 1 && !this.finished) {
+        this.finished = true
         Game.instance().scene.remove(this.overlay!)
         this.trigger('finished')
       }
