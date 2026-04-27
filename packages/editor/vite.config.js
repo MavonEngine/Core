@@ -105,6 +105,7 @@ export default defineConfig(({ command }) => ({
     },
   },
   test: {
+    include: ['tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src'],
