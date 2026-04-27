@@ -17,6 +17,7 @@ import { applyShadeMode } from './Editor/applyShadeMode'
 export type ShadeMode = 'solid' | 'flat' | 'wireframe'
 
 export default class Editor extends EventEmitter implements IEditor, GameObjectInterface {
+  ready = false
   flyControls!: FlyControls
   reactRoot!: Root
   activeItem?: Object3D<Object3DEventMap> | null

@@ -72,15 +72,5 @@ jobs:
 
     - name: Run editor e2e tests
       if: matrix.os != 'windows-latest'
-      run: npx playwright test --update-snapshots=missing
+      run: npm run test:e2e
       working-directory: ./packages/editor
-
-    - name: Upload Playwright results
-      if: matrix.os != 'windows-latest' && always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: playwright-results-${{ matrix.os }}
-        path: |
-          packages/editor/e2e/editor.spec.ts-snapshots/
-          packages/editor/test-results/
-        if-no-files-found: ignore

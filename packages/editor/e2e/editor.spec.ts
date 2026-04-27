@@ -29,6 +29,7 @@ test('editor opens on Insert key press', async ({ page }) => {
   await expect(page).toHaveTitle('MavonEngine | Editor')
 
   await page.waitForFunction(() => window.Game?.loadingScreen?.finished === true)
+  await page.waitForFunction(() => window.Game?.editor?.ready === true)
 
   await expect(page).toHaveScreenshot('editor-boot.png')
 })
