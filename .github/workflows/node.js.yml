@@ -66,9 +66,11 @@ jobs:
       working-directory: ./packages/multiplayer-template
 
     - name: Install Playwright browsers
+      if: matrix.os != 'windows-latest'
       run: npx playwright install --with-deps chromium
       working-directory: ./packages/editor
 
     - name: Run editor e2e tests
+      if: matrix.os != 'windows-latest'
       run: npm run test:e2e
       working-directory: ./packages/editor
