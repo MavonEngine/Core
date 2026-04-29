@@ -26,6 +26,7 @@
   "main": "./dist/Editor.mjs",
   "types": "./dist/Editor.d.ts",
   "files": [
+    "README.md",
     "dist"
   ],
   "scripts": {
@@ -35,7 +36,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui --coverage.enabled true --coverage.reporter html",
     "test:coverage": "vitest --coverage.enabled true --coverage.reporter json-summary",
-    "test:dev": "vitest"
+    "test:dev": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "peerDependencies": {
     "@mavonengine/core": "*",
@@ -53,6 +56,7 @@
   "devDependencies": {
     "@dimforge/rapier3d-compat": "0.18.2",
     "@mavonengine/core": "*",
+    "@playwright/test": "^1.52.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.10",

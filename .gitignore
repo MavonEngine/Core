@@ -26,4 +26,6 @@ dist-ssr
 .env
 coverage
 *.tsbuildinfo
+test-results
+playwright-report
 packages/core/src/version.ts

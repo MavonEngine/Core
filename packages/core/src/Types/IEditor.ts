@@ -16,6 +16,7 @@ export default interface IEditor {
   on(event: string, callback: (event?: any) => void): void
   off(event: string, callback: (event?: any) => void): void
   trigger(name: string, event?: any): void
+  ready: boolean
   availableAssetCategories: string[]
   activeAssetCategory: 'Object' | '_texture' | 'CubeTexture' | 'AudioBuffer' | 'Font'
   setActiveAssetCategory(value: 'Object' | '_texture' | 'CubeTexture' | 'AudioBuffer' | 'Font'): void

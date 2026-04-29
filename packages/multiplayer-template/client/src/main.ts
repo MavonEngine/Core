@@ -8,7 +8,10 @@ import './game.css'
 
 if (import.meta.env.DEV) {
   Game.devModeHook = () => {
-    import('@mavonengine/editor').then(({ default: Editor }) => Editor.registerListener())
+    import('@mavonengine/editor').then(({ default: Editor }) => {
+      Editor.registerListener()
+      Game.instance().trigger('editorRegistered')
+    })
   }
 }
 
