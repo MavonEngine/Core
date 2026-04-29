@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  timeout: 10_000,
   webServer: {
     command: 'npm run dev --prefix ../multiplayer-template/client',
     url: 'http://localhost:5173',
