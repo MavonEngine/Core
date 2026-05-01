@@ -345,3 +345,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.flatColors.clear()
   }
 }
+
+if (import.meta.hot) {
+  import.meta.hot.accept()
+}
