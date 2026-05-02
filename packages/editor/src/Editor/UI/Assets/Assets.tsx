@@ -18,6 +18,7 @@ import AudioPlayer from './AudioPlayer'
 import ModelViewer from './ModelViewer'
 import ParticleViewer from './ParticleViewer'
 import TextureViewer, { getTextureUrl } from './TextureViewer'
+import type { RawImage } from './TextureViewer'
 
 export default () => {
   const editor = Game.instance().editor!
@@ -356,7 +357,7 @@ export default () => {
           >
             {item instanceof AudioBuffer && <AudioPlayer buffer={item} />}
             {'scene' in item && <ModelViewer model={item.scene} animations={(item as GLTF).animations} />}
-            {item instanceof Texture && <TextureViewer texture={item} />}
+            {item instanceof Texture && <TextureViewer texture={item as Texture<RawImage>} />}
             {'particleName' in item && <ParticleViewer particleName={item.particleName} />}
           </Window>
         )
@@ -532,7 +533,7 @@ export default () => {
                                   onDoubleClick={() => openAsset(key, item)}
                                   onDragStart={e => onItemDragStart(e, key)}
                                   draggable
-                                  src={getTextureUrl(item)}
+                                  src={getTextureUrl(item as Texture<RawImage>)}
                                 />
                               )
                             : (
