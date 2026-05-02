@@ -1,6 +1,7 @@
 import type { DragEvent } from 'react'
 import type { CubeTexture, Object3D, Scene } from 'three'
 import type { Font, GLTF, SVGResult } from 'three/examples/jsm/Addons.js'
+import type { RawImage } from './TextureViewer'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
 import { getPreviewMap, spawnParticle } from '@mavonengine/core/Particles/System/ParticlePreviewRegistry'
@@ -18,7 +19,6 @@ import AudioPlayer from './AudioPlayer'
 import ModelViewer from './ModelViewer'
 import ParticleViewer from './ParticleViewer'
 import TextureViewer, { getTextureUrl } from './TextureViewer'
-import type { RawImage } from './TextureViewer'
 
 export default () => {
   const editor = Game.instance().editor!
