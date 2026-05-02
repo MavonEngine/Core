@@ -52,7 +52,7 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
       '│                                         │',
       `│  Version:  ${ENGINE_VERSION.padEnd(28)} │`,
       `│  Three.js: r${THREE_REVISION.padEnd(27)} │`,
-      `│  Rapier:   ${RAPIER_VERSION().padEnd(28)} │`,
+      ...(physicsWorld ? [`│  Rapier:   ${RAPIER_VERSION().padEnd(28)} │`] : []),
       // eslint-disable-next-line node/prefer-global/process
       `│  Mode:     ${(process.env.NODE_ENV ?? 'development').padEnd(28)} │`,
       '│                                         │',
