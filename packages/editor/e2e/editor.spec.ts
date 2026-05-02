@@ -28,6 +28,9 @@ test('editor opens on Insert key press', async ({ page }) => {
   // The editor mounts its React UI into #ui and sets the page title
   await expect(page).toHaveTitle('MavonEngine | Editor')
 
+  await page.keyboard.press('Insert') 
+  // The first 'insert' triggers hmr causing a page refresh. We need to trigger the editor again
+
   await page.waitForFunction(() => window.Game?.loadingScreen?.finished === true)
   await page.waitForFunction(() => window.Game?.editor?.ready === true)
 
