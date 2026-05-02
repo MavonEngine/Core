@@ -34,6 +34,7 @@ test('editor opens on Insert key press', async ({ page }) => {
   // The first 'insert' triggers hmr causing a page refresh. We need to trigger the editor again
 
   // Wait for Game to re-initialise after the HMR refresh before polling editor.ready
+  await page.waitForTimeout(1000)
   await page.waitForFunction(() => window.Game?.editor?.ready === true)
 
   await expect(page).toHaveScreenshot('editor-boot.png')
