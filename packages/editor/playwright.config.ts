@@ -9,7 +9,6 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },
-  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   use: {
     baseURL: 'http://localhost:5173',
     ...devices['Desktop Chrome'],
