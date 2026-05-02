@@ -7,7 +7,6 @@ export default defineConfig({
     command: 'npm run dev --prefix ../multiplayer-template/client',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
   },
   use: {
     baseURL: 'http://localhost:5173',
