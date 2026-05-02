@@ -19,7 +19,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
     "@mavonengine/editor": "0.0.7",
-    "@types/three": "^0.176.0",
+    "@types/three": "^0.184.0",
     "concurrently": "^9.1.2",
     "eslint": "^10.1.0",
     "tsup": "^8.5.1",

@@ -1,6 +1,7 @@
 import type { DragEvent } from 'react'
 import type { CubeTexture, Object3D, Scene } from 'three'
 import type { Font, GLTF, SVGResult } from 'three/examples/jsm/Addons.js'
+import type { RawImage } from './TextureViewer'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
 import { getPreviewMap, spawnParticle } from '@mavonengine/core/Particles/System/ParticlePreviewRegistry'
@@ -356,7 +357,7 @@ export default () => {
           >
             {item instanceof AudioBuffer && <AudioPlayer buffer={item} />}
             {'scene' in item && <ModelViewer model={item.scene} animations={(item as GLTF).animations} />}
-            {item instanceof Texture && <TextureViewer texture={item} />}
+            {item instanceof Texture && <TextureViewer texture={item as Texture<RawImage>} />}
             {'particleName' in item && <ParticleViewer particleName={item.particleName} />}
           </Window>
         )
@@ -532,7 +533,7 @@ export default () => {
                                   onDoubleClick={() => openAsset(key, item)}
                                   onDragStart={e => onItemDragStart(e, key)}
                                   draggable
-                                  src={getTextureUrl(item)}
+                                  src={getTextureUrl(item as Texture<RawImage>)}
                                 />
                               )
                             : (
