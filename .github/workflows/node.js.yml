@@ -5,6 +5,7 @@ on:
     branches: [ "main", "dev" ]
   pull_request:
     branches: [ "main", "dev" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -110,5 +111,13 @@ jobs:
       working-directory: ./packages/multiplayer-template
 
     - name: Run editor e2e tests
-      run: npm run test:e2e
+      run: npx playwright test ${{ github.event_name == 'workflow_dispatch' && '--update-snapshots' || '' }}
       working-directory: ./packages/editor
+
+    - name: Upload updated snapshots
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-snapshots
+        path: packages/editor/e2e/editor.spec.ts-snapshots/
+        retention-days: 30
