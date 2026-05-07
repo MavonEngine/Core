@@ -5,16 +5,22 @@ import type winston from 'winston'
 import type GameObject from '../../World/GameObject'
 import type Player from '../Entities/Player'
 import type NetworkedActor from '../NetworkedActor'
+import type { LatencySimulatorOptions } from './LatencySimulator'
 import { Buffer } from 'node:buffer'
 import geckos from '@geckos.io/server'
 import express from 'express'
 import BaseGame from '../../BaseGame'
 import { ServerCommand } from './Commands'
+import LatencySimulator from './LatencySimulator'
 import BandwidthTracker from './Stats/BandwidthTracker'
 import CpuTracker from './Stats/CpuTracker'
 import ServerWorld from './World'
 
 let instance: Server<GameObject>
+
+export interface ServerOptions {
+  latencySimulation?: LatencySimulatorOptions
+}
 
 export default abstract class Server<TClient extends GameObject> {
   game: BaseGame
@@ -31,11 +37,12 @@ export default abstract class Server<TClient extends GameObject> {
 
   bandwidthTracker = new BandwidthTracker()
   private cpuTracker: CpuTracker
+  private latencySimulator?: LatencySimulator
 
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
 
-  constructor(logger: winston.Logger, phyicsWorld?: RAPIER.World) {
+  constructor(logger: winston.Logger, phyicsWorld?: RAPIER.World, options?: ServerOptions) {
     instance = this as unknown as Server<GameObject>
 
     this.game = new BaseGame(logger, phyicsWorld)
@@ -44,6 +51,10 @@ export default abstract class Server<TClient extends GameObject> {
     this.gameSocket = geckos()
     this.logger = logger
     this.cpuTracker = new CpuTracker(this.logger)
+
+    if (options?.latencySimulation) {
+      this.latencySimulator = new LatencySimulator(options.latencySimulation, this.logger)
+    }
 
     this.gameSocket.onConnection((channel) => {
       this.logger.info(`Connected: ${channel.id}`)
@@ -54,7 +65,14 @@ export default abstract class Server<TClient extends GameObject> {
       this.logger.info(`${(this.game.world as ServerWorld).players.length} total players connected`)
 
       channel.on('ping', () => {
-        channel.emit('pong')
+        const pong = () => channel.emit('pong')
+
+        if (this.latencySimulator) {
+          this.latencySimulator.handle(pong)
+        }
+        else {
+          pong()
+        }
       })
 
       channel.onDisconnect(() => {
@@ -175,7 +193,15 @@ export default abstract class Server<TClient extends GameObject> {
       }
 
       this.bandwidthTracker.recordSent('server', Buffer.byteLength(JSON.stringify(state)))
-      con.channel.emit(ServerCommand.SV_STATE, state)
+
+      const SendState = () => con.channel.emit(ServerCommand.SV_STATE, state)
+
+      if (this.latencySimulator) {
+        this.latencySimulator.handle(SendState)
+      }
+      else {
+        SendState()
+      }
     })
 
     // Mark entities as synced ONLY if they were actually sent to at least one client
@@ -192,7 +218,14 @@ export default abstract class Server<TClient extends GameObject> {
     while (this.commandBuffer.length > 0) {
       const currentCommand = this.commandBuffer[0]
 
-      this.onCommand(currentCommand, this.calculateDelta())
+      const process = () => this.onCommand(currentCommand, this.calculateDelta())
+
+      if (this.latencySimulator) {
+        this.latencySimulator.handle(process)
+      }
+      else {
+        process()
+      }
 
       this.commandBuffer.shift()
     }
