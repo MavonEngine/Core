@@ -47,7 +47,7 @@
     "test:dev": "vitest"
   },
   "peerDependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.19.3",
     "@geckos.io/client": "^3.0.2",
     "@geckos.io/server": "^3.0.0",
     "@tweakpane/plugin-essentials": "^0.2.1",
@@ -60,7 +60,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.19.3",
     "@geckos.io/server": "^3.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@tweakpane/plugin-essentials": "^0.2.1",
