@@ -15,8 +15,12 @@ export default class NetworkManager extends EventEmitter {
   private _connected = false
 
   private currentSequenceId = 0
-  private lastAcknowledgedSequenceId = 0
 
+  /**
+   * This command queue is used for replaying packets locally.
+   * When ServerCommand.SV_STATE comes in we drop anything thats below
+   * the lastProcessedSequenceId
+   */
   private localCommandQueue: CommandPacket<any>[] = []
 
   constructor(options: ClientOptions) {
@@ -75,6 +79,10 @@ export default class NetworkManager extends EventEmitter {
 
     this.localCommandQueue.push(commandPacket)
     this.socket.emit('command', commandPacket)
+  }
+
+  public dropCommandsAtSequenceId(sequenceId: number) {
+    this.localCommandQueue = this.localCommandQueue.filter(packet => packet.sequenceId! > sequenceId)
   }
 
   protected onPong() { }

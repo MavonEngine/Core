@@ -241,6 +241,12 @@ export default abstract class Server<TClient extends GameObject> {
         process()
       }
 
+      /**
+       * Update the players lastProcessedSequenceId after the command has executed
+       */
+      const player = this.game.world.entities.items.get(currentCommand.playerId!) as Player
+      player.updateLastProcessedSequenceId(currentCommand.sequenceId!)
+
       this.commandBuffer.shift()
     }
   }

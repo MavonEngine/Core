@@ -89,6 +89,8 @@ export default class PlayerController extends GameObject {
     }
 
     this.player.updateFromNetwork(entityData)
+
+    NetworkManager.getInstance().dropCommandsBeforeSequenceId(this.player.lastProcessedSequenceId)
   }
 
   destroy(): void {
