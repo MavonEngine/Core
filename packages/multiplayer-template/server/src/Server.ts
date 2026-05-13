@@ -7,7 +7,7 @@ import BaseServer from '@mavonengine/core/Networking/Server/Server'
 import { randRange } from '@mavonengine/core/Utils/Math'
 import { Vector3 } from 'three'
 import Tree from './Base/Vegetation/Tree'
-import { ClientCommand, ServerCommand } from './Commands'
+import { ClientCommand, type ServerCommand } from './Commands'
 import Player from './Server/Entities/Player'
 
 const TREE_COUNT = 15

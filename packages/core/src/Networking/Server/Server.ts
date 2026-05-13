@@ -10,7 +10,7 @@ import { Buffer } from 'node:buffer'
 import geckos from '@geckos.io/server'
 import express from 'express'
 import BaseGame from '../../BaseGame'
-import { ServerCommand } from './Commands'
+import { ClientCommand, CommandPacket, IncomingClientCommandPacket, ServerCommand } from './Commands'
 import LatencySimulator from './LatencySimulator'
 import BandwidthTracker from './Stats/BandwidthTracker'
 import CpuTracker from './Stats/CpuTracker'
@@ -25,7 +25,7 @@ export interface ServerOptions {
 export default abstract class Server<TClient extends GameObject> {
   game: BaseGame
 
-  private commandBuffer: object[] = []
+  private commandBuffer: IncomingClientCommandPacket<ClientCommand>[] = []
 
   gameSocket: GeckosServer
   httpServer: Express = express()
@@ -128,7 +128,7 @@ export default abstract class Server<TClient extends GameObject> {
   private bufferIncomingCommand(channel: ServerChannel, command: Data) {
     this.commandBuffer.push({
       playerId: channel.id!,
-      ...(command) as object,
+      ...(command) as CommandPacket<ClientCommand>,
     })
   }
 

@@ -10,6 +10,7 @@
     },
     "allowUmdGlobalAccess": true,
     "strict": true,
+    "declarationMap": true,
     "strictNullChecks": true,
     "noImplicitAny": true,
     "emitDeclarationOnly": true,
