@@ -141,8 +141,11 @@ describe('server', () => {
   it('should call onCommand', () => {
     const server = new TestServer(logger)
 
+    const player = new TestClient('p1')
+    server.game.world.entities.items.set('p1', player)
+
     const onCommand = vi.fn()
-    const testCommand = { command: 'test-command' }
+    const testCommand = { command: 'test-command', playerId: 'p1', sequenceId: 0 }
     const randomDelta = Math.random();
 
     (server as any).onCommand = onCommand;
@@ -158,20 +161,24 @@ describe('server', () => {
   it('sorts the commandBuffer by sequenceId before processing', () => {
     const server = new TestServer(logger)
 
+    const player = new TestClient('p1')
+    server.game.world.entities.items.set('p1', player)
+
     const processed: number[] = []
     ;(server as any).onCommand = (cmd: { sequenceId: number }) => {
       processed.push(cmd.sequenceId)
     }
     ;(server as any).commandBuffer = [
-      { sequenceId: 3 },
-      { sequenceId: 1 },
-      { sequenceId: 4 },
-      { sequenceId: 2 },
+      { sequenceId: 3, playerId: 'p1' },
+      { sequenceId: 1, playerId: 'p1' },
+      { sequenceId: 4, playerId: 'p1' },
+      { sequenceId: 2, playerId: 'p1' },
     ]
 
     ;(server as any).runThroughBuffer()
 
     expect(processed).toEqual([1, 2, 3, 4])
+    expect(player.lastProcessedSequenceId).toBe(4)
   })
 
   describe('stateSync', () => {

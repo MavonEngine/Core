@@ -125,4 +125,77 @@ describe('networkManager', () => {
     expect(mockSocket.emit).toHaveBeenCalledWith('ping')
     vi.useRealTimers()
   })
+
+  describe('command queue', () => {
+    it('sendCommand assigns sequential sequenceIds starting at 0', () => {
+      const nm = new NetworkManager({})
+      const a = { type: 'cmd_a' as any }
+      const b = { type: 'cmd_b' as any }
+      const c = { type: 'cmd_c' as any }
+
+      nm.sendCommand(a)
+      nm.sendCommand(b)
+      nm.sendCommand(c)
+
+      expect(a.sequenceId).toBe(0)
+      expect(b.sequenceId).toBe(1)
+      expect(c.sequenceId).toBe(2)
+    })
+
+    it('sendCommand pushes the packet to the local queue and emits it on the socket', () => {
+      const nm = new NetworkManager({})
+      const packet = { type: 'cmd' as any }
+
+      nm.sendCommand(packet)
+
+      const queue = (nm as any).localCommandQueue
+      expect(queue).toHaveLength(1)
+      expect(queue[0]).toBe(packet)
+      expect(mockSocket.emit).toHaveBeenCalledWith('command', packet)
+    })
+
+    it('dropCommandsAtSequenceId removes acknowledged commands with sequenceId <= given', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+      nm.sendCommand({ type: 'd' as any })
+
+      nm.dropCommandsAtSequenceId(2)
+
+      const queue = (nm as any).localCommandQueue as { type: string, sequenceId: number }[]
+      expect(queue.map(p => p.sequenceId)).toEqual([3])
+    })
+
+    it('dropCommandsAtSequenceId keeps commands with sequenceId greater than given', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+
+      nm.dropCommandsAtSequenceId(0)
+
+      const queue = (nm as any).localCommandQueue as { sequenceId: number }[]
+      expect(queue.map(p => p.sequenceId)).toEqual([1, 2])
+    })
+
+    it('dropCommandsAtSequenceId clears the queue when the ack covers every command', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+
+      nm.dropCommandsAtSequenceId(10)
+
+      const queue = (nm as any).localCommandQueue as unknown[]
+      expect(queue).toHaveLength(0)
+    })
+
+    it('dropCommandsAtSequenceId is a no-op on an empty queue', () => {
+      const nm = new NetworkManager({})
+
+      expect(() => nm.dropCommandsAtSequenceId(5)).not.toThrow()
+      expect((nm as any).localCommandQueue).toHaveLength(0)
+    })
+  })
 })
