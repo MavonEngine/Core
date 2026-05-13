@@ -66,14 +66,14 @@ export default class PlayerController extends GameObject {
 
     const move: CL_MOVE = {
       type: ClientCommand.CL_MOVE,
-      sequenceId: 0,
       keys,
       yaw: this.player.rotation.y,
     }
 
     if (JSON.stringify(this.lastMove) !== JSON.stringify(move)) {
-      this.lastMove = move
-      NetworkManager.getInstance().socket.emit('command', move)
+      // Spread so its a different object. Otherwise sendCommand assigns sequenceId which fails the !== check
+      this.lastMove = {...move}
+      NetworkManager.getInstance().sendCommand(move)
     }
   }
 

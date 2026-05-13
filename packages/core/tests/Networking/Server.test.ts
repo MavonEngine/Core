@@ -155,6 +155,25 @@ describe('server', () => {
     expect(onCommand).toBeCalledWith(testCommand, randomDelta)
   })
 
+  it('sorts the commandBuffer by sequenceId before processing', () => {
+    const server = new TestServer(logger)
+
+    const processed: number[] = []
+    ;(server as any).onCommand = (cmd: { sequenceId: number }) => {
+      processed.push(cmd.sequenceId)
+    }
+    ;(server as any).commandBuffer = [
+      { sequenceId: 3 },
+      { sequenceId: 1 },
+      { sequenceId: 4 },
+      { sequenceId: 2 },
+    ]
+
+    ;(server as any).runThroughBuffer()
+
+    expect(processed).toEqual([1, 2, 3, 4])
+  })
+
   describe('stateSync', () => {
     function makeConnection(id: string) {
       const emit = vi.fn()

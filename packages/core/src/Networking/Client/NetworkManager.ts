@@ -4,6 +4,7 @@ import type { ClientOptions } from '@geckos.io/common/lib/types'
 import { geckos } from '@geckos.io/client'
 import Game from '../../BaseGame'
 import EventEmitter from '../../Utils/EventEmitter'
+import { CommandPacket } from '../Server/Commands'
 
 let instance: NetworkManager | undefined
 
@@ -12,6 +13,11 @@ export default class NetworkManager extends EventEmitter {
   ping = 1000
   pingNow = 0
   private _connected = false
+
+  private currentSequenceId = 0
+  private lastAcknowledgedSequenceId = 0
+
+  private localCommandQueue: CommandPacket<any>[] = []
 
   constructor(options: ClientOptions) {
     super()
@@ -60,9 +66,20 @@ export default class NetworkManager extends EventEmitter {
     instance = undefined
   }
 
-  protected onPong() {}
+  /**
+ * All commands need to go through here to get the
+ * sequenceId assigned and add it to the queue for local replay
+ */
+  public sendCommand(commandPacket: CommandPacket<any>) {
+    commandPacket.sequenceId = this.currentSequenceId++
 
-  protected onDisconnect() {}
+    this.localCommandQueue.push(commandPacket)
+    this.socket.emit('command', commandPacket)
+  }
+
+  protected onPong() { }
+
+  protected onDisconnect() { }
 
   protected pingCheck() {
     this.pingNow = performance.now()

@@ -1,20 +1,15 @@
-import { ServerCommand, type SV_CHAT } from '@template/server/Commands/Server'
 import BaseNetworkManager from '@mavonengine/core/Networking/Client/NetworkManager'
+import { ClientCommand } from '@template/server/Commands/Client'
+import { ServerCommand, type SV_CHAT } from '@template/server/Commands/Server'
 import useStore from './stores/Game'
 import useChat from './UI/composables/useChat'
 import useNetworkState from './UI/composables/useNetworkState'
-import type { CommandPacket, IncomingClientCommandPacket } from '@mavonengine/core/Networking/Server/Commands'
-import { ClientCommand } from '@template/server/Commands/Client'
 
 export default class NetworkManager extends BaseNetworkManager {
   private networkState = useNetworkState().networkState
   private chat = useChat()
   private store = useStore().store
 
-  private currentSequenceId = 0
-  private lastAcknowledgedSequenceId = 0
-
-  private localCommandQueue: CommandPacket<any>[] = []
 
   constructor() {
     super({
@@ -56,17 +51,6 @@ export default class NetworkManager extends BaseNetworkManager {
 
   protected override onDisconnect() {
     this.networkState.value.connected = false
-  }
-
-  /**
-   * All commands need to go through here to get the
-   * sequenceId assigned and add it to the queue for local replay
-   */
-  public sendCommand(commandPacket: CommandPacket<any>) {
-    commandPacket.sequenceId = this.currentSequenceId++
-
-    this.localCommandQueue.push(commandPacket)
-    this.socket.emit('command', commandPacket)
   }
 
   sendChat(message: string) {

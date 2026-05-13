@@ -19,10 +19,6 @@ export const ServerCommand = {
 /**
  * Define the structure of the packets below for your defined packet names above
  */
-export type SV_REMOVE_ENTITY = CommandPacket<BaseServerCommand.SV_REMOVE_ENTITY> & {
-  id: string
-}
-
 export interface SV_CHAT {
   playerId: string
   playerName: string

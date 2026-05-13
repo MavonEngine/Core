@@ -13,7 +13,7 @@ export type Command = ClientCommand | ServerCommand
 
 export interface CommandPacket<T extends Command | string> {
   type: T
-  sequenceId: number
+  sequenceId?: number
 }
 
 export interface IncomingClientCommandPacket<T extends Command> extends CommandPacket<T> {
