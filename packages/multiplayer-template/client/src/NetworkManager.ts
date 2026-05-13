@@ -1,9 +1,10 @@
-import type { SV_CHAT } from '@template/server/Commands/Server'
+import { ServerCommand, type SV_CHAT } from '@template/server/Commands/Server'
 import BaseNetworkManager from '@mavonengine/core/Networking/Client/NetworkManager'
-import { ClientCommand, type ServerCommand, type CommandPacket } from '@template/server/Commands'
 import useStore from './stores/Game'
 import useChat from './UI/composables/useChat'
 import useNetworkState from './UI/composables/useNetworkState'
+import type { CommandPacket, IncomingClientCommandPacket } from '@mavonengine/core/Networking/Server/Commands'
+import { ClientCommand } from '@template/server/Commands/Client'
 
 export default class NetworkManager extends BaseNetworkManager {
   private networkState = useNetworkState().networkState

@@ -1,12 +1,11 @@
 import type GameObjectInterface from '@mavonengine/core/World/GameObjectInterface'
-import type { SV_CHAT, SV_TREES } from '@template/server/Commands/Server'
+import { ServerCommand, type SV_CHAT, type SV_TREES } from '@template/server/Commands/Server'
 import type NetworkManager from './NetworkManager'
 import type PlayerController from './PlayerController'
 import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
 import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
-import { ServerCommand } from '@template/server/Commands'
 import Character from './Entities/Player'
 import Trees from './World/Trees'
 

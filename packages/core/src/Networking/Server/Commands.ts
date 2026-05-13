@@ -1,4 +1,4 @@
-import { ChannelId } from "@geckos.io/client"
+import type { ChannelId } from '@geckos.io/client'
 
 export enum ServerCommand {
   SV_PONG = 'sv_pong',
