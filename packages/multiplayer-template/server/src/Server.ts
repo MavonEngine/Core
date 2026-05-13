@@ -7,7 +7,8 @@ import BaseServer from '@mavonengine/core/Networking/Server/Server'
 import { randRange } from '@mavonengine/core/Utils/Math'
 import { Vector3 } from 'three'
 import Tree from './Base/Vegetation/Tree'
-import { ClientCommand, ServerCommand } from './Commands'
+import { ClientCommand } from './Commands/Client'
+import { ServerCommand } from './Commands/Server'
 import Player from './Server/Entities/Player'
 
 const TREE_COUNT = 15
@@ -99,6 +100,7 @@ export default class Server extends BaseServer<Player> {
         const cmd = command as unknown as CL_MOVE
         player.keysPressed.clear()
         cmd.keys.forEach(key => player.keysPressed.add(key))
+        player.lastMovementCommandTimestamp = performance.now()
         player.rotation.y = cmd.yaw
         break
       }

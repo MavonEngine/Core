@@ -1,6 +1,7 @@
 import type { SV_CHAT } from '@template/server/Commands/Server'
 import BaseNetworkManager from '@mavonengine/core/Networking/Client/NetworkManager'
-import { ClientCommand, ServerCommand } from '@template/server/Commands'
+import { ClientCommand } from '@template/server/Commands/Client'
+import { ServerCommand } from '@template/server/Commands/Server'
 import useStore from './stores/Game'
 import useChat from './UI/composables/useChat'
 import useNetworkState from './UI/composables/useNetworkState'

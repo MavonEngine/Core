@@ -15,6 +15,13 @@ export default class Player extends BasePlayer {
   name?: string
 
   /**
+   * We use this to check when the last movement
+   * command came in. If nothing comes in we reset the keys
+   * (incase packets go missing due to network congestion)
+   */
+  lastMovementCommandTimestamp: number | null = null
+
+  /**
    * Current keys held down - updated each tick from client input or from network.
    */
   keysPressed: Set<string> = new Set()
@@ -43,6 +50,16 @@ export default class Player extends BasePlayer {
     }
   }
 
+  /**
+   * How long should movement continue on for (ms)
+   * if we havent received a movement packet
+   *
+   * override this as needed
+   */
+  getMovementTimeout() {
+    return 400
+  }
+
   isDead(): boolean {
     return this.health <= 0
   }
@@ -57,6 +74,14 @@ export default class Player extends BasePlayer {
 
   update(delta: number): void {
     this.horizontalIntent.set(0, 0, 0)
+
+    /**
+     * If we havent received a movement update in a while lets reset.
+     */
+    if (this.lastMovementCommandTimestamp && performance.now() - this.lastMovementCommandTimestamp > this.getMovementTimeout()) {
+      this.keysPressed.clear()
+    }
+
     super.update(delta) // states run here and may write to horizontalIntent
 
     if (this.isDead() || !this.characterCollider || !this.rigidBody)

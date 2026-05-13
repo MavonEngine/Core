@@ -2,7 +2,7 @@ import type { CL_MOVE } from '@template/server/Commands/Client'
 import type Character from './Entities/Player'
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
-import { ClientCommand } from '@template/server/Commands'
+import { ClientCommand } from '@template/server/Commands/Client'
 import { Vector3 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import NetworkManager from './NetworkManager'
@@ -15,7 +15,6 @@ import NetworkManager from './NetworkManager'
 export default class PlayerController extends GameObject {
   player: Character
   orbitControls: OrbitControls
-  lerpTo?: Vector3 | null
   private lastMove?: object
 
   constructor(player: Character) {
@@ -35,11 +34,6 @@ export default class PlayerController extends GameObject {
   }
 
   update(delta: number): void {
-    // Lerp toward server-corrected position
-    if (this.lerpTo && this.lerpTo.distanceTo(this.player.position) > 0.01) {
-      this.player.position.lerp(this.lerpTo, 0.2)
-    }
-
     // Smoothly follow player
     const desiredTarget = new Vector3().copy(this.player.position).add(new Vector3(0, 0.5, 0))
     this.orbitControls.target.lerp(desiredTarget, 0.1)
@@ -67,29 +61,21 @@ export default class PlayerController extends GameObject {
 
     const move: CL_MOVE = {
       type: ClientCommand.CL_MOVE,
-      sequenceId: 0,
       keys,
       yaw: this.player.rotation.y,
     }
 
     if (JSON.stringify(this.lastMove) !== JSON.stringify(move)) {
-      this.lastMove = move
-      NetworkManager.getInstance().socket.emit('command', move)
+      // Spread so its a different object. Otherwise sendCommand assigns sequenceId which fails the !== check
+      this.lastMove = { ...move }
+      NetworkManager.getInstance().sendCommand(move)
     }
   }
 
   updateFromNetwork(entityData: any) {
-    const serverPosition = new Vector3(
-      entityData.position.x,
-      entityData.position.y,
-      entityData.position.z,
-    )
-
-    if (serverPosition.distanceTo(this.player.position) > 0.2) {
-      this.lerpTo = serverPosition
-    }
-
     this.player.updateFromNetwork(entityData)
+
+    NetworkManager.getInstance().dropCommandsAtSequenceId(this.player.lastProcessedSequenceId)
   }
 
   destroy(): void {

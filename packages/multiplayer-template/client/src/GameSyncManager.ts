@@ -6,7 +6,7 @@ import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
 import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
-import { ServerCommand } from '@template/server/Commands'
+import { ServerCommand } from '@template/server/Commands/Server'
 import Character from './Entities/Player'
 import Trees from './World/Trees'
 
