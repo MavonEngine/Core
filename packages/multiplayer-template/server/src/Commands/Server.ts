@@ -1,7 +1,6 @@
 import {
   ServerCommand as BaseServerCommand,
-  CommandPacket,
-} from "@mavonengine/core/Networking/Server/Commands"
+} from '@mavonengine/core/Networking/Server/Commands'
 
 /**
  * Define all available server commands here that get sent to the client.
@@ -13,7 +12,7 @@ export enum LocalServerCommand {
 
 export const ServerCommand = {
   ...LocalServerCommand,
-  ...BaseServerCommand
+  ...BaseServerCommand,
 }
 
 /**
