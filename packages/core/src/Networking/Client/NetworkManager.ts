@@ -1,10 +1,10 @@
 import type { ClientChannel } from '@geckos.io/client'
 import type { ClientOptions } from '@geckos.io/common/lib/types'
 
+import type { CommandPacket } from '../Server/Commands'
 import { geckos } from '@geckos.io/client'
 import Game from '../../BaseGame'
 import EventEmitter from '../../Utils/EventEmitter'
-import { CommandPacket } from '../Server/Commands'
 
 let instance: NetworkManager | undefined
 
@@ -67,9 +67,9 @@ export default class NetworkManager extends EventEmitter {
   }
 
   /**
- * All commands need to go through here to get the
- * sequenceId assigned and add it to the queue for local replay
- */
+   * All commands need to go through here to get the
+   * sequenceId assigned and add it to the queue for local replay
+   */
   public sendCommand(commandPacket: CommandPacket<any>) {
     commandPacket.sequenceId = this.currentSequenceId++
 

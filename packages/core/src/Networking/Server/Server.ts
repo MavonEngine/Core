@@ -216,16 +216,15 @@ export default abstract class Server<TClient extends GameObject> {
   abstract getStateSyncDistance(): number
 
   private runThroughBuffer() {
-    
     /**
      * Due to network latency packets could come in different orders. First step is sort by sequence Id
-     * 
-     * This currently will move recently connected clients to the 
+     *
+     * This currently will move recently connected clients to the
      * front of the tick to be processed. Not really an issue at the moment but if it does
      * turn out to be an issue then we need to sort the packets by playerId too.
-     * 
-     * TODO fix ordering to sort packets only for player ids. 
-     * If in an FPS player1 shoots first but this sorting puts player2 shot to be 
+     *
+     * TODO fix ordering to sort packets only for player ids.
+     * If in an FPS player1 shoots first but this sorting puts player2 shot to be
      * ticked over first because their sequenceId is lower its not really fair
      */
     this.commandBuffer.sort((a, b) => a.sequenceId! - b.sequenceId!)
