@@ -14,11 +14,11 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@mavonengine/core": "0.0.19"
+    "@mavonengine/core": "0.0.20"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
-    "@mavonengine/editor": "0.0.7",
+    "@mavonengine/editor": "0.0.8",
     "@types/three": "^0.184.0",
     "concurrently": "^9.1.2",
     "eslint": "^10.1.0",
