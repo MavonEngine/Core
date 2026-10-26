@@ -9,6 +9,8 @@ import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
  * UI state that lives across frames but isn't part of the metrics.
  */
 export interface ViewState {
+  /** Index into DASHBOARD_TABS */
+  tab: number
   playerOffset: number
   /** Log lines scrolled back from the newest, 0 follows the tail */
   logFromEnd: number
@@ -24,6 +26,8 @@ export interface RenderOptions {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs'] as const
+
 const WIDE_LAYOUT = 100
 const NEWLINE_RE = /\r?\n/
 
@@ -34,6 +38,14 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
   unauthorized: 'UNAUTHORIZED',
   forbidden: 'FORBIDDEN',
   disabled: 'METRICS DISABLED',
+}
+
+/**
+ * The tab a number key switches to, or null if the key isn't one.
+ */
+export function tabForKey(key: string): number | null {
+  const index = Number(key) - 1
+  return Number.isInteger(index) && index >= 0 && index < DASHBOARD_TABS.length ? index : null
 }
 
 function statusColor(status: ConnectionStatus, theme: Theme): Color {
@@ -63,10 +75,29 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       waiting(root, theme, state)
     }
     else {
-      root.responsive({
-        [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
-        0: c => narrowLayout(c, theme, state, snapshot, view, transparent),
+      root.tabs({
+        tabs: DASHBOARD_TABS.map((name, i) => `${i + 1} ${name}`),
+        active: view.tab,
+        size: 1,
+        onSelect: (index) => {
+          view.tab = index
+          root.ctx.invalidate()
+        },
       })
+
+      const tab = DASHBOARD_TABS[view.tab] ?? 'Overview'
+      if (tab === 'Players') {
+        playersPanel(root, theme, snapshot, view, transparent)
+      }
+      else if (tab === 'Logs') {
+        logsPanel(root, theme, state, view)
+      }
+      else {
+        root.responsive({
+          [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
+          0: c => narrowLayout(c, theme, state, snapshot, view, transparent),
+        })
+      }
     }
 
     root.statusBar({
@@ -75,6 +106,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       items: [
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
+        { key: `1-${DASHBOARD_TABS.length}`, label: 'Tabs' },
       ],
       right: [{ label: STATUS_LABELS[state.status], color: statusColor(state.status, theme), active: state.status === 'live' }],
     })

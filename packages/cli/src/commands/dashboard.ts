@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
-import { renderDashboard } from '../dashboard/view'
+import { renderDashboard, tabForKey } from '../dashboard/view'
 
 export const DASHBOARD_HELP = `Usage: mavonengine dashboard [options]
 
@@ -91,7 +91,7 @@ export async function runDashboard(options: DashboardOptions) {
   const { createApp } = await import('@profullstack/hqtui')
 
   const client = new MetricsClient(options.source, { intervalMs: options.intervalMs })
-  const view: ViewState = { playerOffset: 0, logFromEnd: 0 }
+  const view: ViewState = { tab: 0, playerOffset: 0, logFromEnd: 0 }
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 
@@ -102,6 +102,12 @@ export async function runDashboard(options: DashboardOptions) {
   app.on('key', (event) => {
     if (event.key === 'r')
       void client.refresh()
+
+    const tab = tabForKey(event.key)
+    if (tab !== null) {
+      view.tab = tab
+      app.invalidate()
+    }
   })
 
   app.on('exit', () => client.stop())

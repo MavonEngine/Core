@@ -3,7 +3,7 @@ import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizeSnapshot } from '../src/dashboard/snapshot'
-import { renderDashboard, toLogRows } from '../src/dashboard/view'
+import { renderDashboard, tabForKey, toLogRows } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -26,8 +26,8 @@ async function liveState(samples = 30): Promise<DashboardState> {
   }
 }
 
-function render(state: DashboardState, width = 130, height = 40, transparent = false) {
-  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { playerOffset: 0, logFromEnd: 0 }, { transparent }), { width, height })
+function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0) {
+  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { tab, playerOffset: 0, logFromEnd: 0 }, { transparent }), { width, height })
 }
 
 describe('dashboard view', () => {
@@ -38,6 +38,32 @@ describe('dashboard view', () => {
       expect(screen.contains(title), title).toBe(true)
 
     expect(screen.contains('sim-01')).toBe(true)
+  })
+
+  it('shows only the players on the players tab', async () => {
+    const screen = render(await liveState(), 130, 40, false, 1)
+
+    expect(screen.contains('2 Players')).toBe(true)
+    expect(screen.contains('Players (')).toBe(true)
+    expect(screen.contains('sim-01')).toBe(true)
+    expect(screen.contains('CPU')).toBe(false)
+    expect(screen.contains('Slow tick')).toBe(false)
+  })
+
+  it('shows only the logs on the logs tab', async () => {
+    const screen = render(await liveState(), 130, 40, false, 2)
+
+    expect(screen.contains('Slow tick')).toBe(true)
+    expect(screen.contains('Players (')).toBe(false)
+    expect(screen.contains('CPU')).toBe(false)
+  })
+
+  it('maps number keys to tabs', () => {
+    expect(tabForKey('1')).toBe(0)
+    expect(tabForKey('3')).toBe(2)
+    expect(tabForKey('4')).toBeNull()
+    expect(tabForKey('0')).toBeNull()
+    expect(tabForKey('q')).toBeNull()
   })
 
   it('fits a narrow terminal', async () => {
