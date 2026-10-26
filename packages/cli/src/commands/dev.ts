@@ -1,23 +1,38 @@
+import type { DashboardOptions } from './dashboard'
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { constants } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
+import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
-import { UsageError } from './dashboard'
+import { parseDashboardArgs, runDashboard, UsageError } from './dashboard'
 
 export const DEV_HELP = `Usage: mavonengine dev [options]
 
-Run the dev script of the MavonEngine project you are in (game server and client).
+Run the dev script of the MavonEngine project you are in (game server and client)
+and show the dashboard for it. Quitting the dashboard stops the dev servers.
 
 Options:
-  --cwd <dir>    Start looking for the project here (default: current directory)
-  -h, --help     Show this help
+  --cwd <dir>        Start looking for the project here (default: current directory)
+  --no-dashboard     Only run the dev script, with its output in the terminal
+  --port <port>      Game server HTTP port for the dashboard (default: 8050)
+  --theme <name>     Dashboard theme, see 'mavonengine dashboard --help'
+  --transparent      Let a transparent terminal background show through
+  -h, --help         Show this help
 `
 
 export interface DevOptions {
   cwd: string
+  /** false with --no-dashboard */
+  dashboard: DashboardOptions | false
 }
+
+/** Bytes of dev script output kept while the dashboard is up, printed if the script exits on its own */
+const MAX_CAPTURED_OUTPUT = 64 * 1024
+
+/** How long the dev processes get to exit after SIGTERM before they are killed */
+const STOP_TIMEOUT_MS = 3000
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
@@ -34,21 +49,36 @@ const WHITESPACE_RE = /\s+/
 /**
  * Turn CLI arguments into dev options. Throws UsageError on bad input.
  */
-export function parseDevArgs(args: string[], cwd = process.cwd()): DevOptions | 'help' {
+export function parseDevArgs(args: string[], cwd = process.cwd(), env: Record<string, string | undefined> = process.env): DevOptions | 'help' {
   const { values } = parseArgs({
     args,
     options: {
       cwd: { type: 'string' },
+      dashboard: { type: 'boolean', default: true },
+      port: { type: 'string' },
+      theme: { type: 'string' },
+      transparent: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
     allowPositionals: false,
+    allowNegative: true,
   })
 
   if (values.help)
     return 'help'
 
-  return { cwd: resolve(cwd, values.cwd ?? '.') }
+  let dashboard: DashboardOptions | false = false
+  if (values.dashboard) {
+    const dashboardArgs = [
+      ...(values.port ? ['--port', values.port] : []),
+      ...(values.theme ? ['--theme', values.theme] : []),
+      ...(values.transparent ? ['--transparent'] : []),
+    ]
+    dashboard = parseDashboardArgs(dashboardArgs, env) as DashboardOptions
+  }
+
+  return { cwd: resolve(cwd, values.cwd ?? '.'), dashboard }
 }
 
 function readPackageJson(dir: string): Record<string, any> | undefined {
@@ -108,58 +138,110 @@ export function descendants(root: number, psOutput: string): number[] {
 }
 
 /**
- * Signal a process and everything it started. npm exits on SIGTERM without passing it on,
- * which would leave the game server and vite running.
+ * A process and everything it started, parents first. Empty on Windows, where taskkill walks the tree itself.
  */
-function killTree(pid: number, signal: NodeJS.Signals) {
-  try {
-    if (process.platform === 'win32') {
-      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
-      return
-    }
+function processTree(pid: number): number[] {
+  if (process.platform === 'win32')
+    return []
 
-    const tree = [pid, ...descendants(pid, execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }))]
-    for (const p of tree) {
-      try {
-        process.kill(p, signal)
-      }
-      catch {
-        // Already gone
-      }
-    }
+  try {
+    return [pid, ...descendants(pid, execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }))]
   }
   catch {
-    process.kill(pid, signal)
+    return [pid]
+  }
+}
+
+function signalAll(pids: number[], signal: NodeJS.Signals) {
+  for (const p of pids) {
+    try {
+      process.kill(p, signal)
+    }
+    catch {
+      // Already gone
+    }
+  }
+}
+
+function isAlive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  }
+  catch {
+    return false
   }
 }
 
 /**
- * Run the project's dev script and resolve with its exit code.
+ * Signal a process and everything it started. npm exits on SIGTERM without passing it on,
+ * which would leave the game server and vite running.
  */
-export function runDev(root: string): Promise<number> {
+function killTree(pid: number, signal: NodeJS.Signals) {
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
+    }
+    catch {
+      // Already gone
+    }
+    return
+  }
+
+  signalAll(processTree(pid), signal)
+}
+
+export interface DevProcess {
+  /** Resolves with the dev script's exit code */
+  exited: Promise<number>
+  /** SIGTERM the whole tree, SIGKILL whatever is left after STOP_TIMEOUT_MS, and wait for the script to exit */
+  stop(): Promise<number>
+  /** The captured output, when started with `capture` */
+  output(): string
+}
+
+/**
+ * Start the project's dev script. With `capture` its output is kept in memory instead of
+ * written to the terminal, which belongs to the dashboard then.
+ */
+export function startDev(root: string, { capture = false } = {}): DevProcess {
   const pm = detectPackageManager(root)
   process.stdout.write(`mavonengine: running '${pm} run dev' in ${root}\n`)
 
   const child = spawn(pm, ['run', 'dev'], {
     cwd: root,
-    stdio: 'inherit',
+    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     // npm, pnpm and yarn are .cmd shims on Windows
     shell: process.platform === 'win32',
   })
+
+  let output = ''
+  const keep = (chunk: string) => {
+    output = (output + chunk).slice(-MAX_CAPTURED_OUTPUT)
+  }
+  child.stdout?.setEncoding('utf8').on('data', keep)
+  child.stderr?.setEncoding('utf8').on('data', keep)
+
+  let running = true
 
   // Ctrl-C reaches the child through the terminal's process group, so only keep ourselves alive until it exits.
   // Signals sent to us alone (kill, closing the terminal) are passed on.
   const onInterrupt = () => {}
   const forward = (signal: NodeJS.Signals) => child.pid && killTree(child.pid, signal)
+  // Last resort when we exit before the dev script, e.g. the dashboard's own signal handlers calling process.exit
+  const onExit = () => running && child.pid && killTree(child.pid, 'SIGTERM')
   process.on('SIGINT', onInterrupt)
   process.on('SIGTERM', forward)
   process.on('SIGHUP', forward)
+  process.on('exit', onExit)
 
-  return new Promise((resolvePromise, reject) => {
+  const exited = new Promise<number>((resolvePromise, reject) => {
     const cleanup = () => {
+      running = false
       process.off('SIGINT', onInterrupt)
       process.off('SIGTERM', forward)
       process.off('SIGHUP', forward)
+      process.off('exit', onExit)
     }
 
     child.on('error', (err: NodeJS.ErrnoException) => {
@@ -172,12 +254,77 @@ export function runDev(root: string): Promise<number> {
       resolvePromise(code ?? 128 + (signal ? constants.signals[signal] : 0))
     })
   })
+
+  const stop = async () => {
+    if (running && child.pid) {
+      if (process.platform === 'win32') {
+        killTree(child.pid, 'SIGTERM')
+      }
+      else {
+        // Remembered up front: once npm exits, its children are reparented and can't be found from it anymore
+        const tree = processTree(child.pid)
+        signalAll(tree, 'SIGTERM')
+
+        const deadline = Date.now() + STOP_TIMEOUT_MS
+        while (tree.some(isAlive) && Date.now() < deadline)
+          await delay(50)
+
+        signalAll(tree.filter(isAlive), 'SIGKILL')
+      }
+    }
+
+    return exited
+  }
+
+  return { exited, stop, output: () => output }
+}
+
+/**
+ * Run the project's dev script and resolve with its exit code.
+ */
+export function runDev(root: string): Promise<number> {
+  return startDev(root).exited
+}
+
+/**
+ * Run the dev script behind the dashboard. Quitting the dashboard stops the dev script;
+ * the dev script exiting on its own closes the dashboard and prints what it wrote.
+ */
+export async function runDevWithDashboard(root: string, dashboard: DashboardOptions): Promise<number> {
+  const dev = startDev(root, { capture: true })
+  const startup = { engineVersion: readPackageJson(join(root, 'node_modules', '@mavonengine', 'core'))?.version, output: dev.output }
+
+  const devExited = new AbortController()
+  dev.exited.then(() => devExited.abort(), () => devExited.abort())
+
+  let quit = false
+  try {
+    await runDashboard({ ...dashboard, startup }, devExited.signal)
+  }
+  finally {
+    quit = !devExited.signal.aborted
+    if (quit)
+      await dev.stop().catch(() => {})
+  }
+
+  // The user quit, so stopping the dev servers is the expected outcome
+  if (quit)
+    return 0
+
+  // Rejects when the package manager could not be started
+  const exitCode = await dev.exited
+  process.stderr.write(`${dev.output()}\nmavonengine: the dev script exited with code ${exitCode}\n`)
+  return exitCode
 }
 
 export async function runDevCommand(options: DevOptions): Promise<number> {
   const root = findProjectRoot(options.cwd)
   if (!root)
     throw new UsageError(`no MavonEngine project found in ${options.cwd} or its parents (looking for a package.json with @mavonengine/core and a dev script)`)
+
+  // The dashboard needs an interactive terminal; without one (CI, piped output) just run the dev script
+  if (options.dashboard && process.stdout.isTTY && process.stdin.isTTY)
+    return runDevWithDashboard(root, options.dashboard)
 
   return runDev(root)
 }

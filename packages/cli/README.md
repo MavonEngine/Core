@@ -11,7 +11,9 @@ npx mavonengine --help
 
 ## `mavonengine dev`
 
-Runs the `dev` script of the MavonEngine project you are in. For the multiplayer template that starts the game server and the client together.
+Runs the `dev` script of the MavonEngine project you are in and shows the [dashboard](#mavonengine-dashboard) for it. For the multiplayer template that starts the game server and the client together.
+
+While the game server starts, a startup screen shows the latest output of the dev script; the dashboard takes over as soon as the server answers. Quitting the dashboard (`q` or Ctrl-C) stops the dev script and everything it started. If the dev script exits on its own, the dashboard closes and its output is printed.
 
 ```sh
 npx mavonengine dev
@@ -20,11 +22,15 @@ npx mavonengine dev
 npx mavonengine dev --cwd path/to/my-game
 ```
 
-The project root is the nearest `package.json`, from the current directory upwards, that depends on `@mavonengine/core` and has a `dev` script, so it also works from inside `client/` or `server/`. The package manager comes from the lockfile (`npm`, `pnpm`, `yarn` or `bun`, default `npm`). Ctrl-C stops everything, and the command exits with the dev script's exit code.
+The project root is the nearest `package.json`, from the current directory upwards, that depends on `@mavonengine/core` and has a `dev` script, so it also works from inside `client/` or `server/`. The package manager comes from the lockfile (`npm`, `pnpm`, `yarn` or `bun`, default `npm`). Without an interactive terminal, or with `--no-dashboard`, the dev script's output goes straight to the terminal instead. Ctrl-C stops everything, and the command exits with the dev script's exit code.
 
 | Option | Default | |
 | --- | --- | --- |
 | `--cwd <dir>` | current directory | Where to start looking for the project |
+| `--no-dashboard` | | Only run the dev script |
+| `--port <port>` | `8050` | Game server HTTP port for the dashboard |
+| `--theme <name>` | `dark` | Dashboard theme |
+| `--transparent` | | Let a transparent terminal background show through |
 
 ## `mavonengine dashboard`
 

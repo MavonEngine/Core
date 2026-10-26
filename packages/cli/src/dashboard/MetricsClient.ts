@@ -88,6 +88,8 @@ export interface MetricsClientOptions {
   intervalMs?: number
   /** Longest wait between retries while the server is failing */
   maxBackoffMs?: number
+  /** Poll this often, without backoff, until the first snapshot arrives. For a server that is still starting */
+  startupIntervalMs?: number
 }
 
 /**
@@ -98,13 +100,15 @@ export default class MetricsClient {
   readonly state: DashboardState
   private intervalMs: number
   private maxBackoffMs: number
+  private startupIntervalMs?: number
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
   private listeners = new Set<(state: DashboardState) => void>()
 
-  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000 }: MetricsClientOptions = {}) {
+  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs }: MetricsClientOptions = {}) {
     this.intervalMs = intervalMs
     this.maxBackoffMs = maxBackoffMs
+    this.startupIntervalMs = startupIntervalMs
     this.state = {
       status: 'connecting',
       source: source.label,
@@ -206,8 +210,12 @@ export default class MetricsClient {
 
   /**
    * Delay before the next poll: the normal interval, doubling per failure up to maxBackoffMs.
+   * The startup interval until the server first answered, if one is set.
    */
   nextDelay() {
+    if (this.startupIntervalMs !== undefined && !this.state.snapshot)
+      return this.startupIntervalMs
+
     if (this.state.failures === 0)
       return this.intervalMs
 

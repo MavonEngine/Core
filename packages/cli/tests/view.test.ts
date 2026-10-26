@@ -1,5 +1,5 @@
 import type { DashboardState } from '../src/dashboard/MetricsClient'
-import type { ViewState } from '../src/dashboard/view'
+import type { StartupInfo, ViewState } from '../src/dashboard/view'
 import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
@@ -31,8 +31,12 @@ function viewState(overrides: Partial<ViewState> = {}): ViewState {
   return { tab: 0, playerOffset: 0, logFromEnd: 0, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
 }
 
-function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab })) {
-  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, view, { transparent }), { width, height })
+function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab }), startup?: StartupInfo) {
+  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, view, { transparent, startup }), { width, height })
+}
+
+function startingState(status: DashboardState['status']): DashboardState {
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null }
 }
 
 describe('dashboard view', () => {
@@ -151,6 +155,29 @@ describe('dashboard view', () => {
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
     expect(screen.contains('use --token')).toBe(true)
     expect(screen.contains('attempt 2')).toBe(true)
+  })
+
+  it('shows the startup screen while the dev server starts', () => {
+    const screen = render(startingState('unreachable'), 130, 40, false, 0, viewState(), {
+      engineVersion: '0.0.20',
+      output: '\u001B[32mbuilding\u001B[39m\n\nESM Build success\n',
+    })
+
+    expect(screen.contains('MavonEngine')).toBe(true)
+    expect(screen.contains('Version:  0.0.20')).toBe(true)
+    expect(screen.contains('Starting the game server')).toBe(true)
+    expect(screen.contains('ESM Build success')).toBe(true)
+    expect(screen.contains('STARTING')).toBe(true)
+    expect(screen.contains('UNREACHABLE')).toBe(false)
+  })
+
+  it('leaves the startup screen for a server that answers with an error', () => {
+    const state = startingState('unauthorized')
+    state.error = 'Metrics token missing or wrong (use --token)'
+    const screen = render(state, 130, 40, false, 0, viewState(), { output: '' })
+
+    expect(screen.contains('Starting the game server')).toBe(false)
+    expect(screen.contains('use --token')).toBe(true)
   })
 
   it('keeps the last values and shows the error when the server drops', async () => {

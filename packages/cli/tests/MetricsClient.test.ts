@@ -102,6 +102,30 @@ describe('metricsClient', () => {
     expect(client.nextDelay()).toBe(5000)
   })
 
+  it('polls quickly without backoff until a starting server first answers', async () => {
+    let up = false
+    const client = new MetricsClient(
+      { label: 'test', fetch: async () => {
+        if (!up)
+          throw new Error('nope')
+        return {}
+      } },
+      { intervalMs: 1000, startupIntervalMs: 250 },
+    )
+
+    await client.poll()
+    await client.poll()
+    expect(client.nextDelay()).toBe(250)
+
+    up = true
+    await client.poll()
+    expect(client.nextDelay()).toBe(1000)
+
+    up = false
+    await client.poll()
+    expect(client.nextDelay()).toBe(2000)
+  })
+
   it('polls on an interval until stopped', async () => {
     vi.useFakeTimers()
     const fetch = vi.fn(async () => ({}))

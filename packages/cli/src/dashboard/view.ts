@@ -1,6 +1,7 @@
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
 import type { LogLine, ServerMetricsSnapshot } from './snapshot'
+import { stripVTControlCharacters } from 'node:util'
 import { DEFAULT_COLOR } from '@profullstack/hqtui'
 import { formatBytes, formatDuration, formatMs, formatPercent, formatRate } from './format'
 import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
@@ -26,6 +27,15 @@ export interface RenderOptions {
    * Text is only as readable as whatever is behind the window.
    */
   transparent?: boolean
+  /** Set while `mavonengine dev` waits for the game server it started */
+  startup?: StartupInfo
+}
+
+export interface StartupInfo {
+  /** The project's @mavonengine/core version, if it is installed */
+  engineVersion?: string
+  /** What the dev script printed so far */
+  output: string
 }
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
@@ -96,11 +106,12 @@ function statusColor(status: ConnectionStatus, theme: Theme): Color {
 /**
  * Draw the whole dashboard. Pure apart from `view`, so it can be rendered in tests.
  */
-export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false }: RenderOptions = {}) {
+export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup }: RenderOptions = {}) {
+  const { snapshot } = state
+  const starting = !snapshot && !!startup && (state.status === 'connecting' || state.status === 'unreachable')
+
   ui.column({}, (root) => {
     header(root, theme, state)
-
-    const { snapshot } = state
 
     if (snapshot?.latencySimulation)
       latencyBanner(root, theme, snapshot.latencySimulation)
@@ -108,7 +119,10 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
     if (state.error && snapshot)
       root.text([{ text: ` ${state.error} — showing last known values`, fg: theme.danger }], { size: 1 })
 
-    if (!snapshot) {
+    if (starting) {
+      startupScreen(root, theme, startup!)
+    }
+    else if (!snapshot) {
       waiting(root, theme, state)
     }
     else {
@@ -148,7 +162,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
           ? [{ key: '↑↓', label: 'Select player' }, ...(view.selectedPlayerId ? [{ key: 'esc', label: 'Close' }] : [])]
           : []),
       ],
-      right: [{ label: STATUS_LABELS[state.status], color: statusColor(state.status, theme), active: state.status === 'live' }],
+      right: [starting
+        ? { label: 'STARTING', color: statusColor('connecting', theme) }
+        : { label: STATUS_LABELS[state.status], color: statusColor(state.status, theme), active: state.status === 'live' }],
     })
   })
 }
@@ -181,6 +197,56 @@ function latencyBanner(ui: Container, theme: Theme, latency: NonNullable<ServerM
     bg: theme.warning,
     bold: true,
   }], { size: 1 })
+}
+
+/**
+ * The boot banner the game server logs (BaseGame in @mavonengine/core), with what is known before it runs.
+ */
+export function startupBanner(engineVersion = 'unknown'): string[] {
+  return [
+    '┌─────────────────────────────────────────┐',
+    '│                                         │',
+    '│              MavonEngine                │',
+    '│                                         │',
+    `│  Version:  ${engineVersion.padEnd(28)} │`,
+    `│  Mode:     ${'development'.padEnd(28)} │`,
+    '│                                         │',
+    '│  https://github.com/MavonEngine/core    │',
+    '│  https://mavonengine.com                │',
+    '│                                         │',
+    '└─────────────────────────────────────────┘',
+  ]
+}
+
+/** Dev script output lines shown under the banner while the server starts */
+const STARTUP_OUTPUT_LINES = 8
+
+function startupScreen(ui: Container, theme: Theme, { engineVersion, output }: StartupInfo) {
+  const label = 'Starting the game server…'
+  const lines = stripVTControlCharacters(output).split(NEWLINE_RE).filter(line => line.trim() !== '')
+
+  ui.column({ size: '1fr' }, (column) => {
+    column.spacer('1fr')
+    for (const line of startupBanner(engineVersion))
+      column.text([{ text: line, fg: theme.primary }], { align: 'center', size: 1 })
+    column.spacer(1)
+    column.row({ size: 1 }, (row) => {
+      row.spacer('1fr')
+      // Glyph, space, label
+      row.spinner({ label, size: label.length + 2 })
+      row.spacer('1fr')
+    })
+    column.spacer('1fr')
+  })
+
+  ui.panel({ title: 'Dev script', size: STARTUP_OUTPUT_LINES + 2 }, (panel) => {
+    if (lines.length === 0) {
+      panel.label('No output yet')
+      return
+    }
+
+    panel.log({ entries: lines.slice(-STARTUP_OUTPUT_LINES).map(message => ({ message })), size: '1fr' })
+  })
 }
 
 function waiting(ui: Container, theme: Theme, state: DashboardState) {

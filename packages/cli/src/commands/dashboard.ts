@@ -29,7 +29,15 @@ export interface DashboardOptions {
   intervalMs: number
   theme?: string
   transparent: boolean
+  /** Show the startup screen until the server first answers (`mavonengine dev`) */
+  startup?: {
+    engineVersion?: string
+    output(): string
+  }
 }
+
+/** Poll interval while waiting for a server that is still starting, so the dashboard appears as soon as it is up */
+const STARTUP_POLL_MS = 250
 
 export class UsageError extends Error { }
 
@@ -86,16 +94,25 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
   return { source: httpSource({ url, token }), intervalMs, theme: values.theme, transparent: values.transparent }
 }
 
-export async function runDashboard(options: DashboardOptions) {
+/**
+ * Run the dashboard until the user quits or `signal` aborts.
+ */
+export async function runDashboard(options: DashboardOptions, signal?: AbortSignal) {
   // Loaded lazily so `mavonengine --help` doesn't pay for the TUI
   const { createApp } = await import('@profullstack/hqtui')
 
-  const client = new MetricsClient(options.source, { intervalMs: options.intervalMs })
+  const client = new MetricsClient(options.source, {
+    intervalMs: options.intervalMs,
+    startupIntervalMs: options.startup ? STARTUP_POLL_MS : undefined,
+  })
   const view: ViewState = { tab: 0, playerOffset: 0, logFromEnd: 0, selectedPlayerId: null, followSelectedPlayer: true }
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 
-  app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, { transparent: options.transparent }))
+  app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, {
+    transparent: options.transparent,
+    startup: options.startup && { engineVersion: options.startup.engineVersion, output: options.startup.output() },
+  }))
 
   client.onChange(() => app.invalidate())
 
@@ -115,7 +132,13 @@ export async function runDashboard(options: DashboardOptions) {
 
   app.on('exit', () => client.stop())
 
+  const onAbort = () => app.stop()
+  signal?.addEventListener('abort', onAbort)
+
   client.start()
-  await app.start()
+  // stop() does nothing before start(), so an abort that already happened is checked here
+  if (!signal?.aborted)
+    await app.start()
+  signal?.removeEventListener('abort', onAbort)
   client.stop()
 }
