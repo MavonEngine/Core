@@ -17,6 +17,9 @@
     "physics",
     "multiplayer"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "exports": {
     "./vite.config": "./vite.config.js",
     "./*.glsl": "./dist/*.glsl",

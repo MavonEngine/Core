@@ -2,7 +2,7 @@
 
 Command line tools for [MavonEngine](https://mavonengine.com).
 
-Requires Node 22.6 or newer.
+Requires Node 24 or newer.
 
 ```sh
 npm install -D @mavonengine/cli
