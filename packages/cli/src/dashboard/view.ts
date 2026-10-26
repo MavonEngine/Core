@@ -2,6 +2,7 @@ import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
 import type { LogLine, ServerMetricsSnapshot } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
+import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
 import { DEFAULT_COLOR } from '@profullstack/hqtui'
 import { formatBytes, formatDuration, formatMs, formatPercent, formatRate } from './format'
 import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
@@ -199,25 +200,6 @@ function latencyBanner(ui: Container, theme: Theme, latency: NonNullable<ServerM
   }], { size: 1 })
 }
 
-/**
- * The boot banner the game server logs (BaseGame in @mavonengine/core), with what is known before it runs.
- */
-export function startupBanner(engineVersion = 'unknown'): string[] {
-  return [
-    '┌─────────────────────────────────────────┐',
-    '│                                         │',
-    '│              MavonEngine                │',
-    '│                                         │',
-    `│  Version:  ${engineVersion.padEnd(28)} │`,
-    `│  Mode:     ${'development'.padEnd(28)} │`,
-    '│                                         │',
-    '│  https://github.com/MavonEngine/core    │',
-    '│  https://mavonengine.com                │',
-    '│                                         │',
-    '└─────────────────────────────────────────┘',
-  ]
-}
-
 /** Dev script output lines shown under the banner while the server starts */
 const STARTUP_OUTPUT_LINES = 8
 
@@ -227,7 +209,8 @@ function startupScreen(ui: Container, theme: Theme, { engineVersion, output }: S
 
   ui.column({ size: '1fr' }, (column) => {
     column.spacer('1fr')
-    for (const line of startupBanner(engineVersion))
+    // The game server logs the same banner once it runs
+    for (const line of bootBanner({ version: engineVersion ?? 'unknown', mode: 'development' }))
       column.text([{ text: line, fg: theme.primary }], { align: 'center', size: 1 })
     column.spacer(1)
     column.row({ size: 1 }, (row) => {
