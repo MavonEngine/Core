@@ -1,5 +1,6 @@
 import type winston from 'winston'
 import type BaseGame from '../../../BaseGame'
+import type { PlayerConnectionInfo } from '../../Entities/Player'
 import type { LatencySimulatorOptions } from '../LatencySimulator'
 import type ServerWorld from '../World'
 import type { BandwidthSample } from './BandwidthTracker'
@@ -23,6 +24,10 @@ export interface PlayerMetrics {
   position: { x: number, y: number, z: number }
   lastProcessedSequenceId: number
   trackedEntities: number
+  /** Seconds since the player connected */
+  connectedFor: number
+  /** Null when the player has no live connection, e.g. a bot */
+  connection: PlayerConnectionInfo | null
 }
 
 export interface ServerHealth {
@@ -165,6 +170,8 @@ export default class ServerMetrics {
         position: { x: player.position.x, y: player.position.y, z: player.position.z },
         lastProcessedSequenceId: player.lastProcessedSequenceId,
         trackedEntities: player.trackedEntities.size,
+        connectedFor: Math.max(0, Math.round((Date.now() - player.connectedAt) / 1000)),
+        connection: player.connection,
       })),
       world: {
         entities: game.world.entities.length,

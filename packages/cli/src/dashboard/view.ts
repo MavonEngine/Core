@@ -12,6 +12,10 @@ export interface ViewState {
   /** Index into DASHBOARD_TABS */
   tab: number
   playerOffset: number
+  /** Player shown in the details tile on the Players tab */
+  selectedPlayerId: string | null
+  /** Keep the selected row on screen; off while the mouse wheel scrolls the table */
+  followSelectedPlayer: boolean
   /** Log lines scrolled back from the newest, 0 follows the tail */
   logFromEnd: number
 }
@@ -46,6 +50,39 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
 export function tabForKey(key: string): number | null {
   const index = Number(key) - 1
   return Number.isInteger(index) && index >= 0 && index < DASHBOARD_TABS.length ? index : null
+}
+
+function sortedPlayers(players: ServerMetricsSnapshot['players']) {
+  return [...players].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+/**
+ * Arrow keys / j k move the player selection on the Players tab, escape clears it.
+ * Returns whether the key was used.
+ */
+export function handlePlayersKey(view: ViewState, snapshot: ServerMetricsSnapshot | null, key: string): boolean {
+  if (DASHBOARD_TABS[view.tab] !== 'Players' || !snapshot)
+    return false
+
+  if (key === 'escape') {
+    const had = view.selectedPlayerId !== null
+    view.selectedPlayerId = null
+    return had
+  }
+
+  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  const rows = sortedPlayers(snapshot.players)
+  if (delta === 0 || rows.length === 0)
+    return false
+
+  const current = rows.findIndex(p => p.id === view.selectedPlayerId)
+  const next = current === -1
+    ? (delta > 0 ? 0 : rows.length - 1)
+    : Math.max(0, Math.min(rows.length - 1, current + delta))
+
+  view.selectedPlayerId = rows[next].id
+  view.followSelectedPlayer = true
+  return true
 }
 
 function statusColor(status: ConnectionStatus, theme: Theme): Color {
@@ -87,7 +124,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
 
       const tab = DASHBOARD_TABS[view.tab] ?? 'Overview'
       if (tab === 'Players') {
-        playersPanel(root, theme, snapshot, view, transparent)
+        playersTab(root, theme, snapshot, view, transparent)
       }
       else if (tab === 'Logs') {
         logsPanel(root, theme, state, view)
@@ -107,6 +144,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
         { key: `1-${DASHBOARD_TABS.length}`, label: 'Tabs' },
+        ...(snapshot && DASHBOARD_TABS[view.tab] === 'Players'
+          ? [{ key: '↑↓', label: 'Select player' }, ...(view.selectedPlayerId ? [{ key: 'esc', label: 'Close' }] : [])]
+          : []),
       ],
       right: [{ label: STATUS_LABELS[state.status], color: statusColor(state.status, theme), active: state.status === 'live' }],
     })
@@ -272,8 +312,50 @@ function worldPanel(ui: Container, theme: Theme, { players, world, physics, memo
   })
 }
 
-function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
-  const rows = [...players].sort((a, b) => a.id.localeCompare(b.id))
+function playersTab(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
+  const selected = snapshot.players.find(p => p.id === view.selectedPlayerId)
+  if (!selected) {
+    // Nothing picked yet, or the player disconnected
+    view.selectedPlayerId = null
+    playersPanel(ui, theme, snapshot, view, transparent, true)
+    return
+  }
+
+  ui.responsive({
+    [WIDE_LAYOUT]: c => c.row({ size: '1fr' }, (row) => {
+      playersPanel(row, theme, snapshot, view, transparent, true)
+      playerDetails(row, theme, selected, 42)
+    }),
+    0: (c) => {
+      playersPanel(c, theme, snapshot, view, transparent, true)
+      playerDetails(c, theme, selected, 13)
+    },
+  })
+}
+
+function playerDetails(ui: Container, theme: Theme, player: PlayerRow, size: number) {
+  const { connection, position } = player
+
+  ui.panel({ title: player.displayName, size }, (panel) => {
+    panel.keyValues([
+      { label: 'ID', value: player.id },
+      { label: 'Connected', value: formatDuration(player.connectedFor) },
+      { label: 'IP', value: connection ? connection.address ?? 'pending' : '—', color: theme.primary },
+      { label: 'RTT', value: connection?.rttMs != null ? formatMs(connection.rttMs) : '—' },
+      { label: 'Sent', value: connection ? formatBytes(connection.bytesSent) : '—' },
+      { label: 'Received', value: connection ? formatBytes(connection.bytesReceived) : '—' },
+      { label: 'Position', value: [position.x, position.y, position.z].map(n => n.toFixed(2)).join(', ') },
+      { label: 'Last seq', value: String(player.lastProcessedSequenceId) },
+      { label: 'Tracked', value: String(player.trackedEntities) },
+    ], { spread: true })
+
+    if (!connection)
+      panel.label('No live connection (a bot, or an older server)')
+  })
+}
+
+function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSnapshot, view: ViewState, transparent: boolean, selectable = false) {
+  const rows = sortedPlayers(players)
   const maxOffset = Math.max(0, rows.length - 1)
   view.playerOffset = Math.min(view.playerOffset, maxOffset)
   // Display names default to the id, so the column only adds noise until a game sets them
@@ -288,12 +370,29 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
     panel.table<PlayerRow>({
       rows,
       offset: view.playerOffset,
+      selected: selectable ? rows.findIndex(p => p.id === view.selectedPlayerId) : -1,
+      followSelection: selectable && view.followSelectedPlayer,
+      // Following the selection can move the window, so keep our offset in step with what is drawn
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          view.playerOffset = index
+      },
+      onSelectRow: selectable
+        ? (visibleRow) => {
+            const row = rows[view.playerOffset + visibleRow]
+            if (!row)
+              return
+            view.selectedPlayerId = row.id === view.selectedPlayerId ? null : row.id
+            ui.ctx.invalidate()
+          }
+        : undefined,
       scrollbar: true,
       // Zebra stripes are solid fills, which would break transparency
       zebra: !transparent,
       size: '1fr',
       onScroll: (delta) => {
         view.playerOffset = Math.max(0, Math.min(maxOffset, view.playerOffset + delta))
+        view.followSelectedPlayer = false
         ui.ctx.invalidate()
       },
       columns: [

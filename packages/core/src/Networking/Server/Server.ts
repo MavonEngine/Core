@@ -3,7 +3,6 @@ import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
 import type winston from 'winston'
 import type GameObject from '../../World/GameObject'
-import type Player from '../Entities/Player'
 import type NetworkedActor from '../NetworkedActor'
 import type { ClientCommand, CommandPacket, IncomingClientCommandPacket } from './Commands'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
@@ -12,6 +11,7 @@ import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMe
 import { Buffer } from 'node:buffer'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import Player from '../Entities/Player'
 import { ServerCommand } from './Commands'
 import HttpServer from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
@@ -96,6 +96,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.logger.info(`Connected: ${channel.id}`)
 
       const client = this.onConnection(channel)
+      if (client instanceof Player)
+        client.channel = channel
       this.game.world.entities.items.set(client.id!.toString(), client)
 
       this.logger.info(`${(this.game.world as ServerWorld).players.length} total players connected`)

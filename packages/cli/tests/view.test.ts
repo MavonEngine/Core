@@ -1,9 +1,10 @@
 import type { DashboardState } from '../src/dashboard/MetricsClient'
+import type { ViewState } from '../src/dashboard/view'
 import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizeSnapshot } from '../src/dashboard/snapshot'
-import { renderDashboard, tabForKey, toLogRows } from '../src/dashboard/view'
+import { handlePlayersKey, renderDashboard, tabForKey, toLogRows } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -26,8 +27,12 @@ async function liveState(samples = 30): Promise<DashboardState> {
   }
 }
 
-function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0) {
-  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { tab, playerOffset: 0, logFromEnd: 0 }, { transparent }), { width, height })
+function viewState(overrides: Partial<ViewState> = {}): ViewState {
+  return { tab: 0, playerOffset: 0, logFromEnd: 0, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
+}
+
+function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab })) {
+  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, view, { transparent }), { width, height })
 }
 
 describe('dashboard view', () => {
@@ -56,6 +61,64 @@ describe('dashboard view', () => {
     expect(screen.contains('Slow tick')).toBe(true)
     expect(screen.contains('Players (')).toBe(false)
     expect(screen.contains('CPU')).toBe(false)
+  })
+
+  it('shows a details tile for the selected player', async () => {
+    const state = await liveState()
+    const player = state.snapshot!.players[0]
+
+    const closed = render(state, 130, 40, false, 1)
+    expect(closed.contains(player.connection!.address!)).toBe(false)
+
+    for (const [width, height] of [[130, 40], [80, 60]]) {
+      const screen = render(state, width, height, false, 1, viewState({ tab: 1, selectedPlayerId: player.id }))
+      expect(screen.contains(player.connection!.address!), `${width}x${height}`).toBe(true)
+      expect(screen.contains('Connected')).toBe(true)
+      expect(screen.contains('esc Close')).toBe(true)
+    }
+  })
+
+  it('explains a player without a connection', async () => {
+    const state = await liveState()
+    const player = state.snapshot!.players[0]
+    player.connection = null
+
+    const screen = render(state, 130, 40, false, 1, viewState({ tab: 1, selectedPlayerId: player.id }))
+    expect(screen.contains('No live connection')).toBe(true)
+  })
+
+  it('drops the selection when the player disconnects', async () => {
+    const state = await liveState()
+    const view = viewState({ tab: 1, selectedPlayerId: 'gone' })
+
+    render(state, 130, 40, false, 1, view)
+    expect(view.selectedPlayerId).toBeNull()
+  })
+
+  it('moves the player selection with the arrow keys', async () => {
+    const { snapshot } = await liveState()
+    const ids = snapshot!.players.map(p => p.id).sort()
+    const view = viewState({ tab: 1 })
+
+    expect(handlePlayersKey(view, snapshot, 'down')).toBe(true)
+    expect(view.selectedPlayerId).toBe(ids[0])
+    handlePlayersKey(view, snapshot, 'j')
+    expect(view.selectedPlayerId).toBe(ids[1])
+    handlePlayersKey(view, snapshot, 'up')
+    handlePlayersKey(view, snapshot, 'up')
+    expect(view.selectedPlayerId).toBe(ids[0])
+
+    expect(handlePlayersKey(view, snapshot, 'escape')).toBe(true)
+    expect(view.selectedPlayerId).toBeNull()
+    expect(handlePlayersKey(view, snapshot, 'escape')).toBe(false)
+  })
+
+  it('ignores the arrow keys outside the players tab', async () => {
+    const { snapshot } = await liveState()
+    const view = viewState({ tab: 0 })
+
+    expect(handlePlayersKey(view, snapshot, 'down')).toBe(false)
+    expect(view.selectedPlayerId).toBeNull()
   })
 
   it('maps number keys to tabs', () => {

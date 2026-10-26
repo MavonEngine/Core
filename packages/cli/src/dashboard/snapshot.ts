@@ -23,6 +23,14 @@ function str(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback
 }
 
+function numOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function strOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
 function arr<T>(value: unknown, map: (item: AnyRecord) => T): T[] {
   return Array.isArray(value) ? value.filter(isRecord).map(map) : []
 }
@@ -69,6 +77,7 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
     tickRate: num(s.tickRate),
     players: arr(s.players, (p) => {
       const position = section(p.position)
+      const connection = isRecord(p.connection) ? p.connection : null
       const id = str(p.id, '?')
       return {
         id,
@@ -77,6 +86,15 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
         position: { x: num(position.x), y: num(position.y), z: num(position.z) },
         lastProcessedSequenceId: num(p.lastProcessedSequenceId),
         trackedEntities: num(p.trackedEntities),
+        connectedFor: num(p.connectedFor),
+        connection: connection
+          ? {
+              address: strOrNull(connection.address),
+              rttMs: numOrNull(connection.rttMs),
+              bytesSent: num(connection.bytesSent),
+              bytesReceived: num(connection.bytesReceived),
+            }
+          : null,
       }
     }),
     world: {

@@ -78,6 +78,7 @@ describe('server', () => {
 
     expect((server.game.world as ServerWorld).players).toHaveLength(1)
     expect((server.game.world as ServerWorld).players[0].id).eq(randomId)
+    expect((server.game.world as ServerWorld).players[0].channel?.id).eq(randomId)
 
     // Simulate a disconnect from the client
     disconnectCallback()

@@ -41,6 +41,7 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
 
   const logs: LogLine[] = []
   let previousPlayers = 0
+  const joinedAt: number[] = []
   const log = (level: string, message: string) => {
     logs.push({ id: logs.length + 1, timestamp: now, level, message })
   }
@@ -56,6 +57,9 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
 
       // Players drift in and out on a slow wave
       const playerCount = Math.max(1, Math.round(6 + 5 * Math.sin(step / 20) + random() * 2))
+      for (let i = previousPlayers; i < playerCount; i++)
+        joinedAt[i] = now
+
       const players = Array.from({ length: playerCount }, (_, i) => ({
         id: `sim-${(i + 1).toString().padStart(2, '0')}`,
         displayName: `Player ${i + 1}`,
@@ -66,6 +70,13 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         },
         lastProcessedSequenceId: sequence - Math.floor(random() * 3),
         trackedEntities: playerCount + 20 + Math.floor(random() * 5),
+        connectedFor: Math.round((now - joinedAt[i]) / 1000),
+        connection: {
+          address: `203.0.113.${10 + i}`,
+          rttMs: Math.round(20 + i * 8 + random() * 10),
+          bytesSent: Math.round((now - joinedAt[i]) * (25 + i)),
+          bytesReceived: Math.round((now - joinedAt[i]) * (4 + i / 2)),
+        },
       }))
 
       for (let i = previousPlayers; i < playerCount; i++) {

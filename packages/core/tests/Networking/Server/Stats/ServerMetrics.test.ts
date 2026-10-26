@@ -49,11 +49,32 @@ describe('serverMetrics', () => {
       position: { x: 1, y: 2, z: 3 },
       lastProcessedSequenceId: 7,
       trackedEntities: 1,
+      connectedFor: 0,
+      connection: null,
     }])
     expect(snapshot.world.entities).toBe(1)
     expect(snapshot.physics).toBeNull()
     expect(snapshot.latencySimulation).toEqual({ fixedLatency: 50, jitter: 10, packetLoss: 0 })
     expect(snapshot.memory.rss).toBeGreaterThan(0)
+  })
+
+  it('includes how long players have been connected and their connection details', () => {
+    const { game, metrics } = makeMetrics()
+
+    const p1 = addPlayer(game, 'p1')
+    p1.connectedAt = Date.now() - 90_000
+    p1.channel = { webrtcConnection: { peerConnection: {
+      rtt: () => 42,
+      bytesSent: () => 1000,
+      bytesReceived: () => 200,
+      getSelectedCandidatePair: () => ({ remote: { address: '203.0.113.7' } }),
+    } } } as any
+    addPlayer(game, 'bot')
+
+    const [connected, bot] = metrics.snapshot().players
+    expect(connected.connectedFor).toBe(90)
+    expect(connected.connection).toEqual({ address: '203.0.113.7', rttMs: 42, bytesSent: 1000, bytesReceived: 200 })
+    expect(bot.connection).toBeNull()
   })
 
   it('uses the player id as the display name until one is set', () => {

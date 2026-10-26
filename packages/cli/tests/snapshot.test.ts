@@ -25,8 +25,13 @@ describe('normalizeSnapshot', () => {
     expect(() => normalizeSnapshot(null)).not.toThrow()
     expect(() => normalizeSnapshot('nope')).not.toThrow()
     expect(normalizeSnapshot({ players: [null, 3, { id: 'a' }] }).players).toEqual([
-      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0 },
+      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0, connectedFor: 0, connection: null },
     ])
+  })
+
+  it('keeps unknown connection details as null', () => {
+    const [player] = normalizeSnapshot({ players: [{ id: 'a', connection: { address: 7, rttMs: Number.NaN, bytesSent: 10 } }] }).players
+    expect(player.connection).toEqual({ address: null, rttMs: null, bytesSent: 10, bytesReceived: 0 })
   })
 
   it('replaces non-finite numbers', () => {
