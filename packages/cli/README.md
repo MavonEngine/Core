@@ -9,6 +9,23 @@ npm install -D @mavonengine/cli
 npx mavonengine --help
 ```
 
+## `mavonengine dev`
+
+Runs the `dev` script of the MavonEngine project you are in. For the multiplayer template that starts the game server and the client together.
+
+```sh
+npx mavonengine dev
+
+# From somewhere else
+npx mavonengine dev --cwd path/to/my-game
+```
+
+The project root is the nearest `package.json`, from the current directory upwards, that depends on `@mavonengine/core` and has a `dev` script, so it also works from inside `client/` or `server/`. The package manager comes from the lockfile (`npm`, `pnpm`, `yarn` or `bun`, default `npm`). Ctrl-C stops everything, and the command exits with the dev script's exit code.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+
 ## `mavonengine dashboard`
 
 A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui).

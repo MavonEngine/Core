@@ -1,11 +1,15 @@
 import type { Express, NextFunction, Request, Response } from 'express'
+import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
 import type LogBuffer from '../Stats/LogBuffer'
 import type ServerMetrics from '../Stats/ServerMetrics'
+import type { ClientOptions } from './ClientMiddleware'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
+import { join } from 'node:path'
 import process from 'node:process'
 import express from 'express'
+import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
 
 export interface MetricsEndpointOptions {
   /**
@@ -26,6 +30,8 @@ export interface HttpServerOptions {
   metrics?: MetricsEndpointOptions
   /** Serves recent log entries on GET /api/game/logs when given */
   logs?: LogBuffer
+  /** Serve the game client from this server, see `serveClient()` */
+  client?: ClientOptions
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -42,7 +48,9 @@ export default class HttpServer {
   private port: number
   private metricsOptions: MetricsEndpointOptions
   private logs?: LogBuffer
+  private clientOptions?: ClientOptions
   private lastMetricsRequestAt?: number
+  private listener?: NodeServer
 
   constructor(
     private logger: winston.Logger,
@@ -54,6 +62,7 @@ export default class HttpServer {
     this.port = options.port ?? 8050
     this.metricsOptions = options.metrics ?? {}
     this.logs = options.logs
+    this.clientOptions = options.client
 
     this.registerHealthEndpoint()
     this.registerMetricsEndpoint()
@@ -62,9 +71,43 @@ export default class HttpServer {
 
   start() {
     this.logger.info('Starting @mavon/engine - HTTP Server')
-    this.app.listen(this.port)
+    this.listener = this.app.listen(this.port)
 
     this.logger.info(`Visit game server status: http://localhost:${this.port}/api/game/health`)
+  }
+
+  /**
+   * The underlying Node HTTP server, once started.
+   */
+  get server(): NodeServer | undefined {
+    return this.listener
+  }
+
+  /**
+   * Mount the game client configured in `options.client`. Call it after every other route is registered,
+   * because the client answers any page request that is left.
+   * Returns whether a client is being served.
+   */
+  serveClient(): boolean {
+    const client = this.clientOptions
+    if (!client || !this.listener)
+      return false
+
+    if (client.dev) {
+      this.app.use(devClientMiddleware(client.root, this.listener, this.logger))
+      return true
+    }
+
+    const dist = client.dist ?? join(client.root, 'dist')
+    const middleware = staticClientMiddleware(dist)
+    if (!middleware) {
+      this.logger.warn(`No built client at ${dist}, run the client build to serve it from the game server`)
+      return false
+    }
+
+    this.app.use(middleware)
+    this.logger.info(`Serving the built client from ${dist}: http://localhost:${this.port}/`)
+    return true
   }
 
   get metricsEnabled() {

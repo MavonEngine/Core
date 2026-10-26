@@ -257,6 +257,74 @@ describe('server', () => {
     expect((server.http as any).port).toBe(9002)
   })
 
+  it('moves the game socket onto the HTTP server when it serves the client', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+    const nodeServer = {}
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(true)
+    vi.spyOn(server.http, 'server', 'get').mockReturnValue(nodeServer as any)
+
+    server.start()
+    server.stop()
+
+    expect(addServer).toHaveBeenCalledWith(nodeServer)
+    expect(listen).not.toHaveBeenCalled()
+  })
+
+  it('still opens the socket port when asked to while serving the client', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' }, socketPort: 9001 })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    ;(server.gameSocket as any).addServer = vi.fn()
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(true)
+    vi.spyOn(server.http, 'server', 'get').mockReturnValue({} as any)
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(9001)
+  })
+
+  it('falls back to port 8081 when the client is configured but not built', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(false)
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(8081)
+    expect(addServer).not.toHaveBeenCalled()
+  })
+
+  it('keeps the game socket on its own port when no client is served', () => {
+    const server = new TestServer(logger)
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+    server.start()
+    server.stop()
+
+    expect(addServer).not.toHaveBeenCalled()
+    expect(listen).toHaveBeenCalledWith(8081)
+  })
+
   it('captures log output for the logs endpoint', () => {
     const logger = winston.createLogger({ level: 'info', transports: [] })
     const server = new TestServer(logger)

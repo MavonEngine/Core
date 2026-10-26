@@ -5,6 +5,7 @@ import type winston from 'winston'
 import type GameObject from '../../World/GameObject'
 import type NetworkedActor from '../NetworkedActor'
 import type { ClientCommand, CommandPacket, IncomingClientCommandPacket } from './Commands'
+import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
@@ -24,11 +25,20 @@ let instance: Server<GameObject>
 export interface ServerOptions {
   latencySimulation?: LatencySimulatorOptions
 
-  /** Port the geckos.io game socket listens on. Default 8081 */
-  socketPort?: number
+  /**
+   * Separate port for the geckos.io game socket, or false for none.
+   * Defaults to none when the HTTP server serves the client, since the socket is reachable there, and 8081 otherwise.
+   */
+  socketPort?: number | false
 
   /** Port the HTTP server listens on. Default 8050 */
   httpPort?: number
+
+  /**
+   * Serve the game client from the HTTP server: the source through Vite when `dev` is set, the built files otherwise.
+   * The game socket is then also reachable on the HTTP port, so the client needs no second origin.
+   */
+  client?: ClientOptions
 
   metrics?: MetricsEndpointOptions & ServerMetricsOptions & {
     /** How often a CPU / bandwidth summary is logged, in ms. Default 5000 */
@@ -90,6 +100,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       port: this.options.httpPort,
       metrics: this.options.metrics,
       logs: this.logs,
+      client: this.options.client,
     })
 
     this.gameSocket.onConnection((channel) => {
@@ -325,9 +336,6 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   start() {
-    this.logger.info('Starting @mavon/engine - Socket Server')
-    this.gameSocket.listen(this.options.socketPort ?? 8081)
-
     this.http.start()
     this.startMetrics()
 
@@ -336,6 +344,21 @@ export default abstract class Server<TClient extends GameObject> implements Serv
      */
     if (this.onHttpCallback) {
       this.onHttpCallback(this.httpServer)
+    }
+
+    // Last, because the client answers every page request the routes above leave
+    const servesClient = this.http.serveClient() && !!this.http.server
+    if (servesClient) {
+      // geckos matches its /.wrtc/v2 routes anywhere in the path, so this also answers a client
+      // that connects through a /socket prefix, like the template does
+      this.gameSocket.addServer(this.http.server!)
+      this.logger.info('Game socket reachable on the HTTP server')
+    }
+
+    const socketPort = this.options.socketPort ?? (servesClient ? false : 8081)
+    if (socketPort !== false) {
+      this.logger.info('Starting @mavon/engine - Socket Server')
+      this.gameSocket.listen(socketPort)
     }
   }
 

@@ -1,11 +1,13 @@
 import process from 'node:process'
 import { version } from '../package.json'
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
+import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 
 const HELP = `Usage: mavonengine <command> [options]
 
 Commands:
   dashboard    Live terminal dashboard for a running game server
+  dev          Run the project's dev servers (game server and client)
 
 Options:
   -h, --help       Show help
@@ -42,6 +44,17 @@ async function main(argv: string[]): Promise<number> {
 
     await runDashboard(options)
     return 0
+  }
+
+  if (command === 'dev') {
+    const options = parseDevArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(DEV_HELP)
+      return 0
+    }
+
+    return runDevCommand(options)
   }
 
   throw new UsageError(`Unknown command '${command}'\n\n${HELP}`)
