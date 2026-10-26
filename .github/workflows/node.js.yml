@@ -50,11 +50,15 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/cli
 
+    # Run the built file directly: npm ci runs before the build, so npm skipped
+    # linking the `mavonengine` bin (its target didn't exist yet) and npx would
+    # fall back to looking it up on the registry
     - name: Smoke test cli binary
       run: |
-        npx mavonengine --version
-        npx mavonengine --help
-        npx mavonengine dashboard --help
+        node dist/index.js --version
+        node dist/index.js --help
+        node dist/index.js dashboard --help
+      working-directory: ./packages/cli
 
     - name: npm link core locally
       run: |
