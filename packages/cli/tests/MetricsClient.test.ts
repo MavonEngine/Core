@@ -247,6 +247,52 @@ describe('metricsClient', () => {
       expect(client.state.logs[0].id).toBe(11)
     })
 
+    it('follows requests the same way as logs', async () => {
+      const request = (id: number) => ({ id, timestamp: 0, method: 'GET', path: `/${id}`, status: 200, durationMs: 1, bytes: 1, address: null })
+      const pages = [{ entries: [request(1), request(2)], latestId: 2 }, { entries: [request(3)], latestId: 3 }]
+      const calls: number[] = []
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRequests: async (afterId: number) => {
+          calls.push(afterId)
+          return pages.shift()!
+        },
+      })
+
+      expect(client.state.logsAvailable).toBe(false)
+      await client.poll()
+      await client.poll()
+
+      expect(calls).toEqual([0, 2])
+      expect(client.state.requests.map(r => r.path)).toEqual(['/1', '/2', '/3'])
+      expect(client.state.requestsAvailable).toBe(true)
+    })
+
+    it('marks requests unavailable on an older server without failing the poll', async () => {
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRequests: async () => {
+          throw new MetricsSourceError('not found', 'disabled')
+        },
+      })
+
+      await client.poll()
+
+      expect(client.state.requestsAvailable).toBe(false)
+      expect(client.state.status).toBe('live')
+    })
+
+    it('derives the requests url from the metrics url', async () => {
+      const fetch = vi.fn(async () => response(200, { entries: [], latestId: 0 }))
+      const source = httpSource({ url: 'http://localhost:8050/api/game/metrics', fetch })
+
+      await source.fetchRequests!(7)
+
+      expect(fetch).toHaveBeenCalledWith('http://localhost:8050/api/game/requests?after=7', expect.anything())
+    })
+
     it('derives the logs url from the metrics url', async () => {
       const fetch = vi.fn(async () => response(200, { entries: [], latestId: 0 }))
       const source = httpSource({ url: 'http://localhost:8050/api/game/metrics', fetch })

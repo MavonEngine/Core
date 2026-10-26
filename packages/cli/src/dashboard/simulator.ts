@@ -1,5 +1,5 @@
 import type { MetricsSource } from './MetricsClient'
-import type { LogLine, ServerMetricsSnapshot } from './snapshot'
+import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
 
 const HISTORY_LENGTH = 60
 
@@ -45,6 +45,11 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
   const log = (level: string, message: string) => {
     logs.push({ id: logs.length + 1, timestamp: now, level, message })
   }
+  const requests: RequestLine[] = []
+  const request = (method: string, path: string, status: number | null, bytes: number, address: string) => {
+    requests.push({ id: requests.length + 1, timestamp: now, method, path, status, durationMs: Math.round((1 + random() * 20) * 100) / 100, bytes, address })
+  }
+
   log('info', 'Starting @mavon/engine - Socket Server')
   log('info', 'Starting @mavon/engine - HTTP Server')
 
@@ -80,6 +85,14 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
       }))
 
       for (let i = previousPlayers; i < playerCount; i++) {
+        // What a browser loading the client and joining asks for
+        const address = players[i].connection.address
+        request('GET', '/', 200, 1240, address)
+        const cached = step % 3 === 0
+        request('GET', '/assets/index-4f2a9c1e.js', cached ? 304 : 200, cached ? 210 : 412_000, address)
+        request('GET', '/favicon.ico', 404, 160, address)
+        request('POST', '/.wrtc/v2/connections', 200, 2900, address)
+        request('POST', `/.wrtc/v2/connections/${players[i].id}/additional-candidates`, 200, 600, address)
         log('info', `Connected: ${players[i].id}`)
         log('info', `${i + 1} total players connected`)
       }
@@ -88,6 +101,11 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         log('info', `${i} total players connected`)
       }
       previousPlayers = playerCount
+
+      if (step % 10 === 0)
+        request('GET', '/api/game/health', 200, 180, '198.51.100.7')
+      if (step % 23 === 0)
+        request('GET', '/wp-login.php', 404, 160, '192.0.2.66')
 
       if (step % 5 === 0)
         log('debug', `Client - Sent: ${playerCount * 4200} B, Received: ${playerCount * 600} B`)
@@ -162,6 +180,9 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
     },
     async fetchLogs(afterId) {
       return { entries: logs.filter(entry => entry.id > afterId), latestId: logs.length }
+    },
+    async fetchRequests(afterId) {
+      return { entries: requests.filter(entry => entry.id > afterId), latestId: requests.length }
     },
   }
 }

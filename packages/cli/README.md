@@ -36,7 +36,7 @@ The project root is the nearest `package.json`, from the current directory upwar
 
 A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui).
 
-It shows CPU, network bandwidth, tick timings against the tick budget, world/physics/memory stats, the connected players and the server's recent log output. It reads them from the server's `GET /api/game/metrics` and `GET /api/game/logs` endpoints, which need a `@mavonengine/core` release that includes them.
+It shows CPU, network bandwidth, tick timings against the tick budget, world/physics/memory stats, the connected players, the server's recent log output and the HTTP requests it received. It reads them from the server's `GET /api/game/metrics`, `GET /api/game/logs` and `GET /api/game/requests` endpoints, which need a `@mavonengine/core` release that includes them.
 
 ```sh
 # Local server on the default HTTP port (8050)
@@ -60,7 +60,9 @@ npx mavonengine dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now. The mouse wheel scrolls the players table and the logs; scroll the logs back to the bottom to follow new lines again.
+Keys: `q` quits, `r` refreshes now, `1`–`4` switch between the Overview, Players, Logs and HTTP tabs. The mouse wheel scrolls the players table, the logs and the requests; scroll the logs back to the bottom, or the requests back to the top, to follow new ones again.
+
+The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
 
 ### Server access
 
@@ -73,6 +75,8 @@ const server = new MyServer(logger, physicsWorld, {
     token: process.env.METRICS_TOKEN,
     // Recent log entries kept for the dashboard, 0 turns the logs endpoint off
     logBufferSize: 500,
+    // Recent HTTP requests kept for the dashboard, 0 turns the requests endpoint off
+    requestLogSize: 500,
   },
 })
 ```

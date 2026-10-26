@@ -4,6 +4,7 @@ import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/H
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import HttpServer, { METRICS_CLIENT_TIMEOUT_MS } from '../../../../src/Networking/Server/Http/HttpServer'
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
+import RequestLog from '../../../../src/Networking/Server/Stats/RequestLog'
 
 const health = { serverTime: 'now', uptime: 1, players: 0, world: { entities: 0 }, physics: {} }
 const snapshot = { schemaVersion: 1, players: [] }
@@ -110,6 +111,26 @@ describe('httpServer', () => {
     const request = await serve()
 
     expect((await request('/api/game/logs')).status).toBe(404)
+  })
+
+  it('serves recorded requests after an id, protected like metrics', async () => {
+    const requests = new RequestLog()
+    requests.push({ timestamp: 0, method: 'GET', path: '/one', status: 200, durationMs: 1, bytes: 10, address: null })
+    requests.push({ timestamp: 0, method: 'GET', path: '/two', status: 404, durationMs: 1, bytes: 10, address: null })
+
+    const request = await serve({ requests, metrics: { token: 'secret' } })
+
+    expect((await request('/api/game/requests')).status).toBe(401)
+
+    const newer = await (await request('/api/game/requests?after=1&token=secret')).json()
+    expect(newer.latestId).toBe(2)
+    expect(newer.entries.map((e: any) => e.path)).toEqual(['/two'])
+  })
+
+  it('404s requests without a request log', async () => {
+    const request = await serve()
+
+    expect((await request('/api/game/requests')).status).toBe(404)
   })
 
   it('tracks whether metrics were fetched recently', async () => {

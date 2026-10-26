@@ -105,7 +105,7 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
     intervalMs: options.intervalMs,
     startupIntervalMs: options.startup ? STARTUP_POLL_MS : undefined,
   })
-  const view: ViewState = { tab: 0, playerOffset: 0, logFromEnd: 0, selectedPlayerId: null, followSelectedPlayer: true }
+  const view: ViewState = { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true }
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 

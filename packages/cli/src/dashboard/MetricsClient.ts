@@ -1,5 +1,5 @@
-import type { LogLine, ServerMetricsSnapshot } from './snapshot'
-import { normalizeLogs, normalizeSnapshot } from './snapshot'
+import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
+import { normalizeLogs, normalizeRequests, normalizeSnapshot } from './snapshot'
 
 export type ConnectionStatus = 'connecting' | 'live' | 'unreachable' | 'unauthorized' | 'forbidden' | 'disabled'
 
@@ -17,10 +17,17 @@ export interface DashboardState {
   logs: LogLine[]
   /** false once the server turned out not to serve logs, null until known */
   logsAvailable: boolean | null
+  /** Recent HTTP requests to the server, oldest first */
+  requests: RequestLine[]
+  /** false once the server turned out not to record requests, null until known */
+  requestsAvailable: boolean | null
 }
 
 /** Log lines kept in memory by the dashboard */
 export const MAX_LOG_LINES = 1000
+
+/** HTTP requests kept in memory by the dashboard */
+export const MAX_REQUEST_LINES = 1000
 
 export class MetricsSourceError extends Error {
   constructor(message: string, readonly status: ConnectionStatus) {
@@ -30,12 +37,13 @@ export class MetricsSourceError extends Error {
 
 /**
  * Something that produces one raw metrics snapshot per call,
- * and optionally the log entries newer than a given id.
+ * and optionally the log entries / HTTP requests newer than a given id.
  */
 export interface MetricsSource {
   label: string
   fetch(): Promise<unknown>
   fetchLogs?(afterId: number): Promise<unknown>
+  fetchRequests?(afterId: number): Promise<unknown>
 }
 
 export interface HttpSourceOptions {
@@ -48,6 +56,7 @@ export interface HttpSourceOptions {
 export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fetch }: HttpSourceOptions): MetricsSource {
   // Logs live next to metrics: .../api/game/metrics -> .../api/game/logs
   const logsUrl = new URL('logs', url)
+  const requestsUrl = new URL('requests', url)
 
   async function request(target: string) {
     let res: Response
@@ -81,6 +90,58 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
       logsUrl.searchParams.set('after', String(afterId))
       return request(logsUrl.toString())
     },
+    fetchRequests: (afterId) => {
+      requestsUrl.searchParams.set('after', String(afterId))
+      return request(requestsUrl.toString())
+    },
+  }
+}
+
+/**
+ * Follows an endpoint whose entries have increasing ids (logs, HTTP requests),
+ * keeping the newest `max` of them.
+ */
+class Feed<T extends { id: number }> {
+  entries: T[] = []
+  /** false once the server turned out not to serve it, null until known */
+  available: boolean | null
+  private lastId = 0
+
+  constructor(
+    private fetchPage: ((afterId: number) => Promise<unknown>) | undefined,
+    private normalize: (raw: unknown) => { entries: T[], latestId: number },
+    private max: number,
+  ) {
+    this.available = fetchPage ? null : false
+  }
+
+  async poll() {
+    if (!this.fetchPage || this.available === false)
+      return
+
+    try {
+      let { entries, latestId } = this.normalize(await this.fetchPage(this.lastId))
+
+      // Ids went backwards, so the server restarted: start over from its first entry
+      if (latestId < this.lastId) {
+        this.entries = []
+        this.lastId = 0;
+        ({ entries, latestId } = this.normalize(await this.fetchPage(0)))
+      }
+
+      this.available = true
+      this.entries.push(...entries.filter(entry => entry.id > this.lastId))
+      this.lastId = Math.max(this.lastId, latestId)
+
+      if (this.entries.length > this.max)
+        this.entries.splice(0, this.entries.length - this.max)
+    }
+    catch (err) {
+      // Metrics work but this doesn't: an older server, or it is turned off in the server options
+      if (err instanceof MetricsSourceError && err.status === 'disabled')
+        this.available = false
+      // Anything else is transient, the next poll tries again
+    }
   }
 }
 
@@ -104,11 +165,15 @@ export default class MetricsClient {
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
   private listeners = new Set<(state: DashboardState) => void>()
+  private logs: Feed<LogLine>
+  private requests: Feed<RequestLine>
 
   constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs }: MetricsClientOptions = {}) {
     this.intervalMs = intervalMs
     this.maxBackoffMs = maxBackoffMs
     this.startupIntervalMs = startupIntervalMs
+    this.logs = new Feed(source.fetchLogs?.bind(source), normalizeLogs, MAX_LOG_LINES)
+    this.requests = new Feed(source.fetchRequests?.bind(source), normalizeRequests, MAX_REQUEST_LINES)
     this.state = {
       status: 'connecting',
       source: source.label,
@@ -117,7 +182,9 @@ export default class MetricsClient {
       error: null,
       failures: 0,
       logs: [],
-      logsAvailable: source.fetchLogs ? null : false,
+      logsAvailable: this.logs.available,
+      requests: [],
+      requestsAvailable: this.requests.available,
     }
   }
 
@@ -154,7 +221,7 @@ export default class MetricsClient {
   }
 
   /**
-   * Fetch one snapshot, then any new log lines, and update the state.
+   * Fetch one snapshot, then any new log lines and requests, and update the state.
    */
   async poll() {
     try {
@@ -166,7 +233,11 @@ export default class MetricsClient {
       this.state.error = null
       this.state.failures = 0
 
-      await this.pollLogs()
+      await Promise.all([this.logs.poll(), this.requests.poll()])
+      this.state.logs = this.logs.entries
+      this.state.logsAvailable = this.logs.available
+      this.state.requests = this.requests.entries
+      this.state.requestsAvailable = this.requests.available
     }
     catch (err) {
       this.state.status = err instanceof MetricsSourceError ? err.status : 'unreachable'
@@ -175,37 +246,6 @@ export default class MetricsClient {
     }
 
     this.listeners.forEach(listener => listener(this.state))
-  }
-
-  private lastLogId = 0
-
-  private async pollLogs() {
-    if (!this.source.fetchLogs || this.state.logsAvailable === false)
-      return
-
-    try {
-      let { entries, latestId } = normalizeLogs(await this.source.fetchLogs(this.lastLogId))
-
-      // Ids went backwards, so the server restarted: start over from its first entry
-      if (latestId < this.lastLogId) {
-        this.state.logs = []
-        this.lastLogId = 0;
-        ({ entries, latestId } = normalizeLogs(await this.source.fetchLogs(0)))
-      }
-
-      this.state.logsAvailable = true
-      this.state.logs.push(...entries.filter(entry => entry.id > this.lastLogId))
-      this.lastLogId = Math.max(this.lastLogId, latestId)
-
-      if (this.state.logs.length > MAX_LOG_LINES)
-        this.state.logs.splice(0, this.state.logs.length - MAX_LOG_LINES)
-    }
-    catch (err) {
-      // Metrics work but logs don't: an older server, or logBufferSize 0
-      if (err instanceof MetricsSourceError && err.status === 'disabled')
-        this.state.logsAvailable = false
-      // Anything else is transient, the next poll tries again
-    }
   }
 
   /**

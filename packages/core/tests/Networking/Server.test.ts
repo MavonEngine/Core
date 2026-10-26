@@ -342,6 +342,11 @@ describe('server', () => {
     expect(logger.transports).toHaveLength(0)
   })
 
+  it('records HTTP requests unless requestLogSize is 0', () => {
+    expect(new TestServer(logger).requests).toBeDefined()
+    expect(new TestServer(logger, undefined, { metrics: { requestLogSize: 0 } }).requests).toBeUndefined()
+  })
+
   describe('periodic stats logging', () => {
     function startServer() {
       const server = new TestServer(logger, undefined, { metrics: { logIntervalMs: 1000 } })

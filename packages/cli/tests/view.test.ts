@@ -24,11 +24,17 @@ async function liveState(samples = 30): Promise<DashboardState> {
       { id: 2, timestamp: 0, level: 'warn', message: 'Slow tick: 40.1 ms (budget 33.33 ms)' },
     ],
     logsAvailable: true,
+    requests: [
+      { id: 1, timestamp: 0, method: 'GET', path: '/assets/index.js', status: 200, durationMs: 3.2, bytes: 412000, address: '203.0.113.10' },
+      { id: 2, timestamp: 0, method: 'GET', path: '/favicon.ico', status: 404, durationMs: 0.8, bytes: 160, address: '203.0.113.10' },
+      { id: 3, timestamp: 0, method: 'WS', path: '/hmr', status: 101, durationMs: 1.1, bytes: 129, address: '127.0.0.1' },
+    ],
+    requestsAvailable: true,
   }
 }
 
 function viewState(overrides: Partial<ViewState> = {}): ViewState {
-  return { tab: 0, playerOffset: 0, logFromEnd: 0, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
+  return { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
 }
 
 function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab }), startup?: StartupInfo) {
@@ -36,7 +42,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null }
 }
 
 describe('dashboard view', () => {
@@ -65,6 +71,49 @@ describe('dashboard view', () => {
     expect(screen.contains('Slow tick')).toBe(true)
     expect(screen.contains('Players (')).toBe(false)
     expect(screen.contains('CPU')).toBe(false)
+  })
+
+  it('shows HTTP requests, newest first, on the http tab', async () => {
+    const screen = render(await liveState(), 130, 40, false, 3)
+
+    expect(screen.contains('4 HTTP')).toBe(true)
+    expect(screen.contains('HTTP requests (3, 1 error)')).toBe(true)
+    for (const text of ['/assets/index.js', '/favicon.ico', '404', 'WS', '/hmr', '402.3 KiB'])
+      expect(screen.contains(text), text).toBe(true)
+    expect(screen.find('/hmr')!.y).toBeLessThan(screen.find('/favicon.ico')!.y)
+    expect(screen.contains('Slow tick')).toBe(false)
+  })
+
+  it('keeps a scrolled http table on the same request as new ones arrive', async () => {
+    const state = await liveState()
+    const request = (id: number) => ({ id, timestamp: 0, method: 'GET', path: `/page-${id}`, status: 200, durationMs: 1, bytes: 10, address: null })
+    state.requests = Array.from({ length: 80 }, (_, i) => request(i + 1))
+    const view = viewState({ tab: 3, requestTopId: 60 })
+
+    state.requests.push(request(81))
+    const screen = render(state, 130, 40, false, 3, view)
+
+    expect(screen.find('/page-60 ')!.y).toBe(screen.find('Time')!.y + 1)
+    expect(screen.contains('/page-81')).toBe(false)
+    expect(screen.contains('scroll up to follow')).toBe(true)
+    expect(view.requestTopId).toBe(60)
+  })
+
+  it('follows the newest requests again once everything fits', async () => {
+    const view = viewState({ tab: 3, requestTopId: 2 })
+
+    const screen = render(await liveState(), 130, 40, false, 3, view)
+
+    expect(screen.contains('/hmr')).toBe(true)
+    expect(view.requestTopId).toBeNull()
+  })
+
+  it('explains when the server does not record requests', async () => {
+    const state = await liveState()
+    state.requests = []
+    state.requestsAvailable = false
+
+    expect(render(state, 130, 40, false, 3).contains('requestLogSize')).toBe(true)
   })
 
   it('shows a details tile for the selected player', async () => {
@@ -127,8 +176,8 @@ describe('dashboard view', () => {
 
   it('maps number keys to tabs', () => {
     expect(tabForKey('1')).toBe(0)
-    expect(tabForKey('3')).toBe(2)
-    expect(tabForKey('4')).toBeNull()
+    expect(tabForKey('4')).toBe(3)
+    expect(tabForKey('5')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -150,6 +199,8 @@ describe('dashboard view', () => {
       failures: 2,
       logs: [],
       logsAvailable: null,
+      requests: [],
+      requestsAvailable: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)

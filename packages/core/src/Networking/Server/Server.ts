@@ -17,6 +17,7 @@ import { ServerCommand } from './Commands'
 import HttpServer from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
 import LogBuffer from './Stats/LogBuffer'
+import RequestLog from './Stats/RequestLog'
 import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
 import ServerWorld from './World'
 
@@ -46,6 +47,9 @@ export interface ServerOptions {
 
     /** How many recent log entries are kept for GET /api/game/logs. 0 turns it off. Default 500 */
     logBufferSize?: number
+
+    /** How many recent HTTP requests are kept for GET /api/game/requests. 0 turns it off. Default 500 */
+    requestLogSize?: number
   }
 }
 
@@ -60,6 +64,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   readonly metrics: ServerMetrics
   readonly http: HttpServer
   readonly logs?: LogBuffer
+  readonly requests?: RequestLog
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -95,11 +100,16 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.latencySimulator = new LatencySimulator(this.options.latencySimulation, this.logger)
     }
 
+    const requestLogSize = this.options.metrics?.requestLogSize ?? 500
+    if (requestLogSize > 0)
+      this.requests = new RequestLog(requestLogSize)
+
     this.metrics = new ServerMetrics(this, this.logger, this.options.metrics)
     this.http = new HttpServer(this.logger, this.metrics, {
       port: this.options.httpPort,
       metrics: this.options.metrics,
       logs: this.logs,
+      requests: this.requests,
       client: this.options.client,
     })
 

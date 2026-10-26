@@ -1,6 +1,6 @@
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { LogLine, ServerMetricsSnapshot } from './snapshot'
+import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
 import { DEFAULT_COLOR } from '@profullstack/hqtui'
@@ -20,6 +20,8 @@ export interface ViewState {
   followSelectedPlayer: boolean
   /** Log lines scrolled back from the newest, 0 follows the tail */
   logFromEnd: number
+  /** Request at the top of the HTTP table while scrolled, null follows the newest */
+  requestTopId: number | null
 }
 
 export interface RenderOptions {
@@ -41,7 +43,7 @@ export interface StartupInfo {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs'] as const
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP'] as const
 
 const WIDE_LAYOUT = 100
 const NEWLINE_RE = /\r?\n/
@@ -143,6 +145,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       }
       else if (tab === 'Logs') {
         logsPanel(root, theme, state, view)
+      }
+      else if (tab === 'HTTP') {
+        requestsPanel(root, theme, state, view, transparent)
       }
       else {
         root.responsive({
@@ -511,6 +516,67 @@ function logsPanel(ui: Container, theme: Theme, state: DashboardState, view: Vie
         view.logFromEnd = Math.max(0, Math.min(rows.length - 1, view.logFromEnd - delta * 3))
         ui.ctx.invalidate()
       },
+    })
+  })
+}
+
+function statusCodeColor(status: number | null, theme: Theme): Color | undefined {
+  if (status === null || status >= 500)
+    return theme.danger
+  if (status >= 400)
+    return theme.warning
+  if (status >= 300)
+    return theme.info
+  return theme.success
+}
+
+function requestsPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
+  // Newest first, so new requests appear at the top without scrolling
+  const rows = [...state.requests].reverse()
+  // Anchored to a request rather than a row number, so arriving requests don't move a scrolled table
+  const anchor = view.requestTopId === null ? 0 : rows.findIndex(r => r.id <= view.requestTopId!)
+  const offset = Math.max(0, anchor)
+  const errors = rows.filter(r => r.status === null || r.status >= 400).length
+
+  const title = `HTTP requests (${rows.length}${errors ? `, ${errors} error${errors === 1 ? '' : 's'}` : ''})${offset > 0 ? ', scroll up to follow' : ''}`
+
+  ui.panel({ title, size: '1fr' }, (panel) => {
+    if (state.requestsAvailable === false) {
+      panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/requests, or has metrics.requestLogSize set to 0')
+      return
+    }
+
+    if (rows.length === 0) {
+      panel.label('No requests yet')
+      return
+    }
+
+    panel.table<RequestLine>({
+      rows,
+      offset,
+      scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
+      size: '1fr',
+      // The table won't scroll past the last full page, so keep the anchor on the row it actually drew
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          view.requestTopId = index === 0 ? null : rows[index].id
+      },
+      onScroll: (delta) => {
+        const next = Math.max(0, Math.min(rows.length - 1, offset + delta))
+        view.requestTopId = next === 0 ? null : rows[next].id
+        ui.ctx.invalidate()
+      },
+      columns: [
+        { key: 'time', title: 'Time', width: 8, color: theme.muted, render: r => formatTime(r.timestamp) },
+        { key: 'method', title: 'Method', width: 7, color: r => r.method === 'WS' ? theme.primary : undefined },
+        { key: 'status', title: 'Status', width: 6, align: 'right', color: r => statusCodeColor(r.status, theme), render: r => r.status === null ? '—' : String(r.status) },
+        { key: 'durationMs', title: 'Duration', width: 10, align: 'right', render: r => formatMs(r.durationMs) },
+        { key: 'bytes', title: 'Size', width: 10, align: 'right', render: r => formatBytes(r.bytes) },
+        { key: 'address', title: 'Client', width: 18, color: theme.muted, render: r => r.address ?? '—' },
+        { key: 'path', title: 'Path' },
+      ],
     })
   })
 }
