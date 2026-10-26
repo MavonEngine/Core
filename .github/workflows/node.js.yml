@@ -45,6 +45,17 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/bootstrap
 
+    # Needs core's dist from the build step, the snapshot types come from there
+    - name: Typecheck cli
+      run: npm run typecheck
+      working-directory: ./packages/cli
+
+    - name: Smoke test cli binary
+      run: |
+        npx mavonengine --version
+        npx mavonengine --help
+        npx mavonengine dashboard --help
+
     - name: npm link core locally
       run: |
         npm link
