@@ -1,11 +1,13 @@
 import process from 'node:process'
 import { version } from '../package.json'
+import { CREATE_HELP, parseCreateArgs, runCreateCommand } from './commands/create'
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 
 const HELP = `Usage: mavonengine <command> [options]
 
 Commands:
+  create       Create a project from the multiplayer template and start it
   dashboard    Live terminal dashboard for a running game server
   dev          Run the project's dev servers (game server and client)
 
@@ -27,6 +29,17 @@ async function main(argv: string[]): Promise<number> {
   if (command === '-v' || command === '--version') {
     process.stdout.write(`${version}\n`)
     return 0
+  }
+
+  if (command === 'create') {
+    const options = parseCreateArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(CREATE_HELP)
+      return 0
+    }
+
+    return runCreateCommand(options)
   }
 
   if (command === 'dashboard') {

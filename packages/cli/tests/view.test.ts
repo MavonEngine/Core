@@ -222,6 +222,19 @@ describe('dashboard view', () => {
     expect(screen.contains('UNREACHABLE')).toBe(false)
   })
 
+  it('shows what mavonengine create is doing on the startup screen', () => {
+    const screen = render(startingState('connecting'), 130, 40, false, 0, viewState(), {
+      output: 'Running \'npm install\'\nadded 312 packages\n',
+      label: 'Installing dependencies…',
+      outputTitle: 'Setup',
+    })
+
+    expect(screen.contains('Installing dependencies')).toBe(true)
+    expect(screen.contains('Setup')).toBe(true)
+    expect(screen.contains('added 312 packages')).toBe(true)
+    expect(screen.contains('Starting the game server')).toBe(false)
+  })
+
   it('draws the logo above the banner when the terminal is tall enough', () => {
     const startup = { engineVersion: '0.0.20', output: '' }
     const logo = (height: number, capabilities = {}) => renderToScreen(

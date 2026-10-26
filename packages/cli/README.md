@@ -9,6 +9,24 @@ npm install -D @mavonengine/cli
 npx mavonengine --help
 ```
 
+## `mavonengine create`
+
+Creates a new project from the multiplayer template, installs its dependencies and starts it like [`mavonengine dev`](#mavonengine-dev). It does the same as `@mavonengine/create-bootstrap`, but in the dashboard.
+
+```sh
+npx @mavonengine/cli create my-game
+```
+
+Asks for a name if none is given. While the template downloads and `npm install` runs, the startup screen shows each step and its output. Then the dev script starts, and the dashboard takes over as soon as the game server answers. Quitting during setup stops it and leaves what was created so far in the project directory. Without an interactive terminal, or with `--no-dashboard`, the progress and the dev script's output go straight to the terminal.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to create the project directory |
+| `--no-dashboard` | | Print the progress instead of showing the dashboard |
+| `--port <port>` | `8050` | Game server HTTP port for the dashboard |
+| `--theme <name>` | `dark` | Dashboard theme |
+| `--transparent` | | Let a transparent terminal background show through |
+
 ## `mavonengine dev`
 
 Runs the `dev` script of the MavonEngine project you are in and shows the [dashboard](#mavonengine-dashboard) for it. For the multiplayer template that starts the game server and the client together.

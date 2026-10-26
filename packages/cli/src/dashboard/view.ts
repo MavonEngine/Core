@@ -31,7 +31,7 @@ export interface RenderOptions {
    * Text is only as readable as whatever is behind the window.
    */
   transparent?: boolean
-  /** Set while `mavonengine dev` waits for the game server it started */
+  /** Set while `mavonengine dev` or `mavonengine create` waits for the game server it started */
   startup?: StartupInfo
 }
 
@@ -40,6 +40,10 @@ export interface StartupInfo {
   engineVersion?: string
   /** What the dev script printed so far */
   output: string
+  /** Under the banner, default 'Starting the game server…' */
+  label?: string
+  /** Of the output panel, default 'Dev script' */
+  outputTitle?: string
 }
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
@@ -240,8 +244,7 @@ function logoLines(pixels: string[]): Span[][] {
 
 const LOGOS = LOGO_SIZES.map(logoLines)
 
-function startupScreen(ui: Container, theme: Theme, { engineVersion, output }: StartupInfo) {
-  const label = 'Starting the game server…'
+function startupScreen(ui: Container, theme: Theme, { engineVersion, output, label = 'Starting the game server…', outputTitle = 'Dev script' }: StartupInfo) {
   const lines = stripVTControlCharacters(output).split(NEWLINE_RE).filter(line => line.trim() !== '')
   // The game server logs the same banner once it runs
   const banner = bootBanner({ version: engineVersion ?? 'unknown', mode: 'development' })
@@ -271,7 +274,7 @@ function startupScreen(ui: Container, theme: Theme, { engineVersion, output }: S
     column.spacer('1fr')
   })
 
-  ui.panel({ title: 'Dev script', size: STARTUP_OUTPUT_LINES + 2 }, (panel) => {
+  ui.panel({ title: outputTitle, size: STARTUP_OUTPUT_LINES + 2 }, (panel) => {
     if (lines.length === 0) {
       panel.label('No output yet')
       return

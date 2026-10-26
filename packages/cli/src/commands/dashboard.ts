@@ -1,5 +1,5 @@
 import type { MetricsSource } from '../dashboard/MetricsClient'
-import type { ViewState } from '../dashboard/view'
+import type { StartupInfo, ViewState } from '../dashboard/view'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
@@ -29,11 +29,8 @@ export interface DashboardOptions {
   intervalMs: number
   theme?: string
   transparent: boolean
-  /** Show the startup screen until the server first answers (`mavonengine dev`) */
-  startup?: {
-    engineVersion?: string
-    output(): string
-  }
+  /** Show the startup screen until the server first answers (`mavonengine dev`), read every frame */
+  startup?(): StartupInfo
 }
 
 /** Poll interval while waiting for a server that is still starting, so the dashboard appears as soon as it is up */
@@ -111,7 +108,7 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
 
   app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, {
     transparent: options.transparent,
-    startup: options.startup && { engineVersion: options.startup.engineVersion, output: options.startup.output() },
+    startup: options.startup?.(),
   }))
 
   client.onChange(() => app.invalidate())

@@ -46,20 +46,25 @@ const LOCKFILES: [string, PackageManager][] = [
 
 const WHITESPACE_RE = /\s+/
 
+/** Flags shared by `mavonengine dev` and `mavonengine create` */
+export const DEV_FLAGS = {
+  cwd: { type: 'string' },
+  dashboard: { type: 'boolean', default: true },
+  port: { type: 'string' },
+  theme: { type: 'string' },
+  transparent: { type: 'boolean', default: false },
+  help: { type: 'boolean', short: 'h', default: false },
+} as const
+
+type DevFlags = ReturnType<typeof parseArgs<{ options: typeof DEV_FLAGS }>>['values']
+
 /**
  * Turn CLI arguments into dev options. Throws UsageError on bad input.
  */
 export function parseDevArgs(args: string[], cwd = process.cwd(), env: Record<string, string | undefined> = process.env): DevOptions | 'help' {
   const { values } = parseArgs({
     args,
-    options: {
-      cwd: { type: 'string' },
-      dashboard: { type: 'boolean', default: true },
-      port: { type: 'string' },
-      theme: { type: 'string' },
-      transparent: { type: 'boolean', default: false },
-      help: { type: 'boolean', short: 'h', default: false },
-    },
+    options: DEV_FLAGS,
     strict: true,
     allowPositionals: false,
     allowNegative: true,
@@ -68,6 +73,10 @@ export function parseDevArgs(args: string[], cwd = process.cwd(), env: Record<st
   if (values.help)
     return 'help'
 
+  return toDevOptions(values, cwd, env)
+}
+
+export function toDevOptions(values: DevFlags, cwd: string, env: Record<string, string | undefined>): DevOptions {
   let dashboard: DashboardOptions | false = false
   if (values.dashboard) {
     const dashboardArgs = [
@@ -108,6 +117,13 @@ export function findProjectRoot(start: string): string | undefined {
     if (dirname(dir) === dir)
       return undefined
   }
+}
+
+/**
+ * The @mavonengine/core version installed in a project, if any.
+ */
+export function installedEngineVersion(root: string): string | undefined {
+  return readPackageJson(join(root, 'node_modules', '@mavonengine', 'core'))?.version
 }
 
 export function detectPackageManager(root: string): PackageManager {
@@ -206,7 +222,6 @@ export interface DevProcess {
  */
 export function startDev(root: string, { capture = false } = {}): DevProcess {
   const pm = detectPackageManager(root)
-  process.stdout.write(`mavonengine: running '${pm} run dev' in ${root}\n`)
 
   const child = spawn(pm, ['run', 'dev'], {
     cwd: root,
@@ -219,6 +234,13 @@ export function startDev(root: string, { capture = false } = {}): DevProcess {
   const keep = (chunk: string) => {
     output = (output + chunk).slice(-MAX_CAPTURED_OUTPUT)
   }
+
+  // The terminal may already belong to the dashboard
+  const announce = `mavonengine: running '${pm} run dev' in ${root}\n`
+  if (capture)
+    keep(announce)
+  else
+    process.stdout.write(announce)
   child.stdout?.setEncoding('utf8').on('data', keep)
   child.stderr?.setEncoding('utf8').on('data', keep)
 
@@ -292,7 +314,8 @@ export function runDev(root: string): Promise<number> {
  */
 export async function runDevWithDashboard(root: string, dashboard: DashboardOptions): Promise<number> {
   const dev = startDev(root, { capture: true })
-  const startup = { engineVersion: readPackageJson(join(root, 'node_modules', '@mavonengine', 'core'))?.version, output: dev.output }
+  const engineVersion = installedEngineVersion(root)
+  const startup = () => ({ engineVersion, output: dev.output() })
 
   const devExited = new AbortController()
   dev.exited.then(() => devExited.abort(), () => devExited.abort())
