@@ -222,6 +222,21 @@ describe('dashboard view', () => {
     expect(screen.contains('UNREACHABLE')).toBe(false)
   })
 
+  it('draws the logo above the banner when the terminal is tall enough', () => {
+    const startup = { engineVersion: '0.0.20', output: '' }
+    const logo = (height: number, capabilities = {}) => renderToScreen(
+      ({ ui, theme }) => renderDashboard(ui, theme, startingState('unreachable'), viewState(), { startup }),
+      { width: 130, height, capabilities },
+    ).contains('▀')
+
+    expect(logo(60)).toBe(true)
+    // Room for the smaller size only
+    expect(logo(46)).toBe(true)
+    expect(logo(30)).toBe(false)
+    expect(logo(60, { unicode: false })).toBe(false)
+    expect(logo(60, { colors: 'ansi16' })).toBe(false)
+  })
+
   it('leaves the startup screen for a server that answers with an error', () => {
     const state = startingState('unauthorized')
     state.error = 'Metrics token missing or wrong (use --token)'

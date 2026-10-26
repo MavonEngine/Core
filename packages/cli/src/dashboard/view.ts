@@ -3,8 +3,9 @@ import type { ConnectionStatus, DashboardState } from './MetricsClient'
 import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
-import { DEFAULT_COLOR } from '@profullstack/hqtui'
+import { DEFAULT_COLOR, hex } from '@profullstack/hqtui'
 import { formatBytes, formatDuration, formatMs, formatPercent, formatRate } from './format'
+import { LOGO_SIZES } from './logo'
 import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
 
 /**
@@ -208,14 +209,57 @@ function latencyBanner(ui: Container, theme: Theme, latency: NonNullable<ServerM
 /** Dev script output lines shown under the banner while the server starts */
 const STARTUP_OUTPUT_LINES = 8
 
+/**
+ * Pixel rows drawn two to a line: the top pixel is the glyph, the bottom one its background.
+ * Cut-out pixels keep the terminal's background, so the logo works on any theme.
+ */
+function logoLines(pixels: string[]): Span[][] {
+  const pixel = (row: string | undefined, x: number) => {
+    const value = row?.slice(x * 6, x * 6 + 6)
+    return value && value !== '------' ? hex(Number.parseInt(value, 16)) : null
+  }
+
+  const lines: Span[][] = []
+  for (let y = 0; y < pixels.length; y += 2) {
+    const line: Span[] = []
+    for (let x = 0; x < pixels[y].length / 6; x++) {
+      const top = pixel(pixels[y], x)
+      const bottom = pixel(pixels[y + 1], x)
+      if (top !== null)
+        line.push({ text: '▀', fg: top, bg: bottom ?? undefined })
+      else if (bottom !== null)
+        line.push({ text: '▄', fg: bottom })
+      else
+        line.push({ text: ' ' })
+    }
+    lines.push(line)
+  }
+
+  return lines
+}
+
+const LOGOS = LOGO_SIZES.map(logoLines)
+
 function startupScreen(ui: Container, theme: Theme, { engineVersion, output }: StartupInfo) {
   const label = 'Starting the game server…'
   const lines = stripVTControlCharacters(output).split(NEWLINE_RE).filter(line => line.trim() !== '')
+  // The game server logs the same banner once it runs
+  const banner = bootBanner({ version: engineVersion ?? 'unknown', mode: 'development' })
 
   ui.column({ size: '1fr' }, (column) => {
+    const { unicode, colors } = column.ctx.capabilities
+    // Banner, the spacers around it and the spinner have to fit too. Too few colours make a smudge.
+    const logo = unicode && (colors === 'truecolor' || colors === 'ansi256')
+      ? LOGOS.find(l => l.length + banner.length + 3 <= column.height && l[0].length <= column.width)
+      : undefined
+
     column.spacer('1fr')
-    // The game server logs the same banner once it runs
-    for (const line of bootBanner({ version: engineVersion ?? 'unknown', mode: 'development' }))
+    if (logo) {
+      for (const line of logo)
+        column.text(line, { align: 'center', size: 1 })
+      column.spacer(1)
+    }
+    for (const line of banner)
       column.text([{ text: line, fg: theme.primary }], { align: 'center', size: 1 })
     column.spacer(1)
     column.row({ size: 1 }, (row) => {
