@@ -11,7 +11,7 @@ npx mavonengine --help
 
 ## `mavonengine create`
 
-Creates a new project from the multiplayer template, installs its dependencies and starts it like [`mavonengine dev`](#mavonengine-dev). It does the same as `@mavonengine/create-bootstrap`, but in the dashboard.
+Creates a new project from the multiplayer template, installs its dependencies and starts it like [`mavonengine dev`](#mavonengine-dev). It replaces `@mavonengine/create-bootstrap`, which now forwards to it.
 
 ```sh
 npx @mavonengine/cli create my-game

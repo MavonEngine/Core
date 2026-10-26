@@ -29,7 +29,6 @@ jobs:
         cache: 'npm'
         cache-dependency-path: |
           package-lock.json
-          packages/bootstrap/package-lock.json
           packages/multiplayer-template/package-lock.json
     
     - name: Build and test

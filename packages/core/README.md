@@ -8,7 +8,7 @@ rendering, physics, networking, animation, and debugging into a single cohesive 
 
 ## Get Started
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
 
 | URL | Description |

@@ -3,7 +3,7 @@
 Bootstrap this template instantly with:
 
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
 
 A ready-to-use multiplayer 3D game template built on the [MavonEngine](https://mavonengine.com/) framework. It demonstrates a client-server architecture with authoritative physics, real-time state synchronisation, player animations, chat, and a 3D world with environmental objects.

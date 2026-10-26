@@ -8,7 +8,6 @@ import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
 import { formatBytes } from '../dashboard/format'
 
-// Same template as @mavonengine/create-bootstrap
 export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.14-alpha.zip'
 export const TEMPLATE_SUBPATH = 'packages/multiplayer-template'
 
