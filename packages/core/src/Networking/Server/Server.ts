@@ -6,39 +6,54 @@ import type GameObject from '../../World/GameObject'
 import type Player from '../Entities/Player'
 import type NetworkedActor from '../NetworkedActor'
 import type { ClientCommand, CommandPacket, IncomingClientCommandPacket } from './Commands'
+import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
+import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
 import { Buffer } from 'node:buffer'
 import geckos from '@geckos.io/server'
-import express from 'express'
 import BaseGame from '../../BaseGame'
 import { ServerCommand } from './Commands'
+import HttpServer from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
-import BandwidthTracker from './Stats/BandwidthTracker'
-import CpuTracker from './Stats/CpuTracker'
+import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
 import ServerWorld from './World'
 
 let instance: Server<GameObject>
 
 export interface ServerOptions {
   latencySimulation?: LatencySimulatorOptions
+
+  /** Port the geckos.io game socket listens on. Default 8081 */
+  socketPort?: number
+
+  /** Port the HTTP server listens on. Default 8050 */
+  httpPort?: number
+
+  metrics?: MetricsEndpointOptions & ServerMetricsOptions & {
+    /** How often a CPU / bandwidth summary is logged, in ms. Default 5000 */
+    logIntervalMs?: number
+  }
 }
 
-export default abstract class Server<TClient extends GameObject> {
+export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource {
   game: BaseGame
 
   private commandBuffer: IncomingClientCommandPacket<ClientCommand>[] = []
 
   gameSocket: GeckosServer
-  httpServer: Express = express()
   protected logger: winston.Logger
 
+  readonly metrics: ServerMetrics
+  readonly http: HttpServer
+
   private onHttpCallback?: (httpServer: Express) => void
+  private options: ServerOptions
 
   lastTime = performance.now()
 
-  bandwidthTracker = new BandwidthTracker()
-  private cpuTracker: CpuTracker
   private latencySimulator?: LatencySimulator
+  private commandsProcessedThisTick = 0
+  private timers: ReturnType<typeof setInterval>[] = []
 
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
@@ -51,11 +66,17 @@ export default abstract class Server<TClient extends GameObject> {
 
     this.gameSocket = geckos()
     this.logger = logger
-    this.cpuTracker = new CpuTracker(this.logger)
+    this.options = options ?? {}
 
-    if (options?.latencySimulation) {
-      this.latencySimulator = new LatencySimulator(options.latencySimulation, this.logger)
+    if (this.options.latencySimulation) {
+      this.latencySimulator = new LatencySimulator(this.options.latencySimulation, this.logger)
     }
+
+    this.metrics = new ServerMetrics(this, this.logger, this.options.metrics)
+    this.http = new HttpServer(this.logger, this.metrics, {
+      port: this.options.httpPort,
+      metrics: this.options.metrics,
+    })
 
     this.gameSocket.onConnection((channel) => {
       this.logger.info(`Connected: ${channel.id}`)
@@ -108,22 +129,29 @@ export default abstract class Server<TClient extends GameObject> {
 
       channel.on('command', (data) => {
         const bytes = Buffer.byteLength(JSON.stringify(data))
-        this.bandwidthTracker.recordReceived('server', bytes)
+        this.bandwidthTracker.recordReceived(SERVER_BANDWIDTH_ID, bytes)
 
         this.bufferIncomingCommand(channel, data)
       })
     })
 
     this.game.onUpdate(delta => this.tick(delta))
+    this.game.on('tickComplete', (durationMs: number) => {
+      this.metrics.tick.record(durationMs, this.commandsProcessedThisTick)
+      this.commandsProcessedThisTick = 0
+    })
+  }
 
-    setInterval(() => {
-      const { sent, received } = this.bandwidthTracker.getBandwidthUsage('server')
-      this.logger.debug(`Client - Sent: ${sent} B, Received: ${received} B`)
+  get httpServer(): Express {
+    return this.http.app
+  }
 
-      this.cpuTracker.log()
+  get bandwidthTracker() {
+    return this.metrics.bandwidth
+  }
 
-      this.bandwidthTracker.reset()
-    }, 5000)
+  get latencySimulation() {
+    return this.latencySimulator?.config
   }
 
   private bufferIncomingCommand(channel: ServerChannel, command: Data) {
@@ -134,7 +162,7 @@ export default abstract class Server<TClient extends GameObject> {
   }
 
   private tick(delta: number) {
-    this.runThroughBuffer()
+    this.commandsProcessedThisTick += this.runThroughBuffer()
 
     this.onTick(delta)
     this.stateSync()
@@ -193,7 +221,7 @@ export default abstract class Server<TClient extends GameObject> {
         type: ServerCommand.SV_STATE,
       }
 
-      this.bandwidthTracker.recordSent('server', Buffer.byteLength(JSON.stringify(state)))
+      this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Buffer.byteLength(JSON.stringify(state)))
 
       const SendState = () => con.channel.emit(ServerCommand.SV_STATE, state)
 
@@ -215,7 +243,10 @@ export default abstract class Server<TClient extends GameObject> {
    */
   abstract getStateSyncDistance(): number
 
-  private runThroughBuffer() {
+  /**
+   * Process every buffered command and return how many were processed.
+   */
+  private runThroughBuffer(): number {
     /**
      * Due to network latency packets could come in different orders. First step is sort by sequence Id
      *
@@ -229,10 +260,27 @@ export default abstract class Server<TClient extends GameObject> {
      */
     this.commandBuffer.sort((a, b) => a.sequenceId! - b.sequenceId!)
 
-    while (this.commandBuffer.length > 0) {
-      const currentCommand = this.commandBuffer[0]
+    const commands = this.commandBuffer
+    this.commandBuffer = []
 
-      const process = () => this.onCommand(currentCommand, this.calculateDelta())
+    const delta = this.calculateDelta()
+
+    for (const currentCommand of commands) {
+      const process = () => {
+        // The player may have disconnected while the latency simulator held the command back
+        const player = this.game.world.entities.items.get(currentCommand.playerId!) as Player | undefined
+        if (!player)
+          return
+
+        this.onCommand(currentCommand, delta)
+
+        /**
+         * Update the players lastProcessedSequenceId after the command has executed.
+         * Simulated jitter can complete commands out of order so never move it backwards.
+         */
+        if (currentCommand.sequenceId! > player.lastProcessedSequenceId)
+          player.updateLastProcessedSequenceId(currentCommand.sequenceId!)
+      }
 
       if (this.latencySimulator) {
         this.latencySimulator.handle(process)
@@ -240,22 +288,18 @@ export default abstract class Server<TClient extends GameObject> {
       else {
         process()
       }
-
-      /**
-       * Update the players lastProcessedSequenceId after the command has executed
-       */
-      const player = this.game.world.entities.items.get(currentCommand.playerId!) as Player
-      player.updateLastProcessedSequenceId(currentCommand.sequenceId!)
-
-      this.commandBuffer.shift()
     }
+
+    this.lastTime = performance.now()
+
+    return commands.length
   }
 
+  /**
+   * Ms since the command buffer was last processed
+   */
   private calculateDelta() {
-    const currentTime = performance.now()
-    const deltaTime = (currentTime - this.lastTime)
-
-    return deltaTime
+    return performance.now() - this.lastTime
   }
 
   protected onTick(_delta: number): void { }
@@ -266,9 +310,10 @@ export default abstract class Server<TClient extends GameObject> {
 
   start() {
     this.logger.info('Starting @mavon/engine - Socket Server')
-    this.gameSocket.listen(8081)
+    this.gameSocket.listen(this.options.socketPort ?? 8081)
 
-    this.startHttpServer()
+    this.http.start()
+    this.startMetrics()
 
     /**
      * Register any http functionality in your own server
@@ -278,35 +323,24 @@ export default abstract class Server<TClient extends GameObject> {
     }
   }
 
-  private startHttpServer() {
-    this.logger.info('Starting @mavon/engine - HTTP Server')
-    this.httpServer.listen(8050)
-    this.registerHealthEndpoint()
-
-    this.logger.info('Visit game server status: http://localhost:8050/api/game/health')
+  /**
+   * Stop the metric sampling and logging timers
+   */
+  stop() {
+    this.timers.forEach(timer => clearInterval(timer))
+    this.timers = []
   }
 
-  private registerHealthEndpoint() {
-    this.httpServer.get('/api/game/health', (_req, res) => {
-      // eslint-disable-next-line ts/no-this-alias
-      const server = this
+  private startMetrics() {
+    const logIntervalMs = this.options.metrics?.logIntervalMs ?? 5000
 
-      res.format({
-        json() {
-          res.json({
-            serverTime: new Date(),
-            uptime: Math.round(performance.now() / 1000),
-            players: (server.game.world as ServerWorld).players.length,
-            world: {
-              entities: server.game.world.entities.length,
-            },
-            physics: {
-              bodies: server.game.physicsWorld?.bodies.len(),
-              colliders: server.game.physicsWorld?.colliders.len(),
-            },
-          })
-        },
-      })
-    })
+    this.timers.push(setInterval(() => this.metrics.sample(), this.metrics.sampleIntervalMs))
+
+    this.timers.push(setInterval(() => {
+      const { sent, received } = this.bandwidthTracker.getTotalSince(logIntervalMs)
+      this.logger.debug(`Client - Sent: ${sent} B, Received: ${received} B`)
+
+      this.metrics.cpu.log()
+    }, logIntervalMs))
   }
 }

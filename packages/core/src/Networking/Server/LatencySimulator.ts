@@ -29,6 +29,10 @@ export default class LatencySimulator {
     logger.warn(`RUNNING WITH LATENCY SIMULATION: latency ${this.options.fixedLatency}ms, jitter: ${this.options.jitter}ms, packet loss: ${this.options.packetLoss}%`)
   }
 
+  get config(): Readonly<Required<LatencySimulatorOptions>> {
+    return this.options
+  }
+
   /**
    * Calculate our latency items and then
    * run the callback as appropriate

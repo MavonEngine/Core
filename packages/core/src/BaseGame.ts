@@ -102,6 +102,8 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
     const tickNow = performance.now()
     this.update((tickNow - this.lastTickTime) / 1000)
     this.lastTickTime = tickNow
+
+    this.trigger('tickComplete', performance.now() - tickNow)
   }
 
   onUpdate(callback: (delta: number) => void): void {

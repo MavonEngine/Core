@@ -181,6 +181,81 @@ describe('server', () => {
     expect(player.lastProcessedSequenceId).toBe(4)
   })
 
+  it('skips commands from players that disconnected before they were processed', () => {
+    const server = new TestServer(logger)
+
+    const onCommand = vi.fn()
+    ;(server as any).onCommand = onCommand
+    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'gone' }]
+
+    expect(() => (server as any).runThroughBuffer()).not.toThrow()
+    expect(onCommand).not.toHaveBeenCalled()
+  })
+
+  it('never moves lastProcessedSequenceId backwards', () => {
+    const server = new TestServer(logger)
+
+    const player = new TestClient('p1')
+    player.updateLastProcessedSequenceId(10)
+    server.game.world.entities.items.set('p1', player)
+
+    ;(server as any).commandBuffer = [{ sequenceId: 4, playerId: 'p1' }]
+    ;(server as any).runThroughBuffer()
+
+    expect(player.lastProcessedSequenceId).toBe(10)
+  })
+
+  it('passes the same delta to every command in a tick and resets it afterwards', () => {
+    const server = new TestServer(logger)
+    server.game.world.entities.items.set('p1', new TestClient('p1'))
+
+    const deltas: number[] = []
+    ;(server as any).onCommand = (_cmd: unknown, delta: number) => deltas.push(delta)
+
+    server.lastTime = performance.now() - 1000
+    ;(server as any).commandBuffer = [
+      { sequenceId: 1, playerId: 'p1' },
+      { sequenceId: 2, playerId: 'p1' },
+    ]
+
+    expect((server as any).runThroughBuffer()).toBe(2)
+    expect(deltas[0]).toBeGreaterThanOrEqual(1000)
+    expect(deltas[1]).toBe(deltas[0])
+    expect((server as any).calculateDelta()).toBeLessThan(1000)
+  })
+
+  it('records tick duration and processed commands when a tick completes', () => {
+    const server = new TestServer(logger)
+    server.game.world.entities.items.set('p1', new TestClient('p1'))
+    server.getStateSyncDistance = () => 100
+
+    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'p1' }]
+    server.game.tick()
+
+    expect(server.metrics.tick.sample()).toMatchObject({ ticks: 1, maxCommandsPerTick: 1 })
+  })
+
+  it('exposes the latency simulation config to metrics', () => {
+    const server = new TestServer(logger, undefined, { latencySimulation: { fixedLatency: 20 } })
+
+    expect(server.metrics.snapshot().latencySimulation).toEqual({ fixedLatency: 20, jitter: 0, packetLoss: 0 })
+  })
+
+  it('listens on the configured ports', () => {
+    const server = new TestServer(logger, undefined, { socketPort: 9001, httpPort: 9002 })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const httpStart = vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(9001)
+    expect(httpStart).toHaveBeenCalled()
+    expect((server.http as any).port).toBe(9002)
+  })
+
   describe('stateSync', () => {
     function makeConnection(id: string) {
       const emit = vi.fn()
