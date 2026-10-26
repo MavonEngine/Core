@@ -61,6 +61,7 @@ export default class Server extends BaseServer<Player> {
     channel.on(ClientCommand.CL_INIT, (command) => {
       const cmd = command as CL_INIT
       player.name = cmd.name
+      player.setDisplayName(cmd.name)
 
       this.gameSocket.emit(ServerCommand.SV_CHAT, {
         playerId: '',

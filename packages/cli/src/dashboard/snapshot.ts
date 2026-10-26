@@ -69,8 +69,11 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
     tickRate: num(s.tickRate),
     players: arr(s.players, (p) => {
       const position = section(p.position)
+      const id = str(p.id, '?')
       return {
-        id: str(p.id, '?'),
+        id,
+        // Older servers don't send a name
+        displayName: str(p.displayName, id),
         position: { x: num(position.x), y: num(position.y), z: num(position.z) },
         lastProcessedSequenceId: num(p.lastProcessedSequenceId),
         trackedEntities: num(p.trackedEntities),

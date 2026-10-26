@@ -10,8 +10,25 @@ export default abstract class Player extends NetworkedLivingActor {
 
   private _lastProcessedSequenceId = 0
 
+  private _displayName: string | null = null
+
   get lastProcessedSequenceId() {
     return this._lastProcessedSequenceId
+  }
+
+  /**
+   * Human readable name, shown in tools like the CLI dashboard.
+   * Falls back to the id until the game sets one.
+   */
+  get displayName(): string {
+    return this._displayName ?? this.id
+  }
+
+  /**
+   * Pass null to fall back to the id again.
+   */
+  setDisplayName(name: string | null) {
+    this._displayName = name
   }
 
   updateLastProcessedSequenceId(sequenceId: number) {

@@ -90,6 +90,15 @@ describe('dashboard view', () => {
     expect(render(state).contains('No players connected')).toBe(true)
   })
 
+  it('shows the name column only when a player has a name besides its id', async () => {
+    const state = await liveState()
+    expect(render(state).contains('Name')).toBe(true)
+
+    for (const player of state.snapshot!.players)
+      player.displayName = player.id
+    expect(render(state).contains('Name')).toBe(false)
+  })
+
   it('fills the status bar unless transparent', async () => {
     const state = await liveState()
 

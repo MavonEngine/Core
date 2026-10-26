@@ -19,6 +19,7 @@ export const METRICS_SCHEMA_VERSION = 1
 
 export interface PlayerMetrics {
   id: string
+  displayName: string
   position: { x: number, y: number, z: number }
   lastProcessedSequenceId: number
   trackedEntities: number
@@ -160,6 +161,7 @@ export default class ServerMetrics {
       tickRate: game.tickRate,
       players: this.players().map(player => ({
         id: player.id,
+        displayName: player.displayName,
         position: { x: player.position.x, y: player.position.y, z: player.position.z },
         lastProcessedSequenceId: player.lastProcessedSequenceId,
         trackedEntities: player.trackedEntities.size,

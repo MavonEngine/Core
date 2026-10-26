@@ -58,6 +58,7 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
       const playerCount = Math.max(1, Math.round(6 + 5 * Math.sin(step / 20) + random() * 2))
       const players = Array.from({ length: playerCount }, (_, i) => ({
         id: `sim-${(i + 1).toString().padStart(2, '0')}`,
+        displayName: `Player ${i + 1}`,
         position: {
           x: Math.round(Math.cos(step / 10 + i) * (10 + i * 3) * 100) / 100,
           y: 0,

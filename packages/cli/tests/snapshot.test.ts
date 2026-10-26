@@ -25,7 +25,7 @@ describe('normalizeSnapshot', () => {
     expect(() => normalizeSnapshot(null)).not.toThrow()
     expect(() => normalizeSnapshot('nope')).not.toThrow()
     expect(normalizeSnapshot({ players: [null, 3, { id: 'a' }] }).players).toEqual([
-      { id: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0 },
+      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0 },
     ])
   })
 

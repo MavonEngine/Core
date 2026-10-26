@@ -36,6 +36,7 @@ describe('serverMetrics', () => {
     player.position.set(1, 2, 3)
     player.updateLastProcessedSequenceId(7)
     player.trackedEntities.add('p1')
+    player.setDisplayName('Alice')
 
     const snapshot = metrics.snapshot()
 
@@ -44,6 +45,7 @@ describe('serverMetrics', () => {
     expect(snapshot.tickRate).toBe(game.tickRate)
     expect(snapshot.players).toEqual([{
       id: 'p1',
+      displayName: 'Alice',
       position: { x: 1, y: 2, z: 3 },
       lastProcessedSequenceId: 7,
       trackedEntities: 1,
@@ -52,6 +54,19 @@ describe('serverMetrics', () => {
     expect(snapshot.physics).toBeNull()
     expect(snapshot.latencySimulation).toEqual({ fixedLatency: 50, jitter: 10, packetLoss: 0 })
     expect(snapshot.memory.rss).toBeGreaterThan(0)
+  })
+
+  it('uses the player id as the display name until one is set', () => {
+    const { game, metrics } = makeMetrics()
+
+    const player = addPlayer(game, 'p1')
+    expect(metrics.snapshot().players[0].displayName).toBe('p1')
+
+    player.setDisplayName('Alice')
+    expect(metrics.snapshot().players[0].displayName).toBe('Alice')
+
+    player.setDisplayName(null)
+    expect(metrics.snapshot().players[0].displayName).toBe('p1')
   })
 
   it('leaves out players that are marked for removal', () => {

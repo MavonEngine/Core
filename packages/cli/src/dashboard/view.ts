@@ -244,6 +244,8 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
   const rows = [...players].sort((a, b) => a.id.localeCompare(b.id))
   const maxOffset = Math.max(0, rows.length - 1)
   view.playerOffset = Math.min(view.playerOffset, maxOffset)
+  // Display names default to the id, so the column only adds noise until a game sets them
+  const showNames = rows.some(p => p.displayName !== p.id)
 
   ui.panel({ title: `Players (${rows.length})`, size: '1fr' }, (panel) => {
     if (rows.length === 0) {
@@ -263,6 +265,7 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
         ui.ctx.invalidate()
       },
       columns: [
+        ...(showNames ? [{ key: 'displayName', title: 'Name' }] : []),
         { key: 'id', title: 'ID' },
         { key: 'x', title: 'X', width: 9, align: 'right', render: p => p.position.x.toFixed(2) },
         { key: 'y', title: 'Y', width: 9, align: 'right', render: p => p.position.y.toFixed(2) },
