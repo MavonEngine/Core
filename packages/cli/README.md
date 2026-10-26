@@ -17,7 +17,7 @@ Creates a new project from the multiplayer template, installs its dependencies a
 npx @mavonengine/cli create my-game
 ```
 
-Asks for a name if none is given. While the template downloads and `npm install` runs, the startup screen shows each step and its output. Then the dev script starts, and the dashboard takes over as soon as the game server answers. Quitting during setup stops it and leaves what was created so far in the project directory. Without an interactive terminal, or with `--no-dashboard`, the progress and the dev script's output go straight to the terminal.
+Asks for a name if none is given. While the template downloads and `npm install` runs, the startup screen shows each step and its output. Then the dev script starts, the dashboard takes over as soon as the game server answers, and the game opens in the browser. Quitting during setup stops it and leaves what was created so far in the project directory. Without an interactive terminal, or with `--no-dashboard`, the progress and the dev script's output go straight to the terminal.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -26,12 +26,13 @@ Asks for a name if none is given. While the template downloads and `npm install`
 | `--port <port>` | `8050` | Game server HTTP port for the dashboard |
 | `--theme <name>` | `dark` | Dashboard theme |
 | `--transparent` | | Let a transparent terminal background show through |
+| `--no-open` | | Don't open the game in the browser once the server is up |
 
 ## `mavonengine dev`
 
 Runs the `dev` script of the MavonEngine project you are in and shows the [dashboard](#mavonengine-dashboard) for it. For the multiplayer template that starts the game server and the client together.
 
-While the game server starts, a startup screen shows the latest output of the dev script; the dashboard takes over as soon as the server answers. Quitting the dashboard (`q` or Ctrl-C) stops the dev script and everything it started. If the dev script exits on its own, the dashboard closes and its output is printed.
+While the game server starts, a startup screen shows the latest output of the dev script; the dashboard takes over as soon as the server answers. Once the server is up, the game it serves opens in your default browser (not over SSH, and only if the server answers `/` with a page); `--no-open` turns that off, and `o` opens it again any time. Quitting the dashboard (`q` or Ctrl-C) stops the dev script and everything it started. If the dev script exits on its own, the dashboard closes and its output is printed.
 
 ```sh
 npx mavonengine dev
@@ -49,6 +50,7 @@ The project root is the nearest `package.json`, from the current directory upwar
 | `--port <port>` | `8050` | Game server HTTP port for the dashboard |
 | `--theme <name>` | `dark` | Dashboard theme |
 | `--transparent` | | Let a transparent terminal background show through |
+| `--no-open` | | Don't open the game in the browser once the server is up |
 
 ## `mavonengine dashboard`
 
@@ -78,7 +80,7 @@ npx mavonengine dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, `1`–`4` switch between the Overview, Players, Logs and HTTP tabs. The mouse wheel scrolls the players table, the logs and the requests; scroll the logs back to the bottom, or the requests back to the top, to follow new ones again.
+Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`4` switch between the Overview, Players, Logs and HTTP tabs. The mouse wheel scrolls the players table, the logs and the requests; scroll the logs back to the bottom, or the requests back to the top, to follow new ones again.
 
 The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
 

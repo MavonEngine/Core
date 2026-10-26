@@ -22,6 +22,7 @@ Options:
   --port <port>      Game server HTTP port for the dashboard (default: 8050)
   --theme <name>     Dashboard theme, see 'mavonengine dashboard --help'
   --transparent      Let a transparent terminal background show through
+  --no-open          Don't open the game in the browser once the server is up
   -h, --help         Show this help
 `
 

@@ -31,6 +31,8 @@ export interface RenderOptions {
    * Text is only as readable as whatever is behind the window.
    */
   transparent?: boolean
+  /** Show the `o` key that opens the game in the browser */
+  openKey?: boolean
   /** Set while `mavonengine dev` or `mavonengine create` waits for the game server it started */
   startup?: StartupInfo
 }
@@ -114,7 +116,7 @@ function statusColor(status: ConnectionStatus, theme: Theme): Color {
 /**
  * Draw the whole dashboard. Pure apart from `view`, so it can be rendered in tests.
  */
-export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup }: RenderOptions = {}) {
+export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup, openKey = false }: RenderOptions = {}) {
   const { snapshot } = state
   const starting = !snapshot && !!startup && (state.status === 'connecting' || state.status === 'unreachable')
 
@@ -169,6 +171,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
         { key: `1-${DASHBOARD_TABS.length}`, label: 'Tabs' },
+        ...(openKey && snapshot ? [{ key: 'o', label: 'Open game' }] : []),
         ...(snapshot && DASHBOARD_TABS[view.tab] === 'Players'
           ? [{ key: '↑↓', label: 'Select player' }, ...(view.selectedPlayerId ? [{ key: 'esc', label: 'Close' }] : [])]
           : []),

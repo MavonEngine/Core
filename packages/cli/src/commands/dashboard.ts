@@ -2,6 +2,7 @@ import type { MetricsSource } from '../dashboard/MetricsClient'
 import type { StartupInfo, ViewState } from '../dashboard/view'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
+import { openBrowser, servesPage } from '../browser'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
@@ -29,6 +30,10 @@ export interface DashboardOptions {
   intervalMs: number
   theme?: string
   transparent: boolean
+  /** Page the game server serves the client on, opened with `o` */
+  clientUrl?: string
+  /** Open `clientUrl` in the browser once the server first answers, if it serves a page there */
+  openBrowser?: boolean
   /** Show the startup screen until the server first answers (`mavonengine dev`), read every frame */
   startup?(): StartupInfo
 }
@@ -88,7 +93,7 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
 
   const token = values.token ?? env.MAVONENGINE_METRICS_TOKEN
 
-  return { source: httpSource({ url, token }), intervalMs, theme: values.theme, transparent: values.transparent }
+  return { source: httpSource({ url, token }), clientUrl: new URL('/', url).href, intervalMs, theme: values.theme, transparent: values.transparent }
 }
 
 /**
@@ -109,13 +114,29 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
   app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, {
     transparent: options.transparent,
     startup: options.startup?.(),
+    openKey: !!options.clientUrl,
   }))
 
   client.onChange(() => app.invalidate())
 
+  const { clientUrl } = options
+  if (clientUrl && options.openBrowser) {
+    const off = client.onChange(async (state) => {
+      if (state.status !== 'live')
+        return
+
+      off()
+      if (await servesPage(clientUrl))
+        openBrowser(clientUrl)
+    })
+  }
+
   app.on('key', (event) => {
     if (event.key === 'r')
       void client.refresh()
+
+    if (event.key === 'o' && options.clientUrl)
+      openBrowser(options.clientUrl)
 
     const tab = tabForKey(event.key)
     if (tab !== null) {

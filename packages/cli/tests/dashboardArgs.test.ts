@@ -25,6 +25,16 @@ describe('parseDashboardArgs', () => {
     expect(options !== 'help' && options.source.label).toBe('http://[::1]:8050/api/game/metrics')
   })
 
+  it('opens the client from the root of the metrics server', () => {
+    const local = parseDashboardArgs(['--port', '9000'], {})
+    const proxied = parseDashboardArgs(['--url', 'https://game.example.com/api/game/metrics'], {})
+    const sim = parseDashboardArgs(['--sim'], {})
+
+    expect(local !== 'help' && local.clientUrl).toBe('http://localhost:9000/')
+    expect(proxied !== 'help' && proxied.clientUrl).toBe('https://game.example.com/')
+    expect(sim !== 'help' && sim.clientUrl).toBeUndefined()
+  })
+
   it('uses --url as is', () => {
     const options = parseDashboardArgs(['--url', 'https://game.example.com/api/game/metrics'], {})
 

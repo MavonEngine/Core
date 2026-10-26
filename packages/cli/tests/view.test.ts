@@ -208,6 +208,16 @@ describe('dashboard view', () => {
     expect(screen.contains('attempt 2')).toBe(true)
   })
 
+  it('shows the open key once the server answers, when there is a client to open', async () => {
+    const state = await liveState()
+    const withKey = renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, viewState(), { openKey: true }), { width: 130, height: 40 })
+    const starting = renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, startingState('connecting'), viewState(), { openKey: true }), { width: 130, height: 40 })
+
+    expect(withKey.contains('Open game')).toBe(true)
+    expect(render(state).contains('Open game')).toBe(false)
+    expect(starting.contains('Open game')).toBe(false)
+  })
+
   it('shows the startup screen while the dev server starts', () => {
     const screen = render(startingState('unreachable'), 130, 40, false, 0, viewState(), {
       engineVersion: '0.0.20',

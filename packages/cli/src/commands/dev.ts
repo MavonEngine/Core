@@ -6,12 +6,14 @@ import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
+import { canOpenBrowserHere } from '../browser'
 import { parseDashboardArgs, runDashboard, UsageError } from './dashboard'
 
 export const DEV_HELP = `Usage: mavonengine dev [options]
 
 Run the dev script of the MavonEngine project you are in (game server and client)
-and show the dashboard for it. Quitting the dashboard stops the dev servers.
+and show the dashboard for it. Once the game server is up, the game opens in the
+browser. Quitting the dashboard stops the dev servers.
 
 Options:
   --cwd <dir>        Start looking for the project here (default: current directory)
@@ -19,6 +21,7 @@ Options:
   --port <port>      Game server HTTP port for the dashboard (default: 8050)
   --theme <name>     Dashboard theme, see 'mavonengine dashboard --help'
   --transparent      Let a transparent terminal background show through
+  --no-open          Don't open the game in the browser once the server is up
   -h, --help         Show this help
 `
 
@@ -53,6 +56,7 @@ export const DEV_FLAGS = {
   port: { type: 'string' },
   theme: { type: 'string' },
   transparent: { type: 'boolean', default: false },
+  open: { type: 'boolean', default: true },
   help: { type: 'boolean', short: 'h', default: false },
 } as const
 
@@ -85,6 +89,8 @@ export function toDevOptions(values: DevFlags, cwd: string, env: Record<string, 
       ...(values.transparent ? ['--transparent'] : []),
     ]
     dashboard = parseDashboardArgs(dashboardArgs, env) as DashboardOptions
+    // Over SSH the browser would open on the other machine
+    dashboard.openBrowser = values.open && canOpenBrowserHere(env)
   }
 
   return { cwd: resolve(cwd, values.cwd ?? '.'), dashboard }

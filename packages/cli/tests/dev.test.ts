@@ -108,6 +108,12 @@ describe('parseDevArgs', () => {
     expect(parseDevArgs(['--cwd', 'game'], '/work')).toMatchObject({ cwd: '/work/game' })
   })
 
+  it('opens the browser unless --no-open is passed or the terminal is an SSH session', () => {
+    expect(parseDevArgs([], '/work', {})).toMatchObject({ dashboard: { openBrowser: true, clientUrl: 'http://localhost:8050/' } })
+    expect(parseDevArgs(['--no-open'], '/work', {})).toMatchObject({ dashboard: { openBrowser: false } })
+    expect(parseDevArgs([], '/work', { SSH_TTY: '/dev/ttys001' })).toMatchObject({ dashboard: { openBrowser: false } })
+  })
+
   it('shows the dashboard for the local server by default', () => {
     const options = parseDevArgs([], '/work', {})
 
