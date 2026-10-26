@@ -58,6 +58,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   private latencySimulator?: LatencySimulator
   private commandsProcessedThisTick = 0
+  private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
 
   protected abstract onConnection(channel: ServerChannel): TClient
@@ -349,11 +350,29 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.timers.push(setInterval(() => this.metrics.sample(), this.metrics.sampleIntervalMs))
 
-    this.timers.push(setInterval(() => {
-      const { sent, received } = this.bandwidthTracker.getTotalSince(logIntervalMs)
-      this.logger.debug(`Client - Sent: ${sent} B, Received: ${received} B`)
+    this.timers.push(setInterval(() => this.logStats(logIntervalMs), logIntervalMs))
+  }
 
-      this.metrics.cpu.log()
-    }, logIntervalMs))
+  /**
+   * Periodic CPU / bandwidth summary. Skipped while a dashboard is fetching
+   * metrics, since it already shows the same numbers live.
+   */
+  private logStats(logIntervalMs: number) {
+    const watching = this.http.metricsClientActive()
+
+    if (watching !== this.dashboardWatching) {
+      this.dashboardWatching = watching
+      this.logger.info(watching
+        ? 'Metrics dashboard connected, pausing CPU / bandwidth log output'
+        : 'Metrics dashboard disconnected, resuming CPU / bandwidth log output')
+    }
+
+    if (watching)
+      return
+
+    const { sent, received } = this.bandwidthTracker.getTotalSince(logIntervalMs)
+    this.logger.debug(`Client - Sent: ${sent} B, Received: ${received} B`)
+
+    this.metrics.cpu.log()
   }
 }

@@ -2,7 +2,7 @@ import type { Server as NodeServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/HttpServer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import HttpServer from '../../../../src/Networking/Server/Http/HttpServer'
+import HttpServer, { METRICS_CLIENT_TIMEOUT_MS } from '../../../../src/Networking/Server/Http/HttpServer'
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 
 const health = { serverTime: 'now', uptime: 1, players: 0, world: { entities: 0 }, physics: {} }
@@ -10,11 +10,13 @@ const snapshot = { schemaVersion: 1, players: [] }
 
 let listener: NodeServer | undefined
 
+let http: HttpServer
+
 async function serve(options: HttpServerOptions = {}) {
   const logger = { info: vi.fn() } as any
   const metrics = { health: () => health, snapshot: () => snapshot } as any
 
-  const http = new HttpServer(logger, metrics, options)
+  http = new HttpServer(logger, metrics, options)
 
   listener = await new Promise<NodeServer>((resolve) => {
     const server = http.app.listen(0, '127.0.0.1', () => resolve(server))
@@ -108,5 +110,24 @@ describe('httpServer', () => {
     const request = await serve()
 
     expect((await request('/api/game/logs')).status).toBe(404)
+  })
+
+  it('tracks whether metrics were fetched recently', async () => {
+    const request = await serve()
+
+    expect(http.metricsClientActive()).toBe(false)
+
+    await request('/api/game/metrics')
+
+    expect(http.metricsClientActive()).toBe(true)
+    expect(http.metricsClientActive(Date.now() + METRICS_CLIENT_TIMEOUT_MS + 1)).toBe(false)
+  })
+
+  it('does not count rejected metrics requests', async () => {
+    const request = await serve({ metrics: { token: 'secret' } })
+
+    await request('/api/game/metrics')
+
+    expect(http.metricsClientActive()).toBe(false)
   })
 })

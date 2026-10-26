@@ -1,6 +1,6 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type ServerWorld from '../../src/Networking/Server/World'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
 import { ServerCommand } from '../../src/Networking/Server/Commands'
@@ -271,6 +271,52 @@ describe('server', () => {
 
     expect(server.logs).toBeUndefined()
     expect(logger.transports).toHaveLength(0)
+  })
+
+  describe('periodic stats logging', () => {
+    function startServer() {
+      const server = new TestServer(logger, undefined, { metrics: { logIntervalMs: 1000 } })
+      ;(server.gameSocket as any).listen = vi.fn()
+      vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+      const cpuLog = vi.spyOn(server.metrics.cpu, 'log').mockImplementation(() => {})
+      const info = vi.spyOn(logger, 'info')
+
+      server.start()
+      return { server, cpuLog, info }
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('logs CPU / bandwidth when no dashboard is watching', () => {
+      vi.useFakeTimers()
+      const { server, cpuLog } = startServer()
+
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(cpuLog).toHaveBeenCalledTimes(1)
+    })
+
+    it('pauses while a dashboard is fetching metrics and says so once', () => {
+      vi.useFakeTimers()
+      const { server, cpuLog, info } = startServer()
+      const active = vi.spyOn(server.http, 'metricsClientActive').mockReturnValue(true)
+
+      vi.advanceTimersByTime(3000)
+
+      expect(cpuLog).not.toHaveBeenCalled()
+      expect(info.mock.calls.filter(([msg]) => String(msg).includes('dashboard connected'))).toHaveLength(1)
+
+      active.mockReturnValue(false)
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(cpuLog).toHaveBeenCalledTimes(1)
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('dashboard disconnected'))
+    })
   })
 
   describe('stateSync', () => {

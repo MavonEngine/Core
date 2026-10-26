@@ -30,12 +30,19 @@ export interface HttpServerOptions {
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
+/**
+ * How recently metrics must have been requested for a dashboard to count as watching.
+ * Comfortably above the dashboard's default 1s poll and its 10s retry backoff.
+ */
+export const METRICS_CLIENT_TIMEOUT_MS = 15000
+
 export default class HttpServer {
   readonly app: Express
 
   private port: number
   private metricsOptions: MetricsEndpointOptions
   private logs?: LogBuffer
+  private lastMetricsRequestAt?: number
 
   constructor(
     private logger: winston.Logger,
@@ -77,8 +84,16 @@ export default class HttpServer {
 
   private registerMetricsEndpoint() {
     this.app.get('/api/game/metrics', (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
+      this.lastMetricsRequestAt = Date.now()
       res.json(this.metrics.snapshot())
     })
+  }
+
+  /**
+   * Whether something (usually `mavonengine dashboard`) has fetched metrics recently.
+   */
+  metricsClientActive(now = Date.now()) {
+    return this.lastMetricsRequestAt !== undefined && now - this.lastMetricsRequestAt < METRICS_CLIENT_TIMEOUT_MS
   }
 
   /**
