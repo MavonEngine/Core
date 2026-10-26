@@ -1,6 +1,8 @@
+import type { LogEntry } from '@mavonengine/core/Networking/Server/Stats/LogBuffer'
 import type { ServerMetricsSnapshot } from '@mavonengine/core/Networking/Server/Stats/ServerMetrics'
 
 export type { ServerMetricsSnapshot }
+export type LogLine = LogEntry
 
 /**
  * The newest metrics schema this CLI understands.
@@ -106,5 +108,23 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
     latencySimulation: latency
       ? { fixedLatency: num(latency.fixedLatency), jitter: num(latency.jitter), packetLoss: num(latency.packetLoss) }
       : null,
+  }
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/logs response.
+ */
+export function normalizeLogs(raw: unknown): { entries: LogLine[], latestId: number } {
+  const r = section(raw)
+  const entries = arr(r.entries, e => ({
+    id: num(e.id),
+    timestamp: num(e.timestamp),
+    level: str(e.level, 'info'),
+    message: str(e.message),
+  }))
+
+  return {
+    entries,
+    latestId: num(r.latestId, entries.at(-1)?.id ?? 0),
   }
 }

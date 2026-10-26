@@ -1,5 +1,6 @@
 import type { Express, NextFunction, Request, Response } from 'express'
 import type winston from 'winston'
+import type LogBuffer from '../Stats/LogBuffer'
 import type ServerMetrics from '../Stats/ServerMetrics'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
@@ -8,7 +9,7 @@ import express from 'express'
 
 export interface MetricsEndpointOptions {
   /**
-   * Expose GET /api/game/metrics.
+   * Expose GET /api/game/metrics and GET /api/game/logs.
    * Defaults to true, but in production it stays off unless a token is set.
    */
   enabled?: boolean
@@ -23,6 +24,8 @@ export interface MetricsEndpointOptions {
 export interface HttpServerOptions {
   port?: number
   metrics?: MetricsEndpointOptions
+  /** Serves recent log entries on GET /api/game/logs when given */
+  logs?: LogBuffer
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -32,6 +35,7 @@ export default class HttpServer {
 
   private port: number
   private metricsOptions: MetricsEndpointOptions
+  private logs?: LogBuffer
 
   constructor(
     private logger: winston.Logger,
@@ -42,9 +46,11 @@ export default class HttpServer {
     this.app = app
     this.port = options.port ?? 8050
     this.metricsOptions = options.metrics ?? {}
+    this.logs = options.logs
 
     this.registerHealthEndpoint()
     this.registerMetricsEndpoint()
+    this.registerLogsEndpoint()
   }
 
   start() {
@@ -72,6 +78,21 @@ export default class HttpServer {
   private registerMetricsEndpoint() {
     this.app.get('/api/game/metrics', (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
       res.json(this.metrics.snapshot())
+    })
+  }
+
+  /**
+   * GET /api/game/logs?after=<id> returns the entries newer than `after`.
+   */
+  private registerLogsEndpoint() {
+    this.app.get('/api/game/logs', (req, res, next) => this.authorizeMetrics(req, res, next), (req, res) => {
+      if (!this.logs) {
+        res.status(404).end()
+        return
+      }
+
+      const after = Number(req.query.after ?? 0)
+      res.json(this.logs.since(Number.isFinite(after) ? after : 0))
     })
   }
 

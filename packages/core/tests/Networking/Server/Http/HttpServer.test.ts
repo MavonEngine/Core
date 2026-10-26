@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/HttpServer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import HttpServer from '../../../../src/Networking/Server/Http/HttpServer'
+import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 
 const health = { serverTime: 'now', uptime: 1, players: 0, world: { entities: 0 }, physics: {} }
 const snapshot = { schemaVersion: 1, players: [] }
@@ -77,5 +78,35 @@ describe('httpServer', () => {
 
     const withToken = await serve({ metrics: { token: 'secret' } })
     expect((await withToken('/api/game/metrics?token=secret')).status).toBe(200)
+  })
+
+  it('serves logs after an id', async () => {
+    const logs = new LogBuffer()
+    logs.push('info', 'one')
+    logs.push('warn', 'two')
+
+    const request = await serve({ logs })
+
+    const all = await (await request('/api/game/logs')).json()
+    expect(all.latestId).toBe(2)
+    expect(all.entries.map((e: any) => e.message)).toEqual(['one', 'two'])
+
+    const newer = await (await request('/api/game/logs?after=1')).json()
+    expect(newer.entries.map((e: any) => e.message)).toEqual(['two'])
+
+    expect((await (await request('/api/game/logs?after=nope')).json()).entries).toHaveLength(2)
+  })
+
+  it('protects logs like metrics', async () => {
+    const request = await serve({ logs: new LogBuffer(), metrics: { token: 'secret' } })
+
+    expect((await request('/api/game/logs')).status).toBe(401)
+    expect((await request('/api/game/logs?token=secret')).status).toBe(200)
+  })
+
+  it('404s logs without a buffer', async () => {
+    const request = await serve()
+
+    expect((await request('/api/game/logs')).status).toBe(404)
   })
 })

@@ -3,7 +3,7 @@ import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizeSnapshot } from '../src/dashboard/snapshot'
-import { renderDashboard } from '../src/dashboard/view'
+import { renderDashboard, toLogRows } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -18,11 +18,16 @@ async function liveState(samples = 30): Promise<DashboardState> {
     lastUpdate: Date.now(),
     error: null,
     failures: 0,
+    logs: [
+      { id: 1, timestamp: 0, level: 'info', message: 'Starting @mavon/engine - Socket Server' },
+      { id: 2, timestamp: 0, level: 'warn', message: 'Slow tick: 40.1 ms (budget 33.33 ms)' },
+    ],
+    logsAvailable: true,
   }
 }
 
 function render(state: DashboardState, width = 130, height = 40, transparent = false) {
-  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { playerOffset: 0 }, { transparent }), { width, height })
+  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { playerOffset: 0, logFromEnd: 0 }, { transparent }), { width, height })
 }
 
 describe('dashboard view', () => {
@@ -50,6 +55,8 @@ describe('dashboard view', () => {
       lastUpdate: null,
       error: 'Metrics token missing or wrong (use --token)',
       failures: 2,
+      logs: [],
+      logsAvailable: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
@@ -93,5 +100,36 @@ describe('dashboard view', () => {
     const transparent = render(state, 130, 40, true)
     const quitTransparent = transparent.find('Quit')!
     expect(transparent.cell(quitTransparent.x, quitTransparent.y).bg).toBe(DEFAULT_COLOR)
+  })
+
+  it('shows log lines', async () => {
+    const screen = render(await liveState())
+
+    expect(screen.contains('Logs')).toBe(true)
+    expect(screen.contains('Starting @mavon/engine - Socket Server')).toBe(true)
+    expect(screen.contains('WARN')).toBe(true)
+  })
+
+  it('shows logs in the narrow layout', async () => {
+    expect(render(await liveState(), 80, 70).contains('Slow tick')).toBe(true)
+  })
+
+  it('explains when the server does not serve logs', async () => {
+    const state = await liveState()
+    state.logs = []
+    state.logsAvailable = false
+
+    expect(render(state).contains('Not available')).toBe(true)
+  })
+})
+
+describe('toLogRows', () => {
+  it('splits multi-line messages and trims blank edges', () => {
+    const rows = toLogRows([{ id: 1, timestamp: 0, level: 'info', message: '\n\n┌──┐\n│ME│\n└──┘\n' }])
+
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ level: 'info', message: '┌──┐' })
+    expect(rows[1]).not.toHaveProperty('level')
+    expect(rows[2].message.trim()).toBe('└──┘')
   })
 })

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import MetricsClient, { httpSource, MetricsSourceError } from '../src/dashboard/MetricsClient'
+import MetricsClient, { httpSource, MAX_LOG_LINES, MetricsSourceError } from '../src/dashboard/MetricsClient'
 
 function response(status: number, body: unknown = {}) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -133,5 +133,103 @@ describe('metricsClient', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
 
     client.stop()
+  })
+
+  describe('logs', () => {
+    function logSource(pages: Array<{ entries: any[], latestId: number } | Error>) {
+      const calls: number[] = []
+      return {
+        calls,
+        source: {
+          label: 'test',
+          fetch: async () => ({}),
+          fetchLogs: async (afterId: number) => {
+            calls.push(afterId)
+            const page = pages.shift()!
+            if (page instanceof Error)
+              throw page
+            return page
+          },
+        },
+      }
+    }
+
+    const entry = (id: number) => ({ id, timestamp: 0, level: 'info', message: `line ${id}` })
+
+    it('appends only new lines and asks for what comes after', async () => {
+      const { source, calls } = logSource([
+        { entries: [entry(1), entry(2)], latestId: 2 },
+        { entries: [entry(3)], latestId: 3 },
+      ])
+      const client = new MetricsClient(source)
+
+      await client.poll()
+      await client.poll()
+
+      expect(calls).toEqual([0, 2])
+      expect(client.state.logs.map(l => l.id)).toEqual([1, 2, 3])
+      expect(client.state.logsAvailable).toBe(true)
+    })
+
+    it('starts over when the server restarts', async () => {
+      const { source, calls } = logSource([
+        { entries: [entry(1), entry(2), entry(3)], latestId: 3 },
+        { entries: [], latestId: 1 },
+        { entries: [entry(1)], latestId: 1 },
+      ])
+      const client = new MetricsClient(source)
+
+      await client.poll()
+      await client.poll()
+
+      expect(calls).toEqual([0, 3, 0])
+      expect(client.state.logs.map(l => l.id)).toEqual([1])
+    })
+
+    it('stops asking once the server says logs are not available', async () => {
+      const { source, calls } = logSource([new MetricsSourceError('not found', 'disabled')])
+      const client = new MetricsClient(source)
+
+      await client.poll()
+      await client.poll()
+
+      expect(calls).toEqual([0])
+      expect(client.state.logsAvailable).toBe(false)
+      expect(client.state.status).toBe('live')
+    })
+
+    it('keeps trying after a transient log error', async () => {
+      const { source, calls } = logSource([
+        new MetricsSourceError('blip', 'unreachable'),
+        { entries: [entry(1)], latestId: 1 },
+      ])
+      const client = new MetricsClient(source)
+
+      await client.poll()
+      await client.poll()
+
+      expect(calls).toEqual([0, 0])
+      expect(client.state.logs).toHaveLength(1)
+    })
+
+    it('caps the number of lines kept', async () => {
+      const entries = Array.from({ length: MAX_LOG_LINES + 10 }, (_, i) => entry(i + 1))
+      const { source } = logSource([{ entries, latestId: entries.length }])
+      const client = new MetricsClient(source)
+
+      await client.poll()
+
+      expect(client.state.logs).toHaveLength(MAX_LOG_LINES)
+      expect(client.state.logs[0].id).toBe(11)
+    })
+
+    it('derives the logs url from the metrics url', async () => {
+      const fetch = vi.fn(async () => response(200, { entries: [], latestId: 0 }))
+      const source = httpSource({ url: 'http://localhost:8050/api/game/metrics', fetch })
+
+      await source.fetchLogs!(5)
+
+      expect(fetch).toHaveBeenCalledWith('http://localhost:8050/api/game/logs?after=5', expect.anything())
+    })
   })
 })

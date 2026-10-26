@@ -1,5 +1,5 @@
 import type { MetricsSource } from './MetricsClient'
-import type { ServerMetricsSnapshot } from './snapshot'
+import type { LogLine, ServerMetricsSnapshot } from './snapshot'
 
 const HISTORY_LENGTH = 60
 
@@ -39,6 +39,14 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
   const bandwidthHistory: ServerMetricsSnapshot['bandwidth']['history'] = []
   const tickHistory: ServerMetricsSnapshot['tick']['history'] = []
 
+  const logs: LogLine[] = []
+  let previousPlayers = 0
+  const log = (level: string, message: string) => {
+    logs.push({ id: logs.length + 1, timestamp: now, level, message })
+  }
+  log('info', 'Starting @mavon/engine - Socket Server')
+  log('info', 'Starting @mavon/engine - HTTP Server')
+
   return {
     label: 'simulation',
     async fetch() {
@@ -59,6 +67,19 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         trackedEntities: playerCount + 20 + Math.floor(random() * 5),
       }))
 
+      for (let i = previousPlayers; i < playerCount; i++) {
+        log('info', `Connected: ${players[i].id}`)
+        log('info', `${i + 1} total players connected`)
+      }
+      for (let i = previousPlayers - 1; i >= playerCount; i--) {
+        log('info', `Disconnected sim-${(i + 1).toString().padStart(2, '0')}`)
+        log('info', `${i} total players connected`)
+      }
+      previousPlayers = playerCount
+
+      if (step % 5 === 0)
+        log('debug', `Client - Sent: ${playerCount * 4200} B, Received: ${playerCount * 600} B`)
+
       const cpu = Math.max(0, 12 + playerCount * 2.5 + Math.sin(step / 7) * 6 + random() * 4)
       push(cpuHistory, { timestamp: now, cpuPercentage: Math.round(cpu * 100) / 100 })
 
@@ -69,6 +90,8 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
       // Occasional spike so the max line has something to show
       const avgMs = 2 + playerCount * 0.6 + random() * 1.5
       const maxMs = avgMs + random() * 3 + (step % 17 === 0 ? 25 : 0)
+      if (maxMs > budgetMs)
+        log('warn', `Slow tick: ${maxMs.toFixed(1)} ms (budget ${budgetMs} ms)`)
       const commandsPerSecond = playerCount * tickRate
       push(tickHistory, {
         timestamp: now,
@@ -124,6 +147,9 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
       }
 
       return snapshot
+    },
+    async fetchLogs(afterId) {
+      return { entries: logs.filter(entry => entry.id > afterId), latestId: logs.length }
     },
   }
 }

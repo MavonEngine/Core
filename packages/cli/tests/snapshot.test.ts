@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
-import { normalizeSnapshot } from '../src/dashboard/snapshot'
+import { normalizeLogs, normalizeSnapshot } from '../src/dashboard/snapshot'
 
 describe('normalizeSnapshot', () => {
   it('keeps a complete snapshot as is', async () => {
@@ -42,5 +42,18 @@ describe('normalizeSnapshot', () => {
 
     expect(snapshot.uptime).toBe(5)
     expect(snapshot).not.toHaveProperty('somethingNew')
+  })
+})
+
+describe('normalizeLogs', () => {
+  it('fills in missing fields and drops garbage entries', () => {
+    expect(normalizeLogs({ entries: [{ id: 4, message: 'hi' }, null, 'x'] })).toEqual({
+      entries: [{ id: 4, timestamp: 0, level: 'info', message: 'hi' }],
+      latestId: 4,
+    })
+  })
+
+  it('handles an empty response', () => {
+    expect(normalizeLogs(undefined)).toEqual({ entries: [], latestId: 0 })
   })
 })

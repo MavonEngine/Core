@@ -256,6 +256,23 @@ describe('server', () => {
     expect((server.http as any).port).toBe(9002)
   })
 
+  it('captures log output for the logs endpoint', () => {
+    const logger = winston.createLogger({ level: 'info', transports: [] })
+    const server = new TestServer(logger)
+
+    logger.info('from the game')
+
+    expect(server.logs!.since().entries.at(-1)).toMatchObject({ level: 'info', message: 'from the game' })
+  })
+
+  it('does not capture logs when logBufferSize is 0', () => {
+    const logger = winston.createLogger({ transports: [] })
+    const server = new TestServer(logger, undefined, { metrics: { logBufferSize: 0 } })
+
+    expect(server.logs).toBeUndefined()
+    expect(logger.transports).toHaveLength(0)
+  })
+
   describe('stateSync', () => {
     function makeConnection(id: string) {
       const emit = vi.fn()

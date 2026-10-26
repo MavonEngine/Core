@@ -91,7 +91,7 @@ export async function runDashboard(options: DashboardOptions) {
   const { createApp } = await import('@profullstack/hqtui')
 
   const client = new MetricsClient(options.source, { intervalMs: options.intervalMs })
-  const view: ViewState = { playerOffset: 0 }
+  const view: ViewState = { playerOffset: 0, logFromEnd: 0 }
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 

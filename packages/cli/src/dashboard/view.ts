@@ -1,6 +1,6 @@
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { ServerMetricsSnapshot } from './snapshot'
+import type { LogLine, ServerMetricsSnapshot } from './snapshot'
 import { DEFAULT_COLOR } from '@profullstack/hqtui'
 import { formatBytes, formatDuration, formatMs, formatPercent, formatRate } from './format'
 import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
@@ -10,6 +10,8 @@ import { SUPPORTED_SCHEMA_VERSION } from './snapshot'
  */
 export interface ViewState {
   playerOffset: number
+  /** Log lines scrolled back from the newest, 0 follows the tail */
+  logFromEnd: number
 }
 
 export interface RenderOptions {
@@ -23,6 +25,7 @@ export interface RenderOptions {
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
 const WIDE_LAYOUT = 100
+const NEWLINE_RE = /\r?\n/
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
   connecting: 'CONNECTING',
@@ -61,8 +64,8 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
     }
     else {
       root.responsive({
-        [WIDE_LAYOUT]: c => wideLayout(c, theme, snapshot, view, transparent),
-        0: c => narrowLayout(c, theme, snapshot, view, transparent),
+        [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
+        0: c => narrowLayout(c, theme, state, snapshot, view, transparent),
       })
     }
 
@@ -121,7 +124,7 @@ function waiting(ui: Container, theme: Theme, state: DashboardState) {
   })
 }
 
-function wideLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
+function wideLayout(ui: Container, theme: Theme, state: DashboardState, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   ui.grid({ columns: ['1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
     grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
     grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
@@ -129,15 +132,19 @@ function wideLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot
     grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
   })
 
-  playersPanel(ui, theme, snapshot, view, transparent)
+  ui.row({ size: '1fr' }, (row) => {
+    playersPanel(row, theme, snapshot, view, transparent)
+    logsPanel(row, theme, state, view)
+  })
 }
 
-function narrowLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
+function narrowLayout(ui: Container, theme: Theme, state: DashboardState, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   ui.panel({ title: 'CPU', size: 9 }, p => cpuPanel(p, theme, snapshot))
   ui.panel({ title: 'Network', size: 9 }, p => networkPanel(p, theme, snapshot))
   ui.panel({ title: 'Tick', size: 9 }, p => tickPanel(p, theme, snapshot))
   ui.panel({ title: 'World', size: 11 }, p => worldPanel(p, theme, snapshot))
   playersPanel(ui, theme, snapshot, view, transparent)
+  logsPanel(ui, theme, state, view)
 }
 
 function cpuPanel(ui: Container, theme: Theme, { cpu }: ServerMetricsSnapshot) {
@@ -263,6 +270,64 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
         { key: 'lastProcessedSequenceId', title: 'Seq', width: 10, align: 'right' },
         { key: 'trackedEntities', title: 'Tracked', width: 8, align: 'right' },
       ],
+    })
+  })
+}
+
+function formatTime(timestamp: number) {
+  const date = new Date(timestamp)
+  return [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => n.toString().padStart(2, '0')).join(':')
+}
+
+/**
+ * One widget row per line. Multi-line messages (like the boot banner) continue
+ * on rows without a time or level, and blank lines around them are dropped.
+ */
+export function toLogRows(lines: LogLine[]) {
+  return lines.flatMap(({ timestamp, level, message }) => {
+    const parts = message.split(NEWLINE_RE)
+    while (parts.length > 1 && parts[0].trim() === '')
+      parts.shift()
+    while (parts.length > 1 && parts.at(-1)!.trim() === '')
+      parts.pop()
+
+    return parts.map((part, i) => i === 0
+      ? { time: formatTime(timestamp), level, message: part }
+      : { message: `${' '.repeat(15)}${part}` })
+  })
+}
+
+function logsPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState) {
+  const rows = toLogRows(state.logs)
+  view.logFromEnd = Math.min(view.logFromEnd, Math.max(0, rows.length - 1))
+
+  const title = view.logFromEnd > 0 ? `Logs (scrolled back ${view.logFromEnd}, scroll down to follow)` : 'Logs'
+
+  ui.panel({ title, size: '1fr' }, (panel) => {
+    if (state.logsAvailable === false) {
+      panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/logs, or has metrics.logBufferSize set to 0')
+      return
+    }
+
+    if (rows.length === 0) {
+      panel.label('No log output yet')
+      return
+    }
+
+    panel.log({
+      entries: rows,
+      fromEnd: view.logFromEnd,
+      scrollbar: true,
+      size: '1fr',
+      levelColors: {
+        VERBOSE: theme.muted,
+        SILLY: theme.muted,
+        HTTP: theme.info,
+      },
+      onScroll: (delta) => {
+        view.logFromEnd = Math.max(0, Math.min(rows.length - 1, view.logFromEnd - delta * 3))
+        ui.ctx.invalidate()
+      },
     })
   })
 }

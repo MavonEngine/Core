@@ -15,6 +15,7 @@ import BaseGame from '../../BaseGame'
 import { ServerCommand } from './Commands'
 import HttpServer from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
+import LogBuffer from './Stats/LogBuffer'
 import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
 import ServerWorld from './World'
 
@@ -32,6 +33,9 @@ export interface ServerOptions {
   metrics?: MetricsEndpointOptions & ServerMetricsOptions & {
     /** How often a CPU / bandwidth summary is logged, in ms. Default 5000 */
     logIntervalMs?: number
+
+    /** How many recent log entries are kept for GET /api/game/logs. 0 turns it off. Default 500 */
+    logBufferSize?: number
   }
 }
 
@@ -45,6 +49,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   readonly metrics: ServerMetrics
   readonly http: HttpServer
+  readonly logs?: LogBuffer
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -61,6 +66,13 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   constructor(logger: winston.Logger, phyicsWorld?: RAPIER.World, options?: ServerOptions) {
     instance = this as unknown as Server<GameObject>
 
+    // Attached first so the boot banner is captured too
+    const logBufferSize = options?.metrics?.logBufferSize ?? 500
+    if (logBufferSize > 0) {
+      this.logs = new LogBuffer(logBufferSize)
+      logger.add(this.logs.transport)
+    }
+
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
 
@@ -76,6 +88,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.http = new HttpServer(this.logger, this.metrics, {
       port: this.options.httpPort,
       metrics: this.options.metrics,
+      logs: this.logs,
     })
 
     this.gameSocket.onConnection((channel) => {

@@ -13,7 +13,7 @@ npx mavonengine --help
 
 A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui).
 
-It shows CPU, network bandwidth, tick timings against the tick budget, world/physics/memory stats and the connected players. It reads them from the server's `GET /api/game/metrics` endpoint, which needs a `@mavonengine/core` release that includes it.
+It shows CPU, network bandwidth, tick timings against the tick budget, world/physics/memory stats, the connected players and the server's recent log output. It reads them from the server's `GET /api/game/metrics` and `GET /api/game/logs` endpoints, which need a `@mavonengine/core` release that includes them.
 
 ```sh
 # Local server on the default HTTP port (8050)
@@ -37,7 +37,7 @@ npx mavonengine dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, and the mouse wheel scrolls the players table.
+Keys: `q` quits, `r` refreshes now. The mouse wheel scrolls the players table and the logs; scroll the logs back to the bottom to follow new lines again.
 
 ### Server access
 
@@ -48,6 +48,8 @@ const server = new MyServer(logger, physicsWorld, {
   httpPort: 8050,
   metrics: {
     token: process.env.METRICS_TOKEN,
+    // Recent log entries kept for the dashboard, 0 turns the logs endpoint off
+    logBufferSize: 500,
   },
 })
 ```
@@ -55,3 +57,4 @@ const server = new MyServer(logger, physicsWorld, {
 - With no token, the endpoint only answers requests from localhost.
 - With `NODE_ENV=production` and no token, the endpoint is turned off.
 - Set `metrics.enabled: false` to turn it off everywhere.
+- The logs endpoint follows the same rules. It serves whatever passes your logger's level.
