@@ -1,5 +1,5 @@
 import type { DashboardState } from '../src/dashboard/MetricsClient'
-import { renderToScreen } from '@profullstack/hqtui'
+import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizeSnapshot } from '../src/dashboard/snapshot'
@@ -21,8 +21,8 @@ async function liveState(samples = 30): Promise<DashboardState> {
   }
 }
 
-function render(state: DashboardState, width = 130, height = 40) {
-  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { playerOffset: 0 }), { width, height })
+function render(state: DashboardState, width = 130, height = 40, transparent = false) {
+  return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, { playerOffset: 0 }, { transparent }), { width, height })
 }
 
 describe('dashboard view', () => {
@@ -81,5 +81,17 @@ describe('dashboard view', () => {
     state.snapshot!.players = []
 
     expect(render(state).contains('No players connected')).toBe(true)
+  })
+
+  it('fills the status bar unless transparent', async () => {
+    const state = await liveState()
+
+    const opaque = render(state)
+    const quit = opaque.find('Quit')!
+    expect(opaque.cell(quit.x, quit.y).bg).not.toBe(DEFAULT_COLOR)
+
+    const transparent = render(state, 130, 40, true)
+    const quitTransparent = transparent.find('Quit')!
+    expect(transparent.cell(quitTransparent.x, quitTransparent.y).bg).toBe(DEFAULT_COLOR)
   })
 })

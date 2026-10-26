@@ -18,6 +18,8 @@ Options:
   --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
   --interval <ms>      Poll interval in ms (default: 1000)
   --theme <name>       dark, dracula, nord, tokyoNight, gruvbox, matrix, light, …
+  --transparent        Let a transparent terminal background show through
+                       (text can be hard to read over a light wallpaper)
   --sim                Show simulated data instead of connecting to a server
   -h, --help           Show this help
 `
@@ -26,6 +28,7 @@ export interface DashboardOptions {
   source: MetricsSource
   intervalMs: number
   theme?: string
+  transparent: boolean
 }
 
 export class UsageError extends Error { }
@@ -43,6 +46,7 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
       token: { type: 'string' },
       interval: { type: 'string', default: '1000' },
       theme: { type: 'string' },
+      transparent: { type: 'boolean', default: false },
       sim: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -58,7 +62,7 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
     throw new UsageError('--interval must be a whole number of ms, at least 100')
 
   if (values.sim)
-    return { source: simulatedSource(), intervalMs, theme: values.theme }
+    return { source: simulatedSource(), intervalMs, theme: values.theme, transparent: values.transparent }
 
   let url = values.url
   if (!url) {
@@ -79,7 +83,7 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
 
   const token = values.token ?? env.MAVONENGINE_METRICS_TOKEN
 
-  return { source: httpSource({ url, token }), intervalMs, theme: values.theme }
+  return { source: httpSource({ url, token }), intervalMs, theme: values.theme, transparent: values.transparent }
 }
 
 export async function runDashboard(options: DashboardOptions) {
@@ -89,10 +93,9 @@ export async function runDashboard(options: DashboardOptions) {
   const client = new MetricsClient(options.source, { intervalMs: options.intervalMs })
   const view: ViewState = { playerOffset: 0 }
 
-  // Leave cells on the terminal's default background so transparent / blurred terminals show through
-  const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: false })
+  const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 
-  app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view))
+  app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, { transparent: options.transparent }))
 
   client.onChange(() => app.invalidate())
 

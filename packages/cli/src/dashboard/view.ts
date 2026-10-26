@@ -12,6 +12,14 @@ export interface ViewState {
   playerOffset: number
 }
 
+export interface RenderOptions {
+  /**
+   * Leave cells on the terminal's default background so a transparent terminal shows through.
+   * Text is only as readable as whatever is behind the window.
+   */
+  transparent?: boolean
+}
+
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
 const WIDE_LAYOUT = 100
@@ -36,7 +44,7 @@ function statusColor(status: ConnectionStatus, theme: Theme): Color {
 /**
  * Draw the whole dashboard. Pure apart from `view`, so it can be rendered in tests.
  */
-export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState) {
+export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false }: RenderOptions = {}) {
   ui.column({}, (root) => {
     header(root, theme, state)
 
@@ -53,14 +61,14 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
     }
     else {
       root.responsive({
-        [WIDE_LAYOUT]: c => wideLayout(c, theme, snapshot, view),
-        0: c => narrowLayout(c, theme, snapshot, view),
+        [WIDE_LAYOUT]: c => wideLayout(c, theme, snapshot, view, transparent),
+        0: c => narrowLayout(c, theme, snapshot, view, transparent),
       })
     }
 
     root.statusBar({
       size: 1,
-      background: DEFAULT_COLOR,
+      background: transparent ? DEFAULT_COLOR : undefined,
       items: [
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
@@ -113,7 +121,7 @@ function waiting(ui: Container, theme: Theme, state: DashboardState) {
   })
 }
 
-function wideLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState) {
+function wideLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   ui.grid({ columns: ['1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
     grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
     grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
@@ -121,15 +129,15 @@ function wideLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot
     grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
   })
 
-  playersPanel(ui, theme, snapshot, view)
+  playersPanel(ui, theme, snapshot, view, transparent)
 }
 
-function narrowLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState) {
+function narrowLayout(ui: Container, theme: Theme, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   ui.panel({ title: 'CPU', size: 9 }, p => cpuPanel(p, theme, snapshot))
   ui.panel({ title: 'Network', size: 9 }, p => networkPanel(p, theme, snapshot))
   ui.panel({ title: 'Tick', size: 9 }, p => tickPanel(p, theme, snapshot))
   ui.panel({ title: 'World', size: 11 }, p => worldPanel(p, theme, snapshot))
-  playersPanel(ui, theme, snapshot, view)
+  playersPanel(ui, theme, snapshot, view, transparent)
 }
 
 function cpuPanel(ui: Container, theme: Theme, { cpu }: ServerMetricsSnapshot) {
@@ -225,7 +233,7 @@ function worldPanel(ui: Container, theme: Theme, { players, world, physics, memo
   })
 }
 
-function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSnapshot, view: ViewState) {
+function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   const rows = [...players].sort((a, b) => a.id.localeCompare(b.id))
   const maxOffset = Math.max(0, rows.length - 1)
   view.playerOffset = Math.min(view.playerOffset, maxOffset)
@@ -240,6 +248,8 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
       rows,
       offset: view.playerOffset,
       scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
       size: '1fr',
       onScroll: (delta) => {
         view.playerOffset = Math.max(0, Math.min(maxOffset, view.playerOffset + delta))

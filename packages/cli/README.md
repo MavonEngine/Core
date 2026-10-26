@@ -34,6 +34,7 @@ npx mavonengine dashboard --sim
 | `--token <token>` | `$MAVONENGINE_METRICS_TOKEN` | Metrics token (`ServerOptions.metrics.token`) |
 | `--interval <ms>` | `1000` | Poll interval |
 | `--theme <name>` | `dark` | `dark`, `dracula`, `nord`, `tokyoNight`, `gruvbox`, `matrix`, `monochrome`, `highContrast`, `light` |
+| `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
 Keys: `q` quits, `r` refreshes now, and the mouse wheel scrolls the players table.

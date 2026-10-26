@@ -31,6 +31,14 @@ describe('parseDashboardArgs', () => {
     expect(options !== 'help' && options.source.label).toBe('https://game.example.com/api/game/metrics')
   })
 
+  it('is opaque unless --transparent is passed', () => {
+    const opaque = parseDashboardArgs([], {})
+    const transparent = parseDashboardArgs(['--transparent'], {})
+
+    expect(opaque !== 'help' && opaque.transparent).toBe(false)
+    expect(transparent !== 'help' && transparent.transparent).toBe(true)
+  })
+
   it('switches to the simulator with --sim', () => {
     const options = parseDashboardArgs(['--sim'], {})
 
