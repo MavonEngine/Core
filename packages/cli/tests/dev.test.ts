@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { descendants, detectPackageManager, findProjectRoot, parseDevArgs, runDevCommand, startDev } from '../src/commands/dev'
@@ -101,11 +101,11 @@ describe('descendants', () => {
 
 describe('parseDevArgs', () => {
   it('defaults to the current directory', () => {
-    expect(parseDevArgs([], '/work')).toMatchObject({ cwd: '/work' })
+    expect(parseDevArgs([], '/work')).toMatchObject({ cwd: resolve('/work') })
   })
 
   it('resolves --cwd against the current directory', () => {
-    expect(parseDevArgs(['--cwd', 'game'], '/work')).toMatchObject({ cwd: '/work/game' })
+    expect(parseDevArgs(['--cwd', 'game'], '/work')).toMatchObject({ cwd: resolve('/work/game') })
   })
 
   it('opens the browser unless --no-open is passed or the terminal is an SSH session', () => {
@@ -129,7 +129,7 @@ describe('parseDevArgs', () => {
   })
 
   it('turns the dashboard off with --no-dashboard', () => {
-    expect(parseDevArgs(['--no-dashboard'], '/work')).toEqual({ cwd: '/work', dashboard: false })
+    expect(parseDevArgs(['--no-dashboard'], '/work')).toEqual({ cwd: resolve('/work'), dashboard: false })
   })
 
   it('rejects a bad dashboard port', () => {

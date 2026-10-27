@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { gatedSource, parseCreateArgs } from '../src/commands/create'
@@ -41,7 +41,7 @@ describe('parseCreateArgs', () => {
     const options = parseCreateArgs(['my-game', '--port', '9000', '--cwd', 'games'], '/home') as any
 
     expect(options.projectName).toBe('my-game')
-    expect(options.cwd).toBe('/home/games')
+    expect(options.cwd).toBe(resolve('/home/games'))
     expect(options.dashboard.source.label).toContain(':9000')
   })
 
