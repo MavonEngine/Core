@@ -1,6 +1,6 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type ServerWorld from '../../src/Networking/Server/World'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
 import { ServerCommand } from '../../src/Networking/Server/Commands'
@@ -78,6 +78,7 @@ describe('server', () => {
 
     expect((server.game.world as ServerWorld).players).toHaveLength(1)
     expect((server.game.world as ServerWorld).players[0].id).eq(randomId)
+    expect((server.game.world as ServerWorld).players[0].channel?.id).eq(randomId)
 
     // Simulate a disconnect from the client
     disconnectCallback()
@@ -179,6 +180,217 @@ describe('server', () => {
 
     expect(processed).toEqual([1, 2, 3, 4])
     expect(player.lastProcessedSequenceId).toBe(4)
+  })
+
+  it('skips commands from players that disconnected before they were processed', () => {
+    const server = new TestServer(logger)
+
+    const onCommand = vi.fn()
+    ;(server as any).onCommand = onCommand
+    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'gone' }]
+
+    expect(() => (server as any).runThroughBuffer()).not.toThrow()
+    expect(onCommand).not.toHaveBeenCalled()
+  })
+
+  it('never moves lastProcessedSequenceId backwards', () => {
+    const server = new TestServer(logger)
+
+    const player = new TestClient('p1')
+    player.updateLastProcessedSequenceId(10)
+    server.game.world.entities.items.set('p1', player)
+
+    ;(server as any).commandBuffer = [{ sequenceId: 4, playerId: 'p1' }]
+    ;(server as any).runThroughBuffer()
+
+    expect(player.lastProcessedSequenceId).toBe(10)
+  })
+
+  it('passes the same delta to every command in a tick and resets it afterwards', () => {
+    const server = new TestServer(logger)
+    server.game.world.entities.items.set('p1', new TestClient('p1'))
+
+    const deltas: number[] = []
+    ;(server as any).onCommand = (_cmd: unknown, delta: number) => deltas.push(delta)
+
+    server.lastTime = performance.now() - 1000
+    ;(server as any).commandBuffer = [
+      { sequenceId: 1, playerId: 'p1' },
+      { sequenceId: 2, playerId: 'p1' },
+    ]
+
+    expect((server as any).runThroughBuffer()).toBe(2)
+    expect(deltas[0]).toBeGreaterThanOrEqual(1000)
+    expect(deltas[1]).toBe(deltas[0])
+    expect((server as any).calculateDelta()).toBeLessThan(1000)
+  })
+
+  it('records tick duration and processed commands when a tick completes', () => {
+    const server = new TestServer(logger)
+    server.game.world.entities.items.set('p1', new TestClient('p1'))
+    server.getStateSyncDistance = () => 100
+
+    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'p1' }]
+    server.game.tick()
+
+    expect(server.metrics.tick.sample()).toMatchObject({ ticks: 1, maxCommandsPerTick: 1 })
+  })
+
+  it('exposes the latency simulation config to metrics', () => {
+    const server = new TestServer(logger, undefined, { latencySimulation: { fixedLatency: 20 } })
+
+    expect(server.metrics.snapshot().latencySimulation).toEqual({ fixedLatency: 20, jitter: 0, packetLoss: 0 })
+  })
+
+  it('listens on the configured ports', () => {
+    const server = new TestServer(logger, undefined, { socketPort: 9001, httpPort: 9002 })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const httpStart = vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(9001)
+    expect(httpStart).toHaveBeenCalled()
+    expect((server.http as any).port).toBe(9002)
+  })
+
+  it('moves the game socket onto the HTTP server when it serves the client', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+    const nodeServer = {}
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(true)
+    vi.spyOn(server.http, 'server', 'get').mockReturnValue(nodeServer as any)
+
+    server.start()
+    server.stop()
+
+    expect(addServer).toHaveBeenCalledWith(nodeServer)
+    expect(listen).not.toHaveBeenCalled()
+  })
+
+  it('still opens the socket port when asked to while serving the client', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' }, socketPort: 9001 })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    ;(server.gameSocket as any).addServer = vi.fn()
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(true)
+    vi.spyOn(server.http, 'server', 'get').mockReturnValue({} as any)
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(9001)
+  })
+
+  it('falls back to port 8081 when the client is configured but not built', () => {
+    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    vi.spyOn(server.http, 'serveClient').mockReturnValue(false)
+
+    server.start()
+    server.stop()
+
+    expect(listen).toHaveBeenCalledWith(8081)
+    expect(addServer).not.toHaveBeenCalled()
+  })
+
+  it('keeps the game socket on its own port when no client is served', () => {
+    const server = new TestServer(logger)
+
+    const listen = vi.fn()
+    ;(server.gameSocket as any).listen = listen
+    const addServer = vi.fn()
+    ;(server.gameSocket as any).addServer = addServer
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+    server.start()
+    server.stop()
+
+    expect(addServer).not.toHaveBeenCalled()
+    expect(listen).toHaveBeenCalledWith(8081)
+  })
+
+  it('captures log output for the logs endpoint', () => {
+    const logger = winston.createLogger({ level: 'info', transports: [] })
+    const server = new TestServer(logger)
+
+    logger.info('from the game')
+
+    expect(server.logs!.since().entries.at(-1)).toMatchObject({ level: 'info', message: 'from the game' })
+  })
+
+  it('does not capture logs when logBufferSize is 0', () => {
+    const logger = winston.createLogger({ transports: [] })
+    const server = new TestServer(logger, undefined, { metrics: { logBufferSize: 0 } })
+
+    expect(server.logs).toBeUndefined()
+    expect(logger.transports).toHaveLength(0)
+  })
+
+  it('records HTTP requests unless requestLogSize is 0', () => {
+    expect(new TestServer(logger).requests).toBeDefined()
+    expect(new TestServer(logger, undefined, { metrics: { requestLogSize: 0 } }).requests).toBeUndefined()
+  })
+
+  describe('periodic stats logging', () => {
+    function startServer() {
+      const server = new TestServer(logger, undefined, { metrics: { logIntervalMs: 1000 } })
+      ;(server.gameSocket as any).listen = vi.fn()
+      vi.spyOn(server.http, 'start').mockImplementation(() => {})
+
+      const cpuLog = vi.spyOn(server.metrics.cpu, 'log').mockImplementation(() => {})
+      const info = vi.spyOn(logger, 'info')
+
+      server.start()
+      return { server, cpuLog, info }
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('logs CPU / bandwidth when no dashboard is watching', () => {
+      vi.useFakeTimers()
+      const { server, cpuLog } = startServer()
+
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(cpuLog).toHaveBeenCalledTimes(1)
+    })
+
+    it('pauses while a dashboard is fetching metrics and says so once', () => {
+      vi.useFakeTimers()
+      const { server, cpuLog, info } = startServer()
+      const active = vi.spyOn(server.http, 'metricsClientActive').mockReturnValue(true)
+
+      vi.advanceTimersByTime(3000)
+
+      expect(cpuLog).not.toHaveBeenCalled()
+      expect(info.mock.calls.filter(([msg]) => String(msg).includes('dashboard connected'))).toHaveLength(1)
+
+      active.mockReturnValue(false)
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(cpuLog).toHaveBeenCalledTimes(1)
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('dashboard disconnected'))
+    })
   })
 
   describe('stateSync', () => {

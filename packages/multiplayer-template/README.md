@@ -3,7 +3,7 @@
 Bootstrap this template instantly with:
 
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
 
 A ready-to-use multiplayer 3D game template built on the [MavonEngine](https://mavonengine.com/) framework. It demonstrates a client-server architecture with authoritative physics, real-time state synchronisation, player animations, chat, and a 3D world with environmental objects.
@@ -123,7 +123,7 @@ States are layered: the server defines the logic, the client extends each state 
 To view the scene from the server's perspective (what the authoritative physics world sees), navigate to:
 
 ```
-http://localhost:5173/#debug
+http://localhost:8050/#debug
 ```
 
 This enables the debug overlay and renders the server-side physics colliders and entity positions directly in the browser.
@@ -136,16 +136,25 @@ From the workspace root:
 
 ```bash
 npm install
-npm run dev        # starts both client and server in watch mode
+npm run dev        # starts the game server in watch mode, which serves the client through Vite
 ```
 
-The client runs at `http://localhost:5173` and the server listens on port `8081`.
+Open `http://localhost:8050`. The game server serves the client on its HTTP port, with hot reload for client changes. Server changes rebuild and restart the server, which reloads the page. The client connects to the game socket through `/socket` on the same port, so everything runs on `8050`.
 
 The game server exposes a JSON API with a health endpoint:
 
 ```
 GET http://localhost:8050/api/game/health
 ```
+
+### Production
+
+```bash
+npm run build
+npm start --prefix server
+```
+
+The server serves the built client from `client/dist` on port `8050`, and the game socket is reachable on the same port, so a single process is enough. Vite is never loaded outside `npm run dev`. Behind a reverse proxy or CDN you can still serve `client/dist` yourself and forward `/socket` to the game server's port `8050`.
 
 ---
 

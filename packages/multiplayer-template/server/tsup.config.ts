@@ -14,5 +14,7 @@ export default defineConfig({
     'express',
     'winston',
     'three',
+    // Only loaded in dev to serve the client, never bundled
+    'vite',
   ],
 })

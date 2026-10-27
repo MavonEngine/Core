@@ -1,8 +1,8 @@
 {
   "name": "@mavonengine/create-bootstrap",
   "type": "module",
-  "version": "0.0.9",
-  "description": "Bootstrap a MavonEngine multiplayer project",
+  "version": "0.1.0",
+  "description": "Deprecated: use 'npx @mavonengine/cli create'. Forwards to it.",
   "license": "MIT",
   "bin": {
     "create-bootstrap": "./dist/index.js"
@@ -21,10 +21,9 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16"
+    "@mavonengine/cli": ">=0.0.1 <1"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^3.2.4",
     "tsup": "^8.5.1",

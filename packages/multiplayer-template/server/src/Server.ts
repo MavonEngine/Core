@@ -1,5 +1,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type { ServerChannel } from '@geckos.io/server'
+import type { ServerOptions } from '@mavonengine/core/Networking/Server/Server'
 import type winston from 'winston'
 import type { CL_CHAT, CL_INIT, CL_MOVE } from './Commands/Client'
 import type { SV_TREES } from './Commands/Server'
@@ -20,8 +21,8 @@ export default class Server extends BaseServer<Player> {
   private treeScales: number[] = []
   private trees: Tree[] = []
 
-  constructor(logger: winston.Logger, physicsWorld?: RAPIER.World) {
-    super(logger, physicsWorld)
+  constructor(logger: winston.Logger, physicsWorld?: RAPIER.World, options?: ServerOptions) {
+    super(logger, physicsWorld, options)
     this.spawnTrees()
   }
 
@@ -61,6 +62,7 @@ export default class Server extends BaseServer<Player> {
     channel.on(ClientCommand.CL_INIT, (command) => {
       const cmd = command as CL_INIT
       player.name = cmd.name
+      player.setDisplayName(cmd.name)
 
       this.gameSocket.emit(ServerCommand.SV_CHAT, {
         playerId: '',

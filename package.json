@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/bootstrap",
     "packages/core",
-    "packages/editor"
+    "packages/editor",
+    "packages/cli"
   ],
   "devDependencies": {
     "@antfu/eslint-config": "8.0.0",

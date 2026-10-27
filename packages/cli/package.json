@@ -1,0 +1,47 @@
+{
+  "name": "@mavonengine/cli",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine command line tools",
+  "license": "MIT",
+  "keywords": [
+    "mavonengine",
+    "cli",
+    "create",
+    "dashboard",
+    "game-server",
+    "monitoring"
+  ],
+  "bin": {
+    "mavonengine": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@profullstack/hqtui": "0.11.1",
+    "adm-zip": "^0.5.16"
+  },
+  "devDependencies": {
+    "@mavonengine/core": "*",
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsup": "^8.5.1",
+    "typescript": "5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

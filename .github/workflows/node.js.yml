@@ -29,7 +29,6 @@ jobs:
         cache: 'npm'
         cache-dependency-path: |
           package-lock.json
-          packages/bootstrap/package-lock.json
           packages/multiplayer-template/package-lock.json
     
     - name: Build and test
@@ -44,6 +43,21 @@ jobs:
     - name: Typecheck bootstrap
       run: npm run typecheck
       working-directory: ./packages/bootstrap
+
+    # Needs core's dist from the build step, the snapshot types come from there
+    - name: Typecheck cli
+      run: npm run typecheck
+      working-directory: ./packages/cli
+
+    # Run the built file directly: npm ci runs before the build, so npm skipped
+    # linking the `mavonengine` bin (its target didn't exist yet) and npx would
+    # fall back to looking it up on the registry
+    - name: Smoke test cli binary
+      run: |
+        node dist/index.js --version
+        node dist/index.js --help
+        node dist/index.js dashboard --help
+      working-directory: ./packages/cli
 
     - name: npm link core locally
       run: |

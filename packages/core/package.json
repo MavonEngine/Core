@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/core",
   "type": "module",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "",
   "author": "",
   "license": "MIT",
@@ -34,6 +34,9 @@
     "vite",
     "vite.config.js"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "prepare": "node scripts/generate-version.js",
     "build": "node scripts/generate-version.js && rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json && find src -name '*.glsl' -o -name '*.css' | while read f; do mkdir -p dist/$(dirname ${f#src/}) && cp $f dist/${f#src/}; done",

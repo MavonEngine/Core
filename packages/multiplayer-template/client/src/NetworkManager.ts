@@ -13,9 +13,10 @@ export default class NetworkManager extends BaseNetworkManager {
 
   constructor() {
     super({
-      /** @ts-expect-error port is null in prod when behind a reverse proxy */
-      port: import.meta.env.PROD ? null : 8081,
-      url: import.meta.env.PROD ? '/socket' : undefined,
+      // Same origin as the page: the game server answers /socket on its HTTP port, and so does a reverse proxy in front of it
+      /** @ts-expect-error port is null to use the page's own port */
+      port: null,
+      url: '/socket',
     })
   }
 

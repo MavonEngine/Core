@@ -4,6 +4,7 @@ import type Logger from './Utils/Logger'
 import type GameObjectInterface from './World/GameObjectInterface'
 import { version as RAPIER_VERSION } from '@dimforge/rapier3d-compat'
 import { Clock, Raycaster, Scene, REVISION as THREE_REVISION } from 'three'
+import { bootBanner } from './Utils/BootBanner'
 import EventEmitter from './Utils/EventEmitter'
 import { version as ENGINE_VERSION } from './version'
 
@@ -46,20 +47,13 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
     this.logger?.info([
       '',
       '',
-      '┌─────────────────────────────────────────┐',
-      '│                                         │',
-      '│              MavonEngine                │',
-      '│                                         │',
-      `│  Version:  ${ENGINE_VERSION.padEnd(28)} │`,
-      `│  Three.js: r${THREE_REVISION.padEnd(27)} │`,
-      ...(physicsWorld ? [`│  Rapier:   ${RAPIER_VERSION().padEnd(28)} │`] : []),
-      // eslint-disable-next-line node/prefer-global/process
-      `│  Mode:     ${(process.env.NODE_ENV ?? 'development').padEnd(28)} │`,
-      '│                                         │',
-      '│  https://github.com/MavonEngine/core    │',
-      '│  https://mavonengine.com                │',
-      '│                                         │',
-      '└─────────────────────────────────────────┘',
+      ...bootBanner({
+        version: ENGINE_VERSION,
+        threeRevision: THREE_REVISION,
+        rapierVersion: physicsWorld ? RAPIER_VERSION() : undefined,
+        // eslint-disable-next-line node/prefer-global/process
+        mode: process.env.NODE_ENV ?? 'development',
+      }),
       '',
     ].join('\n'))
 
@@ -102,6 +96,8 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
     const tickNow = performance.now()
     this.update((tickNow - this.lastTickTime) / 1000)
     this.lastTickTime = tickNow
+
+    this.trigger('tickComplete', performance.now() - tickNow)
   }
 
   onUpdate(callback: (delta: number) => void): void {

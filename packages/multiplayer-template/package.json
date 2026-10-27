@@ -7,20 +7,19 @@
   ],
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently --kill-others -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "build": "concurrently \"npm run build --prefix server\" \"npm run build --prefix client\"",
+    "dev": "npm run dev --prefix server",
+    "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@mavonengine/core": "0.0.20"
+    "@mavonengine/core": "0.0.21"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
     "@mavonengine/editor": "0.0.8",
     "@types/three": "0.184.1",
-    "concurrently": "^9.1.2",
     "eslint": "^10.1.0",
     "tsup": "^8.5.1",
     "typescript": "5.9.2"
