@@ -36,6 +36,8 @@ const MAX_CAPTURED_OUTPUT = 64 * 1024
 
 /** How long the dev processes get to exit after SIGTERM before they are killed */
 const STOP_TIMEOUT_MS = 3000
+/** How long killed processes get to disappear before stop() gives up waiting */
+const KILL_TIMEOUT_MS = 2000
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
@@ -195,6 +197,12 @@ function isAlive(pid: number) {
   }
 }
 
+async function waitForExit(pids: number[], timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  while (pids.some(isAlive) && Date.now() < deadline)
+    await delay(50)
+}
+
 /**
  * Signal a process and everything it started. npm exits on SIGTERM without passing it on,
  * which would leave the game server and vite running.
@@ -292,12 +300,11 @@ export function startDev(root: string, { capture = false } = {}): DevProcess {
         // Remembered up front: once npm exits, its children are reparented and can't be found from it anymore
         const tree = processTree(child.pid)
         signalAll(tree, 'SIGTERM')
+        await waitForExit(tree, STOP_TIMEOUT_MS)
 
-        const deadline = Date.now() + STOP_TIMEOUT_MS
-        while (tree.some(isAlive) && Date.now() < deadline)
-          await delay(50)
-
+        // SIGKILL takes effect asynchronously, so wait for those to be gone too
         signalAll(tree.filter(isAlive), 'SIGKILL')
+        await waitForExit(tree, KILL_TIMEOUT_MS)
       }
     }
 
