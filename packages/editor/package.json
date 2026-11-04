@@ -51,7 +51,7 @@
     "wavesurfer.js": "^7.12.1"
   },
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.21.0",
     "@mavonengine/core": "*",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
