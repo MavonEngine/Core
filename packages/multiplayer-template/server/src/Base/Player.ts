@@ -117,8 +117,9 @@ export default class Player extends BasePlayer {
   }
 
   destroy(): void {
-    if (this.characterCollider) {
-      BaseGame.instance().physicsWorld?.removeCollider(this.characterCollider, false)
+    // Removing the rigid body also removes its attached colliders
+    if (this.rigidBody) {
+      BaseGame.instance().physicsWorld?.removeRigidBody(this.rigidBody)
     }
     super.destroy()
   }

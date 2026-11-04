@@ -141,7 +141,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         if (!disconnectedPlayer)
           return
 
-        disconnectedPlayer.destroy()
+        // Flag only: the world calls destroy() when it collects the entity on the next tick
+        disconnectedPlayer.garbageCollect = true
 
         // Only notify players within visibility radius
         this.gameSocket.connectionsManager.connections.forEach((conn, connId) => {
