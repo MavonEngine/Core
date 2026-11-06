@@ -2,7 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express'
 import type { Server as NodeServer } from 'node:http'
 import type { ViteDevServer } from 'vite'
 import type winston from 'winston'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import express from 'express'
 
@@ -21,12 +21,21 @@ export interface ClientOptions {
 }
 
 /**
+ * Absolute root with Windows 8.3 short names (`RUNNER~1`) expanded.
+ * Vite denies any path with a short-name segment, so a short root would 403 every request.
+ */
+function viteRoot(root: string): string {
+  const absolute = resolve(root)
+  return existsSync(absolute) ? realpathSync.native(absolute) : absolute
+}
+
+/**
  * Serve the client source through a Vite dev server in middleware mode.
  * Hot reload shares the HTTP server's port. Requests that arrive while Vite is starting wait for it.
  */
 export function devClientMiddleware(root: string, server: NodeServer, logger: winston.Logger): RequestHandler {
   const vite: Promise<ViteDevServer> = import('vite').then(({ createServer }) => createServer({
-    root: resolve(root),
+    root: viteRoot(root),
     appType: 'spa',
     server: { middlewareMode: true, hmr: { server } },
   }))
