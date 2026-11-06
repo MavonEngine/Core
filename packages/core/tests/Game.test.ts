@@ -7,12 +7,14 @@ vi.mock('three', async () => {
   const actual = await vi.importActual<typeof import('three')>('three')
   return {
     ...actual,
-    Clock: vi.fn().mockImplementation(() => ({
-      start: vi.fn(),
-      getDelta: vi.fn().mockReturnValue(0.016),
-    })),
-    Audio: vi.fn().mockImplementation(() => ({ listener: {} })),
-    AudioListener: vi.fn().mockImplementation(() => ({})),
+    Clock: vi.fn().mockImplementation(function () {
+      return {
+        start: vi.fn(),
+        getDelta: vi.fn().mockReturnValue(0.016),
+      }
+    }),
+    Audio: vi.fn().mockImplementation(function () { return { listener: {} } }),
+    AudioListener: vi.fn().mockImplementation(function () { return {} }),
   }
 })
 
@@ -27,18 +29,58 @@ const mockParticleSystem = { update: vi.fn() }
 const mockInputManager = {}
 const mockClientGameWorld = { update: vi.fn(), entities: { items: new Map() } }
 
-vi.mock('../src/Camera', () => ({ default: vi.fn(() => mockCamera) }))
-vi.mock('../src/Renderer', () => ({ default: vi.fn(() => mockRenderer) }))
-vi.mock('../src/Utils/Resources', () => ({ default: vi.fn(() => mockResources) }))
-vi.mock('../src/Utils/Sizes', () => ({ default: vi.fn(() => mockSizes) }))
-vi.mock('../src/Utils/Debug', () => ({ default: vi.fn(() => mockDebug) }))
-vi.mock('../src/Utils/LoadingScreen', () => ({ default: vi.fn(() => mockLoadingScreen) }))
-vi.mock('../src/Utils/Logger', () => ({ default: vi.fn(() => mockLogger) }))
-vi.mock('../src/Particles/System/ParticleSystem', () => ({ default: vi.fn(() => mockParticleSystem) }))
-vi.mock('../src/InputManager', () => ({ default: vi.fn(() => mockInputManager) }))
-vi.mock('../src/World/World', () => ({ default: vi.fn(() => mockClientGameWorld) }))
+vi.mock('../src/Camera', () => ({
+  default: vi.fn(function () {
+    return mockCamera
+  }),
+}))
+vi.mock('../src/Renderer', () => ({
+  default: vi.fn(function () {
+    return mockRenderer
+  }),
+}))
+vi.mock('../src/Utils/Resources', () => ({
+  default: vi.fn(function () {
+    return mockResources
+  }),
+}))
+vi.mock('../src/Utils/Sizes', () => ({
+  default: vi.fn(function () {
+    return mockSizes
+  }),
+}))
+vi.mock('../src/Utils/Debug', () => ({
+  default: vi.fn(function () {
+    return mockDebug
+  }),
+}))
+vi.mock('../src/Utils/LoadingScreen', () => ({
+  default: vi.fn(function () {
+    return mockLoadingScreen
+  }),
+}))
+vi.mock('../src/Utils/Logger', () => ({
+  default: vi.fn(function () {
+    return mockLogger
+  }),
+}))
+vi.mock('../src/Particles/System/ParticleSystem', () => ({
+  default: vi.fn(function () {
+    return mockParticleSystem
+  }),
+}))
+vi.mock('../src/InputManager', () => ({
+  default: vi.fn(function () {
+    return mockInputManager
+  }),
+}))
+vi.mock('../src/World/World', () => ({
+  default: vi.fn(function () {
+    return mockClientGameWorld
+  }),
+}))
 vi.mock('../src/Renderer/PhysicsRenderer', () => ({
-  RapierDebugRenderer: vi.fn(() => ({ update: vi.fn() })),
+  RapierDebugRenderer: vi.fn(function () { return { update: vi.fn() } }),
 }))
 vi.mock('../src/Editor', () => ({
   default: { registerListener: vi.fn() },

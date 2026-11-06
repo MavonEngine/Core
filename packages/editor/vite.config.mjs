@@ -88,7 +88,7 @@ export default defineConfig(({ command }) => ({
       fileName: 'Editor',
       formats: ['es'],
     },
-    rollupOptions: {
+    rolldownOptions: {
       external: id => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
       plugins: [
         {

@@ -39,9 +39,9 @@
     "@mavonengine/core": "*",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^24.0.0",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^5.1.0",
     "tsup": "^8.5.1",
-    "typescript": "5.9.2",
-    "vitest": "^3.2.4"
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0"
   }
 }
