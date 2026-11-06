@@ -1,4 +1,5 @@
 import type { World } from '@dimforge/rapier3d-compat'
+import type { ClientPlugin, ClientPluginContext, LoadedPlugin } from './Plugins/types'
 import type { Asset } from './Types/Asset'
 import type IEditor from './Types/IEditor'
 import * as THREE from 'three'
@@ -6,6 +7,9 @@ import BaseGame from './BaseGame'
 import Camera from './Camera'
 import InputManager from './InputManager'
 import ParticleSystem from './Particles/System/ParticleSystem'
+import PluginHost from './Plugins/PluginHost'
+import { pluginAssetBase } from './Plugins/types'
+import { registerPrefab } from './Prefab/PrefabRegistry'
 import Renderer from './Renderer'
 import { RapierDebugRenderer } from './Renderer/PhysicsRenderer'
 import Debug from './Utils/Debug'
@@ -15,6 +19,8 @@ import Resources from './Utils/Resources'
 import Sizes from './Utils/Sizes'
 import ClientGameWorld from './World/World'
 import './style.css'
+
+const LEADING_SLASHES_RE = /^\/+/
 
 export default class Game extends BaseGame {
   canvas = document.createElement('canvas') as HTMLCanvasElement
@@ -41,6 +47,20 @@ export default class Game extends BaseGame {
    * e.g. `Game.devModeHook = () => Editor.registerListener()`
    */
   static devModeHook?: () => void
+
+  private static pluginsToLoad: LoadedPlugin<ClientPlugin>[] = []
+
+  /**
+   * Engine plugins to run, set before constructing Game. Usually the plugins enabled in mavonengine.json:
+   * `import plugins from 'virtual:mavonengine/plugins'; Game.usePlugins(plugins)`
+   */
+  static usePlugins(plugins: (ClientPlugin | LoadedPlugin<ClientPlugin>)[]) {
+    Game.pluginsToLoad = plugins.map((plugin, index) => 'plugin' in plugin && 'package' in plugin
+      ? plugin as LoadedPlugin<ClientPlugin>
+      : { package: (plugin as ClientPlugin).name ?? `plugin-${index}`, options: {}, plugin: plugin as ClientPlugin })
+  }
+
+  plugins: PluginHost<ClientPlugin, ClientPluginContext>
 
   declare world: ClientGameWorld
 
@@ -76,7 +96,8 @@ export default class Game extends BaseGame {
       this.resize()
     })
 
-    this.resources = new Resources(sources)
+    this.plugins = this.createPluginHost()
+    this.resources = new Resources([...sources, ...this.pluginAssets()])
 
     this.loadingScreen = new LoadingScreen(this.resources)
 
@@ -99,6 +120,9 @@ export default class Game extends BaseGame {
 
     this.world = new ClientGameWorld()
 
+    this.plugins.run('setup')
+    this.on('editorBoot', () => this.plugins.run('editor'))
+
     if (this.isDevMode()) {
       Game.devModeHook?.()
     }
@@ -113,6 +137,45 @@ export default class Game extends BaseGame {
     }
 
     render()
+  }
+
+  private createPluginHost() {
+    // eslint-disable-next-line ts/no-this-alias
+    const game = this
+    return new PluginHost<ClientPlugin, ClientPluginContext>(Game.pluginsToLoad, loaded => ({
+      package: loaded.package,
+      options: loaded.options,
+      game,
+      logger: game.logger,
+      get editor() {
+        return game.editor
+      },
+      assetUrl: path => `${pluginAssetBase(loaded.package)}${path.replace(LEADING_SLASHES_RE, '')}`,
+      registerPrefab: prefab => registerPrefab({ ...prefab, plugin: loaded.package }),
+    }), this.logger, 'client')
+  }
+
+  /**
+   * The plugins' resources. In a release, those whose files were left out (prefabs the project doesn't use) are skipped.
+   */
+  private pluginAssets(): Asset[] {
+    const shipped = new Map(this.plugins.plugins.map(p => [p.package, p.shippedAssets && new Set(p.shippedAssets)]))
+
+    return this.plugins.collect('assets').flatMap(({ plugin, result: assets }) => {
+      const pkg = plugin.package
+      return assets.filter((asset) => {
+        const files = shipped.get(pkg)
+        if (!files)
+          return true
+
+        const base = pluginAssetBase(pkg)
+        const paths = Array.isArray(asset.path) ? asset.path : [asset.path]
+        const missing = paths.some(path => path.startsWith(base) && !files.has(path.slice(base.length)))
+        if (missing)
+          this.logger?.debug(`Plugin ${pkg}: skipping asset ${asset.name}, it is not part of this release`)
+        return !missing
+      })
+    })
   }
 
   private initDocument() {
@@ -157,6 +220,7 @@ export default class Game extends BaseGame {
     this.loadingScreen.update(delta)
 
     super.update(delta)
+    this.plugins.run('update', delta)
 
     this.physicsDebugRender?.update()
     this.camera.update(delta)

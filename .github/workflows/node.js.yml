@@ -78,3 +78,10 @@ jobs:
       timeout-minutes: 1
       run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"
       working-directory: ./packages/multiplayer-template
+
+    # Installs e2e/plugin/hello-plugin into the template with `mavonengine install`, then checks it on the
+    # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
+    # install, since a real one would replace the npm-linked @mavonengine/core
+    - name: Plugin end-to-end test
+      timeout-minutes: 5
+      run: npm run test:plugin-e2e

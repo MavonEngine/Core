@@ -59,6 +59,10 @@ and state reconciliation.
 - **Prefab registry** — Community-built assets (grass, water, and more) ready to drop into your scene
 - **Full TypeScript** — Comprehensive types throughout
 
+## Plugins
+
+Engine plugins are npm packages that hook into the game loop, the game server (HTTP routes, connections, ticks) and the editor, and can bring their own prefabs and assets. Install one with `npx @mavonengine/cli install <package>`, which offers to register it in `mavonengine.json`. See the [CLI README](https://github.com/MavonEngine/Core/tree/main/packages/cli#writing-a-plugin) for how to write one.
+
 ## Why a Three.js Game Engine with Multiplayer?
 
 Three.js is the most widely used 3D library for the web, but it's a rendering library — not a game

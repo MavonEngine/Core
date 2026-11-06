@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Game from '../src/Game'
+import { getPrefab, unregisterPrefab } from '../src/Prefab/PrefabRegistry'
+import Resources from '../src/Utils/Resources'
 
 vi.mock('three', async () => {
   const actual = await vi.importActual<typeof import('three')>('three')
@@ -107,6 +109,79 @@ describe('game', () => {
     expect(game.particleSystem).toBeDefined()
     expect(game.loadingScreen).toBeDefined()
     expect(game.world).toBeDefined()
+  })
+
+  describe('plugins', () => {
+    afterEach(() => {
+      Game.usePlugins([])
+    })
+
+    it('loads plugin assets with the game, from /plugins/<package>/', () => {
+      Game.usePlugins([{
+        package: 'forest',
+        options: {},
+        plugin: { assets: ctx => [{ name: 'tree', type: 'gltfModel', path: ctx.assetUrl('/models/tree.glb') }] },
+      }])
+
+      void new Game([{ name: 'pine', type: 'gltfModel', path: '/pine.glb' }])
+
+      expect(vi.mocked(Resources)).toHaveBeenLastCalledWith([
+        { name: 'pine', type: 'gltfModel', path: '/pine.glb' },
+        { name: 'tree', type: 'gltfModel', path: '/plugins/forest/models/tree.glb' },
+      ])
+    })
+
+    it('skips assets left out of the release', () => {
+      Game.usePlugins([{
+        package: 'forest',
+        options: {},
+        shippedAssets: ['models/tree.glb'],
+        plugin: {
+          assets: ctx => [
+            { name: 'tree', type: 'gltfModel', path: ctx.assetUrl('models/tree.glb') },
+            { name: 'rock', type: 'gltfModel', path: ctx.assetUrl('models/rock.glb') },
+            { name: 'sky', type: 'cubeTexture', path: ['/sky/px.png'] },
+          ],
+        },
+      }])
+
+      void new Game([])
+
+      expect(vi.mocked(Resources).mock.lastCall![0].map(a => a.name)).toEqual(['tree', 'sky'])
+    })
+
+    it('sets plugins up once the world exists and updates them every frame', () => {
+      const setup = vi.fn()
+      const update = vi.fn()
+      Game.usePlugins([{ name: 'hud', setup, update }])
+
+      const game = new Game([])
+      game.update(0.016)
+
+      expect(setup).toHaveBeenCalledWith(expect.objectContaining({ package: 'hud', game }))
+      expect(update).toHaveBeenCalledWith(0.016, expect.anything())
+    })
+
+    it('registers plugin prefabs under the plugin', () => {
+      Game.usePlugins([{ package: 'forest', options: {}, plugin: { setup: ctx => ctx.registerPrefab({ name: 'Tree', spawn: vi.fn() }) } }])
+
+      void new Game([])
+
+      expect(getPrefab('forest:Tree')?.plugin).toBe('forest')
+      unregisterPrefab('forest:Tree')
+    })
+
+    it('runs the editor hook when the editor boots', () => {
+      const editorHook = vi.fn()
+      Game.usePlugins([{ editor: editorHook }])
+      const game = new Game([])
+      const editor = { update: vi.fn() } as any
+
+      game.editor = editor
+      game.trigger('editorBoot', editor)
+
+      expect(editorHook).toHaveBeenCalledWith(expect.objectContaining({ editor }))
+    })
   })
 
   it('appends canvas to document body', () => {

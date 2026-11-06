@@ -19,6 +19,8 @@ RAPIER.init().then(() => {
       // Set by `npm run dev`: serve the client source through Vite. Otherwise the built client/dist is served
       dev: process.env.MAVONENGINE_DEV_CLIENT === '1',
     },
+    // Engine plugins enabled in mavonengine.json, see `mavonengine install`
+    plugins: { root: fileURLToPath(new URL('../..', import.meta.url)) },
   })
   server.start()
 })
