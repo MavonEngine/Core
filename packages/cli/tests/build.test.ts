@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseBuildArgs, summarizeReleaseAssets } from '../src/commands/build'
 
@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe('parseBuildArgs', () => {
   it('resolves --cwd', () => {
-    expect(parseBuildArgs(['--cwd', 'game'], '/home')).toEqual({ cwd: '/home/game' })
+    expect(parseBuildArgs(['--cwd', 'game'], '/home')).toEqual({ cwd: resolve('/home', 'game') })
   })
 
   it('returns help', () => {

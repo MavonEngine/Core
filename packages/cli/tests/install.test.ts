@@ -1,7 +1,7 @@
 import type { InstallIO } from '../src/commands/install'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installArgs, installedNames, packageNameFromSpec, parseInstallArgs, runInstallCommand } from '../src/commands/install'
 
@@ -64,7 +64,7 @@ afterEach(() => {
 describe('parseInstallArgs', () => {
   it('takes the packages and flags', () => {
     expect(parseInstallArgs(['forest', '@acme/hud@^2', '-y', '--cwd', 'game'], '/home')).toEqual({
-      cwd: '/home/game',
+      cwd: resolve('/home', 'game'),
       packages: ['forest', '@acme/hud@^2'],
       yes: true,
       register: true,

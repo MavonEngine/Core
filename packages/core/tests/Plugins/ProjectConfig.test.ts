@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   addPluginToConfig,
@@ -238,9 +238,11 @@ describe('release assets', () => {
 
 describe('resolveInside', () => {
   it('only resolves paths below the base', () => {
-    expect(resolveInside('/a/b', 'c/d')).toBe('/a/b/c/d')
-    expect(resolveInside('/a/b', '../c')).toBeUndefined()
-    expect(resolveInside('/a/b', '/etc/passwd')).toBeUndefined()
-    expect(resolveInside('/a/b', '')).toBeUndefined()
+    const base = resolve('/a/b')
+
+    expect(resolveInside(base, 'c/d')).toBe(join(base, 'c', 'd'))
+    expect(resolveInside(base, '../c')).toBeUndefined()
+    expect(resolveInside(base, resolve('/etc/passwd'))).toBeUndefined()
+    expect(resolveInside(base, '')).toBeUndefined()
   })
 })
