@@ -26,7 +26,7 @@ beforeAll(() => {
   }
 })
 
-vi.mock('three/examples/jsm/Addons.js', () => ({
+vi.mock('three/examples/jsm/controls/FlyControls.js', () => ({
   FlyControls: vi.fn().mockImplementation(function () {
     return {
       autoForward: false,
@@ -36,12 +36,18 @@ vi.mock('three/examples/jsm/Addons.js', () => ({
       update: vi.fn(),
     }
   }),
+}))
+
+vi.mock('three/examples/jsm/postprocessing/OutlinePass.js', () => ({
   OutlinePass: vi.fn().mockImplementation(function () {
     return {
       selectedObjects: [] as Object3D[],
       dispose: vi.fn(),
     }
   }),
+}))
+
+vi.mock('three/examples/jsm/controls/TransformControls.js', () => ({
   TransformControls: vi.fn().mockImplementation(function () {
     return {
       addEventListener: vi.fn(),
