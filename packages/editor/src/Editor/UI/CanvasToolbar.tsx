@@ -1,4 +1,4 @@
-import type { TransformControlsMode } from 'three/examples/jsm/Addons.js'
+import type { TransformControlsMode } from 'three/examples/jsm/controls/TransformControls.js'
 import type { ShadeMode } from '../../Editor'
 import { useEffect, useRef, useState } from 'react'
 import styles from './CanvasPanel.module.css'

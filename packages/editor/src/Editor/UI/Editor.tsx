@@ -19,7 +19,7 @@ function Editor() {
     <div className={styles.root}>
       <div className={styles.main}>
         <ActivityBar />
-        <Group defaultLayout={defaultLayout} onLayoutChange={onLayoutChanged} orientation="horizontal" className={styles.editor}>
+        <Group defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged} orientation="horizontal" className={styles.editor}>
           <Panel id="left" collapsible minSize={140} defaultSize={14} data-separator="active" className={styles.panel}>
             <div className={styles.panelContent}>
               <PanelHeader title="Explorer" />
