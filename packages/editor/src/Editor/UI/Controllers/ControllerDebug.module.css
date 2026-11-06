@@ -1,0 +1,227 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    font-size: var(--font-size-md);
+}
+
+.empty {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: var(--spacing-2xl) var(--spacing-lg);
+    line-height: 1.5;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    min-width: 0;
+}
+
+.badge {
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background-color: var(--accent-blue);
+    color: var(--text-bright);
+    border-radius: var(--radius-sm);
+    padding: 1px 6px;
+    flex-shrink: 0;
+}
+
+.gamepadId {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.meta {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+}
+
+.button {
+    background-color: var(--bg-active);
+    border: 1px solid var(--border-active);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-ui);
+    font-size: var(--font-size-sm);
+    padding: 2px var(--spacing-md);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.button:hover {
+    background-color: var(--bg-hover);
+}
+
+.warning {
+    color: var(--accent-yellow);
+    font-size: var(--font-size-sm);
+}
+
+.diagram {
+    width: 100%;
+    max-width: 360px;
+    align-self: center;
+}
+
+.body {
+    fill: var(--bg-panel);
+    stroke: var(--border-primary);
+}
+
+.part {
+    fill: var(--bg-hover);
+    stroke: var(--border-active);
+    stroke-width: 1;
+}
+
+.pressed {
+    fill: var(--accent-blue);
+    stroke: var(--text-bright);
+}
+
+.fill {
+    fill: var(--text-muted);
+}
+
+.fillPressed {
+    fill: var(--accent-blue);
+}
+
+.deadzone {
+    fill: none;
+    stroke: var(--accent-orange);
+    stroke-dasharray: 2 2;
+}
+
+.rawDot {
+    fill: var(--text-secondary);
+}
+
+.stickDot {
+    fill: var(--accent-green);
+}
+
+.tinyLabel,
+.faceLabel {
+    fill: var(--text-primary);
+    font-family: var(--font-ui);
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.tinyLabel {
+    font-size: 7px;
+}
+
+.faceLabel {
+    font-size: 8px;
+    font-weight: 600;
+}
+
+.sticks {
+    display: flex;
+    justify-content: space-around;
+    font-family: var(--font-mono);
+    color: var(--text-label);
+}
+
+.sectionTitle {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.row {
+    display: grid;
+    grid-template-columns: 110px 1fr 48px;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: var(--text-label);
+}
+
+.rowPressed {
+    color: var(--text-bright);
+}
+
+.rowLabel {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rowValue {
+    font-family: var(--font-mono);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bar {
+    position: relative;
+    height: 6px;
+    background-color: var(--bg-input);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.barCenter {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--border-active);
+}
+
+.barFill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: var(--accent-blue);
+}
+
+.log {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    color: var(--text-label);
+}
+
+.logEmpty {
+    color: var(--text-muted);
+}
+
+.logEntry {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.logTime {
+    color: var(--text-muted);
+    margin-right: var(--spacing-md);
+}
