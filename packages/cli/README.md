@@ -6,7 +6,7 @@ Requires Node 24 or newer.
 
 ```sh
 npm install -D @mavonengine/cli
-npx mavonengine --help
+npx @mavonengine/cli --help
 ```
 
 ## `mavonengine create`
@@ -35,10 +35,10 @@ Runs the `dev` script of the MavonEngine project you are in and shows the [dashb
 While the game server starts, a startup screen shows the latest output of the dev script; the dashboard takes over as soon as the server answers. Once the server is up, the game it serves opens in your default browser (not over SSH, and only if the server answers `/` with a page); `--no-open` turns that off, and `o` opens it again any time. Quitting the dashboard (`q` or Ctrl-C) stops the dev script and everything it started. If the dev script exits on its own, the dashboard closes and its output is printed.
 
 ```sh
-npx mavonengine dev
+npx @mavonengine/cli dev
 
 # From somewhere else
-npx mavonengine dev --cwd path/to/my-game
+npx @mavonengine/cli dev --cwd path/to/my-game
 ```
 
 The project root is the nearest `package.json`, from the current directory upwards, that depends on `@mavonengine/core` and has a `dev` script, so it also works from inside `client/` or `server/`. The package manager comes from the lockfile (`npm`, `pnpm`, `yarn` or `bun`, default `npm`). Without an interactive terminal, or with `--no-dashboard`, the dev script's output goes straight to the terminal instead. Ctrl-C stops everything, and the command exits with the dev script's exit code.
@@ -52,6 +52,51 @@ The project root is the nearest `package.json`, from the current directory upwar
 | `--transparent` | | Let a transparent terminal background show through |
 | `--no-open` | | Don't open the game in the browser once the server is up |
 
+## `mavonengine install`
+
+Installs packages into the project you are in, with its package manager. For each one that is a MavonEngine [plugin](#writing-a-plugin), it shows where the plugin runs (client, server or both) and which prefabs it brings, and asks whether to add it to the `plugins` in `mavonengine.json`. Registered plugins load on the client and/or the game server and are built into the release.
+
+```sh
+npx @mavonengine/cli install my-custom-plugin
+
+# Anything your package manager takes
+npx @mavonengine/cli install @acme/forest@^2 file:../my-plugin --yes
+```
+
+`mavonengine.json` sits in the project root, next to `package.json`, and is created if it doesn't exist:
+
+```json
+{
+  "plugins": {
+    "my-custom-plugin": { "enabled": true, "prefabs": ["Tree"], "options": { "density": 2 } }
+  }
+}
+```
+
+- `enabled`: set to `false` to turn a plugin off without uninstalling it.
+- `prefabs`: the plugin prefabs the project uses. The editor adds a prefab here when you place it, and you can edit the list by hand. Only the assets of these prefabs (plus the plugin's shared assets) go into the release.
+- `options`: passed to the plugin as `ctx.options`.
+
+The client reloads when the plugins in `mavonengine.json` change. Restart the game server to load a new server plugin. Without an interactive terminal it only installs, unless `--yes` is given.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+| `-y`, `--yes` | | Add plugins to `mavonengine.json` without asking |
+| `--no-register` | | Only install |
+
+## `mavonengine build`
+
+Runs the project's `build` script, then lists what each plugin put into the release. Plugin assets are copied into the client's output under `plugins/<package>/`. Only the shared ones and those of the prefabs in `mavonengine.json` are copied. The client skips loading the others, so a release never requests a file it doesn't contain.
+
+```sh
+npx @mavonengine/cli build
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+
 ## `mavonengine dashboard`
 
 A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui).
@@ -60,13 +105,13 @@ It shows CPU, network bandwidth, tick timings against the tick budget, world/phy
 
 ```sh
 # Local server on the default HTTP port (8050)
-npx mavonengine dashboard
+npx @mavonengine/cli dashboard
 
 # Remote server with a metrics token
-MAVONENGINE_METRICS_TOKEN=secret npx mavonengine dashboard --host game.example.com --port 8050
+MAVONENGINE_METRICS_TOKEN=secret npx @mavonengine/cli dashboard --host game.example.com --port 8050
 
 # No server needed: simulated data
-npx mavonengine dashboard --sim
+npx @mavonengine/cli dashboard --sim
 ```
 
 | Option | Default | |
@@ -105,3 +150,90 @@ const server = new MyServer(logger, physicsWorld, {
 - With `NODE_ENV=production` and no token, the endpoint is turned off.
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
+
+## Writing a plugin
+
+A plugin is an npm package with a `mavonengine` field in its `package.json`:
+
+```json
+{
+  "name": "my-custom-plugin",
+  "type": "module",
+  "mavonengine": {
+    "target": "both",
+    "client": "./dist/client.js",
+    "server": "./dist/server.js",
+    "engine": "^0.0.22",
+    "assets": {
+      "dir": "./assets",
+      "shared": ["textures/bark.png"],
+      "prefabs": {
+        "Tree": ["models/tree.glb"],
+        "Rock": ["models/rock.glb"]
+      }
+    }
+  }
+}
+```
+
+- `target`: `client`, `server` or `both`. The matching entries are required.
+- `assets`: paths relative to `dir` (default `assets`). They are served at `/plugins/<package>/<path>`: all of them in dev, and only the shared ones and those of used prefabs in a release.
+
+Each entry default-exports the plugin. Every hook gets the plugin's context last, which carries `package`, `options`, `game` and `logger`.
+
+```ts
+// client.ts
+import { defineClientPlugin } from '@mavonengine/core/Plugins/types'
+
+export default defineClientPlugin({
+  assets: ctx => [{ name: 'tree', type: 'gltfModel', path: ctx.assetUrl('models/tree.glb') }],
+  setup(ctx) {
+    ctx.registerPrefab({
+      name: 'Tree',
+      spawn: position => ({ object: new Tree(position) }),
+    })
+  },
+  update(delta, ctx) {},
+  // Dev only, when the editor boots
+  editor(ctx) {
+    ctx.editor.on('objectSelected', () => {})
+  },
+})
+```
+
+```ts
+// server.ts
+import { defineServerPlugin } from '@mavonengine/core/Plugins/types'
+
+export default defineServerPlugin({
+  setup(ctx) {},
+  // Runs after the server's own onHttp routes, before the game client
+  http(app, ctx) {
+    app.get('/api/my-plugin/status', (_req, res) => res.json({ ok: true }))
+  },
+  onConnection(channel, client, ctx) {},
+  onDisconnect(channel, ctx) {},
+  tick(delta, ctx) {},
+  destroy(ctx) {},
+})
+```
+
+A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
+
+```ts
+// client: Game.usePlugins() before new Game()
+import Game from '@mavonengine/core/Game'
+import plugins from 'virtual:mavonengine/plugins'
+
+Game.usePlugins(plugins)
+```
+
+```ts
+// server: the directory with mavonengine.json
+const server = new MyServer(logger, physicsWorld, { plugins: { root: projectRoot } })
+await server.start()
+```
+
+The client's Vite config needs to extend `@mavonengine/core/vite.config`, which provides `virtual:mavonengine/plugins`, serves plugin assets in dev and copies them into the release.

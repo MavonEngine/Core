@@ -1,8 +1,10 @@
 import process from 'node:process'
 import { version } from '../package.json'
+import { BUILD_HELP, parseBuildArgs, runBuildCommand } from './commands/build'
 import { CREATE_HELP, parseCreateArgs, runCreateCommand } from './commands/create'
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
+import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
 
 const HELP = `Usage: mavonengine <command> [options]
 
@@ -10,6 +12,8 @@ Commands:
   create       Create a project from the multiplayer template and start it
   dashboard    Live terminal dashboard for a running game server
   dev          Run the project's dev servers (game server and client)
+  install      Install packages and register engine plugins in mavonengine.json
+  build        Build the project for release, with the plugin assets it uses
 
 Options:
   -h, --help       Show help
@@ -68,6 +72,28 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runDevCommand(options)
+  }
+
+  if (command === 'install' || command === 'i' || command === 'add') {
+    const options = parseInstallArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(INSTALL_HELP)
+      return 0
+    }
+
+    return runInstallCommand(options)
+  }
+
+  if (command === 'build') {
+    const options = parseBuildArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(BUILD_HELP)
+      return 0
+    }
+
+    return runBuildCommand(options)
   }
 
   throw new UsageError(`Unknown command '${command}'\n\n${HELP}`)

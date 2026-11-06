@@ -1,0 +1,19 @@
+{
+  "name": "hello-plugin",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fixture engine plugin for e2e/plugin/run.mjs",
+  "mavonengine": {
+    "target": "both",
+    "client": "./client.js",
+    "server": "./server.js",
+    "assets": {
+      "shared": ["textures/shared.txt"],
+      "prefabs": {
+        "Tree": ["models/tree.gltf"],
+        "Rock": ["models/rock.gltf"]
+      }
+    }
+  }
+}

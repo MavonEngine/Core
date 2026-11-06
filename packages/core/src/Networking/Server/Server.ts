@@ -2,6 +2,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
 import type winston from 'winston'
+import type { LoadedPlugin, ServerPlugin, ServerPluginContext } from '../../Plugins/types'
 import type GameObject from '../../World/GameObject'
 import type NetworkedActor from '../NetworkedActor'
 import type { ClientCommand, CommandPacket, IncomingClientCommandPacket } from './Commands'
@@ -12,6 +13,8 @@ import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMe
 import { Buffer } from 'node:buffer'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
+import PluginHost from '../../Plugins/PluginHost'
 import Player from '../Entities/Player'
 import { ServerCommand } from './Commands'
 import HttpServer from './Http/HttpServer'
@@ -51,6 +54,20 @@ export interface ServerOptions {
     /** How many recent HTTP requests are kept for GET /api/game/requests. 0 turns it off. Default 500 */
     requestLogSize?: number
   }
+
+  /**
+   * Engine plugins to run. With `{ root }` the plugins enabled in `<root>/mavonengine.json` are imported
+   * when the server starts; or pass plugin objects directly.
+   */
+  plugins?: (ServerPlugin | LoadedPlugin<ServerPlugin>)[] | { root: string }
+}
+
+function toLoadedPlugin(plugin: ServerPlugin | LoadedPlugin<ServerPlugin>, index: number): LoadedPlugin<ServerPlugin> {
+  if ('plugin' in plugin && 'package' in plugin)
+    return plugin as LoadedPlugin<ServerPlugin>
+
+  const bare = plugin as ServerPlugin
+  return { package: bare.name ?? `plugin-${index}`, options: {}, plugin: bare }
 }
 
 export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource {
@@ -75,6 +92,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private commandsProcessedThisTick = 0
   private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
+
+  /** The running plugins, once `start()` has loaded them */
+  plugins?: PluginHost<ServerPlugin, ServerPluginContext>
 
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
@@ -123,6 +143,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
       this.logger.info(`${(this.game.world as ServerWorld).players.length} total players connected`)
 
+      this.plugins?.run('onConnection', channel, client)
+
       channel.on('ping', () => {
         const pong = () => channel.emit('pong')
 
@@ -137,6 +159,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       channel.onDisconnect(() => {
         const playerId = channel.id!
         const disconnectedPlayer = BaseGame.instance().world.entities.items.get(playerId) as Player
+
+        this.plugins?.run('onDisconnect', channel)
 
         if (!disconnectedPlayer)
           return
@@ -203,6 +227,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.commandsProcessedThisTick += this.runThroughBuffer()
 
     this.onTick(delta)
+    this.plugins?.run('tick', delta)
     this.stateSync()
   }
 
@@ -346,7 +371,33 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.onHttpCallback = callback
   }
 
-  start() {
+  /**
+   * Start the HTTP server and the game socket. With `options.plugins.root` the plugins are imported first,
+   * so wait for the returned promise before relying on them; otherwise everything starts synchronously.
+   */
+  start(): Promise<void> {
+    const plugins = this.options.plugins
+    if (plugins && !Array.isArray(plugins)) {
+      return loadServerPlugins(plugins.root).then(({ plugins: loaded, warnings }) => {
+        warnings.forEach(warning => this.logger.warn(`Plugin skipped: ${warning}`))
+        this.startServer(loaded)
+      })
+    }
+
+    this.startServer((plugins ?? []).map(toLoadedPlugin))
+    return Promise.resolve()
+  }
+
+  private startServer(plugins: LoadedPlugin<ServerPlugin>[]) {
+    this.plugins = new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
+      package: loaded.package,
+      options: loaded.options,
+      game: this.game,
+      logger: this.logger,
+      server: this as unknown as Server<GameObject>,
+    }), this.logger, 'server')
+    this.plugins.run('setup')
+
     this.http.start()
     this.startMetrics()
 
@@ -356,6 +407,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     if (this.onHttpCallback) {
       this.onHttpCallback(this.httpServer)
     }
+
+    this.plugins.run('http', this.httpServer)
 
     // Last, because the client answers every page request the routes above leave
     const servesClient = this.http.serveClient() && !!this.http.server
@@ -374,11 +427,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
-   * Stop the metric sampling and logging timers
+   * Stop the metric sampling and logging timers and the plugins
    */
   stop() {
     this.timers.forEach(timer => clearInterval(timer))
     this.timers = []
+
+    this.plugins?.run('destroy')
+    this.plugins = undefined
   }
 
   private startMetrics() {

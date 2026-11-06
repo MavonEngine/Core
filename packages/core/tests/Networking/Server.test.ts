@@ -325,6 +325,77 @@ describe('server', () => {
     expect(listen).toHaveBeenCalledWith(8081)
   })
 
+  describe('plugins', () => {
+    function startable(server: TestServer) {
+      ;(server.gameSocket as any).listen = vi.fn()
+      vi.spyOn(server.http, 'start').mockImplementation(() => {})
+      return server
+    }
+
+    it('runs setup, then plugin routes after onHttp and before the client', async () => {
+      const order: string[] = []
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [{
+          name: 'routes',
+          setup: ctx => order.push(`setup:${ctx.package}:${ctx.server === server}`),
+          http: (app, ctx) => order.push(`http:${app === ctx.server.httpServer}`),
+        }],
+      }))
+      server.onHttp(() => order.push('onHttp'))
+      vi.spyOn(server.http, 'serveClient').mockImplementation(() => {
+        order.push('client')
+        return false
+      })
+
+      await server.start()
+      server.stop()
+
+      expect(order).toEqual(['setup:routes:true', 'onHttp', 'http:true', 'client'])
+    })
+
+    it('passes the options of loaded plugins to their context', async () => {
+      const setup = vi.fn()
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [{ package: 'forest', options: { density: 2 }, plugin: { setup } }],
+      }))
+
+      await server.start()
+      server.stop()
+
+      expect(setup.mock.calls[0][0]).toMatchObject({ package: 'forest', options: { density: 2 } })
+    })
+
+    it('ticks plugins with the server and tells them about connections', () => {
+      const tick = vi.fn()
+      const onConnection = vi.fn()
+      const onDisconnect = vi.fn()
+      const server = startable(new TestServer(logger, undefined, { plugins: [{ tick, onConnection, onDisconnect }] }))
+      server.start()
+
+      let disconnect = () => {}
+      const channel = { id: 'p1', on: vi.fn(), onDisconnect: (cb: () => void) => (disconnect = cb) }
+      mockGeckosOnConnection.mock.calls[0][0](channel)
+      server.game.update(0.1)
+      disconnect()
+      server.stop()
+
+      expect(onConnection).toHaveBeenCalledWith(channel, expect.any(TestClient), expect.objectContaining({ server }))
+      expect(tick).toHaveBeenCalledWith(0.1, expect.anything())
+      expect(onDisconnect).toHaveBeenCalledWith(channel, expect.anything())
+    })
+
+    it('destroys plugins when it stops', () => {
+      const destroy = vi.fn()
+      const server = startable(new TestServer(logger, undefined, { plugins: [{ destroy }] }))
+
+      server.start()
+      server.stop()
+
+      expect(destroy).toHaveBeenCalledTimes(1)
+      expect(server.plugins).toBeUndefined()
+    })
+  })
+
   it('captures log output for the logs endpoint', () => {
     const logger = winston.createLogger({ level: 'info', transports: [] })
     const server = new TestServer(logger)
