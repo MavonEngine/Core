@@ -6,13 +6,13 @@ const GLSL_FILTER = /\.glsl$/
 
 const mavonEngineGlslPlugin = {
   name: 'glsl',
-  setup(build) {
-    build.onLoad({ filter: GLSL_FILTER }, (args) => {
-      return {
-        contents: `export default ${JSON.stringify(readFileSync(args.path, 'utf8'))}`,
-        loader: 'js',
-      }
-    })
+  load(id) {
+    if (!GLSL_FILTER.test(id))
+      return null
+    return {
+      code: `export default ${JSON.stringify(readFileSync(id, 'utf8'))}`,
+      moduleType: 'js',
+    }
   },
 }
 
@@ -21,7 +21,7 @@ export default defineConfig({
     glsl(),
   ],
   optimizeDeps: {
-    esbuildOptions: {
+    rolldownOptions: {
       plugins: [
         mavonEngineGlslPlugin,
       ],

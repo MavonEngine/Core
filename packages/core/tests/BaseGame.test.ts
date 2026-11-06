@@ -10,9 +10,11 @@ vi.mock('three', async () => {
   const actual = await vi.importActual<typeof import('three')>('three')
   return {
     ...actual,
-    Clock: vi.fn().mockImplementation(() => ({
-      start: vi.fn(),
-    })),
+    Clock: vi.fn().mockImplementation(function () {
+      return {
+        start: vi.fn(),
+      }
+    }),
   }
 })
 

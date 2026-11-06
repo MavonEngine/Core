@@ -27,24 +27,30 @@ beforeAll(() => {
 })
 
 vi.mock('three/examples/jsm/Addons.js', () => ({
-  FlyControls: vi.fn().mockImplementation(() => ({
-    autoForward: false,
-    dragToLook: false,
-    movementSpeed: 0,
-    rollSpeed: 0,
-    update: vi.fn(),
-  })),
-  OutlinePass: vi.fn().mockImplementation(() => ({
-    selectedObjects: [] as Object3D[],
-    dispose: vi.fn(),
-  })),
-  TransformControls: vi.fn().mockImplementation(() => ({
-    addEventListener: vi.fn(),
-    getHelper: vi.fn().mockReturnValue(new Object3D()),
-    setMode: vi.fn(),
-    attach: vi.fn(),
-    detach: vi.fn(),
-  })),
+  FlyControls: vi.fn().mockImplementation(function () {
+    return {
+      autoForward: false,
+      dragToLook: false,
+      movementSpeed: 0,
+      rollSpeed: 0,
+      update: vi.fn(),
+    }
+  }),
+  OutlinePass: vi.fn().mockImplementation(function () {
+    return {
+      selectedObjects: [] as Object3D[],
+      dispose: vi.fn(),
+    }
+  }),
+  TransformControls: vi.fn().mockImplementation(function () {
+    return {
+      addEventListener: vi.fn(),
+      getHelper: vi.fn().mockReturnValue(new Object3D()),
+      setMode: vi.fn(),
+      attach: vi.fn(),
+      detach: vi.fn(),
+    }
+  }),
 }))
 
 vi.mock('../src/Editor/mount', () => ({
