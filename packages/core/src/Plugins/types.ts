@@ -41,6 +41,8 @@ export interface EditorPluginContext extends ClientPluginContext {
 
 export interface ServerPluginContext extends PluginContextBase<BaseGame> {
   readonly server: Server<GameObject>
+  /** Directory with mavonengine.json, when the plugins were loaded from it */
+  readonly projectRoot?: string
 }
 
 interface PluginBase<TContext> {

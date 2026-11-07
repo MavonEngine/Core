@@ -1,0 +1,59 @@
+{
+  "name": "@mavonengine/http-monitoring",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine plugin: the game server dashboard in the browser, behind HTTP Basic auth",
+  "license": "MIT",
+  "keywords": [
+    "mavonengine",
+    "mavonengine-plugin",
+    "monitoring",
+    "dashboard",
+    "game-server",
+    "htpasswd"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "ui"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@mavonengine/core": ">=0.0.22"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3"
+  },
+  "devDependencies": {
+    "@mavonengine/core": "*",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "express": "5.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "mavonengine": {
+    "target": "server",
+    "server": "./dist/index.js",
+    "engine": ">=0.0.22"
+  }
+}

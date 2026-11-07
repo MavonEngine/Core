@@ -99,7 +99,7 @@ npx @mavonengine/cli build
 
 ## `mavonengine dashboard`
 
-A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui).
+A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui). For the same dashboard in a browser, behind a login, see the [`@mavonengine/http-monitoring`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/http-monitoring) plugin.
 
 It shows CPU, network bandwidth, tick timings against the tick budget, world/physics/memory stats, the connected players, the server's recent log output and the HTTP requests it received. It reads them from the server's `GET /api/game/metrics`, `GET /api/game/logs` and `GET /api/game/requests` endpoints, which need a `@mavonengine/core` release that includes them.
 

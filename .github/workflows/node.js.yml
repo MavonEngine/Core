@@ -49,6 +49,10 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/cli
 
+    - name: Typecheck http-monitoring plugin
+      run: npm run typecheck
+      working-directory: ./packages/plugins/http-monitoring
+
     # Run the built file directly: npm ci runs before the build, so npm skipped
     # linking the `mavonengine` bin (its target didn't exist yet) and npx would
     # fall back to looking it up on the registry

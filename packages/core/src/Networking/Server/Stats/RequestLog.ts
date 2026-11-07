@@ -40,6 +40,7 @@ const STATUS_LINE_RE = /^HTTP\/\d(?:\.\d)? (\d{3})/
 export default class RequestLog {
   private entries: RequestLogEntry[] = []
   private nextId = 1
+  private ignoredPrefixes: string[] = []
 
   constructor(private capacity = 500) { }
 
@@ -56,6 +57,14 @@ export default class RequestLog {
       if (server.listenerCount('upgrade') === 1)
         socket.destroy()
     })
+  }
+
+  /**
+   * Stop recording requests whose path starts with `prefix`, e.g. a dashboard's own polling.
+   */
+  ignorePrefix(prefix: string) {
+    if (!this.ignoredPrefixes.includes(prefix))
+      this.ignoredPrefixes.push(prefix)
   }
 
   push(entry: Omit<RequestLogEntry, 'id'>) {
@@ -77,7 +86,7 @@ export default class RequestLog {
 
   private onRequest(req: IncomingMessage, res: ServerResponse) {
     const path = pathOf(req)
-    if (UNLOGGED_PATHS.has(path))
+    if (UNLOGGED_PATHS.has(path) || this.ignoredPrefixes.some(prefix => path.startsWith(prefix)))
       return
 
     const timestamp = Date.now()

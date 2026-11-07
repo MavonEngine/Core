@@ -73,6 +73,18 @@ describe('requestLog', () => {
     expect(log.since().entries.map(e => e.path)).toEqual(['/api/game/health'])
   })
 
+  it('skips paths under an ignored prefix', async () => {
+    const { log, port } = await listen((_req, res) => res.end())
+    log.ignorePrefix('/monitoring/api/')
+    log.ignorePrefix('/monitoring/api/')
+
+    await fetch(`http://127.0.0.1:${port}/monitoring/api/metrics`)
+    await fetch(`http://127.0.0.1:${port}/monitoring/`)
+    await settle()
+
+    expect(log.since().entries.map(e => e.path)).toEqual(['/monitoring/'])
+  })
+
   it('records WebSocket upgrades with the handshake status', async () => {
     const { log, port } = await listen((_req, res) => res.end())
     server!.on('upgrade', (_req, socket) => {

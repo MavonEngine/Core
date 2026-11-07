@@ -5,7 +5,8 @@
     "packages/bootstrap",
     "packages/core",
     "packages/editor",
-    "packages/cli"
+    "packages/cli",
+    "packages/plugins/*"
   ],
   "devDependencies": {
     "@antfu/eslint-config": "8.0.0",

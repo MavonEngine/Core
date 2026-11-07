@@ -1,10 +1,12 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type ServerWorld from '../../src/Networking/Server/World'
+import { rmSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
 import { ServerCommand } from '../../src/Networking/Server/Commands'
 import Server from '../../src/Networking/Server/Server'
+import { installPlugin, tempProject, writeConfig } from '../Plugins/fixtures'
 
 const mockGeckosOnConnection = vi.fn()
 
@@ -382,6 +384,21 @@ describe('server', () => {
       expect(onConnection).toHaveBeenCalledWith(channel, expect.any(TestClient), expect.objectContaining({ server }))
       expect(tick).toHaveBeenCalledWith(0.1, expect.anything())
       expect(onDisconnect).toHaveBeenCalledWith(channel, expect.anything())
+    })
+
+    it('tells plugins loaded from mavonengine.json their project root', async () => {
+      const root = tempProject()
+      installPlugin(root, 'probe', { target: 'server', server: './server.js' }, {
+        'server.js': 'export default { setup(ctx) { globalThis.probeRoot = ctx.projectRoot } }',
+      })
+      writeConfig(root, { plugins: { probe: {} } })
+      const server = startable(new TestServer(logger, undefined, { plugins: { root } }))
+
+      await server.start()
+      server.stop()
+      rmSync(root, { recursive: true, force: true })
+
+      expect((globalThis as any).probeRoot).toBe(root)
     })
 
     it('destroys plugins when it stops', () => {
