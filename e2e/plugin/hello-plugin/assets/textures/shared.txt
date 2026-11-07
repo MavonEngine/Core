@@ -1,0 +1,1 @@
+Shipped with every release that uses hello-plugin

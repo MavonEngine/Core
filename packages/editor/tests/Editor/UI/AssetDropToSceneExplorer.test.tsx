@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
 import Game from '@mavonengine/core/Game'
+import { PREFAB_USED_PATH } from '@mavonengine/core/Plugins/types'
+import { registerPrefab, unregisterPrefab } from '@mavonengine/core/Prefab/PrefabRegistry'
 import EventEmitter from '@mavonengine/core/Utils/EventEmitter'
 import { act, cleanup, render, screen } from '@testing-library/react'
 
 import { Object3D, Scene, Vector3 } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetRecordedPrefabs } from '../../../src/Editor/recordPrefabUsage'
 import Assets from '../../../src/Editor/UI/Assets/Assets'
 import SceneExplorer from '../../../src/Editor/UI/SceneExplorer'
 
@@ -261,6 +264,67 @@ describe('dropped assets appear in SceneExplorer', () => {
       })
 
       expect(game.world.add).not.toHaveBeenCalled()
+    })
+  })
+  describe('prefabs', () => {
+    const fetchMock = vi.fn()
+    const spawnTree = vi.fn()
+
+    beforeEach(() => {
+      fetchMock.mockReset().mockResolvedValue({ ok: true })
+      vi.stubGlobal('fetch', fetchMock)
+      resetRecordedPrefabs()
+      spawnTree.mockReset().mockReturnValue({ object: new Object3D() })
+      registerPrefab({ name: 'Tree', plugin: 'forest', spawn: spawnTree })
+    })
+
+    afterEach(() => {
+      unregisterPrefab('forest:Tree')
+      vi.unstubAllGlobals()
+    })
+
+    it('lists the built-in prefabs and the ones plugins registered', () => {
+      ;(editor as any).activeAssetCategory = 'Prefabs'
+      render(<Assets />)
+
+      screen.getByText('Water')
+      screen.getByText('Grass')
+      expect(screen.getByText('Tree').getAttribute('title')).toBe('Tree (forest)')
+    })
+
+    it('spawns a dropped plugin prefab and records that the project uses it', () => {
+      render(<Assets />)
+      const handler = vi.fn()
+      editor.on('assetDropped', handler)
+
+      act(() => {
+        game.canvas.dispatchEvent(createDropEvent('application/mavonengine-prefab', 'forest:Tree'))
+        game.canvas.dispatchEvent(createDropEvent('application/mavonengine-prefab', 'forest:Tree'))
+      })
+
+      expect(spawnTree).toHaveBeenCalledTimes(2)
+      expect(game.world.add).toHaveBeenCalledTimes(2)
+      expect(Object.keys(game.world.add.mock.calls[0][0])[0]).toMatch(/^prefab_forest_tree_\d+$/)
+      expect(handler).toHaveBeenCalled()
+      // Once per session
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(PREFAB_USED_PATH, expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ plugin: 'forest', prefab: 'Tree' }),
+      }))
+    })
+
+    it('records nothing for built-in prefabs or prefabs that decline to spawn', () => {
+      render(<Assets />)
+
+      act(() => {
+        // No grass resources loaded, so Grass declines
+        game.canvas.dispatchEvent(createDropEvent('application/mavonengine-prefab', 'Grass'))
+      })
+
+      expect(game.world.add).not.toHaveBeenCalled()
+      expect(game.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Grass prefab requires'))
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

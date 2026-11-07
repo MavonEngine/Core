@@ -1,10 +1,14 @@
 import type { App } from 'vue'
 import RAPIER from '@dimforge/rapier3d-compat'
 import Game from '@mavonengine/core/Game'
+import plugins from 'virtual:mavonengine/plugins'
 import { createApp } from 'vue'
 import GameWorld from './Scenes/GameWorld'
 import Frame from './UI/Frame.vue'
 import './game.css'
+
+// Engine plugins from mavonengine.json, see `mavonengine install`
+Game.usePlugins(plugins)
 
 if (import.meta.env.DEV) {
   Game.devModeHook = () => {
