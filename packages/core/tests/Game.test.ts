@@ -28,7 +28,7 @@ const mockDebug = {}
 const mockLoadingScreen = { update: vi.fn() }
 const mockLogger = { info: vi.fn(), debug: vi.fn(), error: vi.fn(), emerg: vi.fn() }
 const mockParticleSystem = { update: vi.fn() }
-const mockInputManager = {}
+const mockInputManager = { update: vi.fn() }
 const mockClientGameWorld = { update: vi.fn(), entities: { items: new Map() } }
 
 vi.mock('../src/Camera', () => ({
@@ -210,6 +210,14 @@ describe('game', () => {
     game.update(0.016)
     expect(mockLoadingScreen.update).toHaveBeenCalledWith(0.016)
     expect(mockCamera.update).toHaveBeenCalledWith(0.016)
+  })
+
+  it('update() polls input before updating the world', () => {
+    const game = new Game([])
+    game.update(0.016)
+    expect(mockInputManager.update).toHaveBeenCalled()
+    expect(mockInputManager.update.mock.invocationCallOrder[0])
+      .toBeLessThan(mockClientGameWorld.update.mock.invocationCallOrder[0])
   })
 
   it('update() calls editor.update when editor is set', () => {

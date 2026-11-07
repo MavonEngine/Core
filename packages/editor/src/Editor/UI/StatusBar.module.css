@@ -36,3 +36,19 @@
     font-family: var(--font-ui);
     font-weight: 600;
 }
+
+.statButton {
+    align-items: center;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: inherit;
+    padding: 0 var(--spacing-sm);
+    height: 18px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.statButton:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}

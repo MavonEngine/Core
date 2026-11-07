@@ -1,5 +1,6 @@
 import { Group, Mesh, Object3D, Vector2 } from 'three'
 import Game from './Game'
+import GamepadManager from './GamepadManager'
 import EventEmitter from './Utils/EventEmitter'
 
 export default class InputManager extends EventEmitter {
@@ -7,6 +8,9 @@ export default class InputManager extends EventEmitter {
   mousePressed: Map<number, true> = new Map()
 
   cursor = new Vector2()
+
+  /** Connected game controllers (Xbox, PlayStation, generic) */
+  readonly gamepads = new GamepadManager()
 
   constructor() {
     super()
@@ -37,6 +41,14 @@ export default class InputManager extends EventEmitter {
         -(ev.clientY / Game.instance().sizes.height * 2 - 1),
       )
     })
+  }
+
+  /**
+   * Poll devices that do not push events, like gamepads.
+   * Called by Game once per update before the world updates.
+   */
+  update() {
+    this.gamepads.poll()
   }
 
   /**

@@ -219,6 +219,8 @@ export default class Game extends BaseGame {
 
     this.loadingScreen.update(delta)
 
+    this.input.update()
+
     super.update(delta)
     this.plugins.run('update', delta)
 
