@@ -4,6 +4,11 @@
   "version": "0.0.1",
   "description": "MavonEngine plugin: the game server dashboard in the browser, behind HTTP Basic auth",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MavonEngine/Core.git",
+    "directory": "packages/plugins/http-monitoring"
+  },
   "keywords": [
     "mavonengine",
     "mavonengine-plugin",

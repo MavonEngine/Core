@@ -1,5 +1,7 @@
 # @mavonengine/http-monitoring
 
+![The Overview tab with sample data: CPU, network and tick charts, world stats, players and logs](docs/screenshot.png)
+
 A [MavonEngine](https://mavonengine.com) plugin that serves the game server dashboard in the browser. It has the same tabs and data as [`mavonengine dashboard`](https://github.com/MavonEngine/Core/tree/main/packages/cli#mavonengine-dashboard): Overview, Players, Logs and HTTP. It runs inside the game server and sits behind HTTP Basic auth, with users from an htpasswd file.
 
 ```sh

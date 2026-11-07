@@ -224,7 +224,8 @@ main {
 .chart {
   position: relative;
   height: 9em;
-  padding-left: 4.5em;
+  /* Room for rate labels like 433.2 KiB/s on one line */
+  padding-left: 7.5em;
 }
 
 .chart svg {
@@ -237,8 +238,9 @@ main {
 .chart .axis {
   position: absolute;
   left: 0;
-  width: 4em;
+  width: 7em;
   text-align: right;
+  white-space: nowrap;
   font-size: 11px;
   color: var(--muted);
 }
