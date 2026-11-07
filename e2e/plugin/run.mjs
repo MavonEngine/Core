@@ -12,104 +12,17 @@
  *
  *   node e2e/plugin/run.mjs
  */
-import { spawn } from 'node:child_process'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { base, check, cli, isWindows, log, readJson, run, startServer, status, template, withPathFirst } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const repo = resolve(here, '../..')
-const template = join(repo, 'packages/multiplayer-template')
-const cli = join(repo, 'packages/cli/dist/index.js')
 const fixture = join(here, 'hello-plugin')
 const PLUGIN = 'hello-plugin'
-const PORT = 8050
-const base = `http://localhost:${PORT}`
-const isWindows = process.platform === 'win32'
-
-const log = text => process.stdout.write(`${text}\n`)
-
-function check(condition, message) {
-  if (!condition)
-    throw new Error(`check failed: ${message}`)
-  log(`  ok  ${message}`)
-}
-
-/** The env with `dir` first on the PATH. Windows spells the key Path, and a second PATH key would be ambiguous */
-function withPathFirst(dir) {
-  const env = { ...process.env }
-  const key = Object.keys(env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH'
-  env[key] = `${dir}${delimiter}${env[key] ?? ''}`
-  return env
-}
-
-/** Run a command to completion, printing its output, and resolve with that output */
-function run(command, args, { cwd, env = process.env }) {
-  return new Promise((resolvePromise, reject) => {
-    // npm is a .cmd shim on Windows
-    const child = spawn(command, args, { cwd, env, shell: isWindows && command !== process.execPath })
-    let output = ''
-    const keep = (chunk) => {
-      output += chunk
-      process.stdout.write(chunk)
-    }
-    child.stdout.setEncoding('utf8').on('data', keep)
-    child.stderr.setEncoding('utf8').on('data', keep)
-    child.on('error', reject)
-    child.on('exit', code => code === 0
-      ? resolvePromise(output)
-      : reject(new Error(`'${command} ${args.join(' ')}' exited with code ${code}`)))
-  })
-}
-
-/** Start the built template server and wait until it answers the health endpoint */
-async function startServer(env) {
-  const child = spawn(process.execPath, ['dist/index.js'], {
-    cwd: join(template, 'server'),
-    env: { ...process.env, ...env },
-  })
-  let output = ''
-  let exited = false
-  child.stdout.setEncoding('utf8').on('data', chunk => output += chunk)
-  child.stderr.setEncoding('utf8').on('data', chunk => output += chunk)
-  const exit = new Promise(resolvePromise => child.on('exit', () => {
-    exited = true
-    resolvePromise()
-  }))
-
-  const deadline = Date.now() + 30000
-  while (true) {
-    if (exited)
-      throw new Error(`the server exited during startup:\n${output}`)
-    if (Date.now() > deadline) {
-      child.kill()
-      throw new Error(`the server did not answer within 30s:\n${output}`)
-    }
-    try {
-      if ((await fetch(`${base}/api/game/health`)).ok)
-        break
-    }
-    catch {
-      // Not listening yet
-    }
-    await delay(250)
-  }
-
-  return {
-    output: () => output,
-    async stop() {
-      if (!exited)
-        child.kill()
-      await exit
-    },
-  }
-}
-
-const readJson = path => JSON.parse(readFileSync(path, 'utf8'))
-const status = async path => (await fetch(`${base}${path}`)).status
 
 async function main() {
   const packageJsonPath = join(template, 'package.json')

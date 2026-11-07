@@ -395,6 +395,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       game: this.game,
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
+      projectRoot: this.options.plugins && !Array.isArray(this.options.plugins) ? this.options.plugins.root : undefined,
     }), this.logger, 'server')
     this.plugins.run('setup')
 
