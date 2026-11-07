@@ -27,3 +27,4 @@ dist-ssr
 coverage
 *.tsbuildinfo
 packages/core/src/version.ts
+e2e/http-monitoring/screenshots

@@ -89,3 +89,17 @@ jobs:
     - name: Plugin end-to-end test
       timeout-minutes: 5
       run: npm run test:plugin-e2e
+
+    # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
+    # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
+    - name: Monitoring dashboard end-to-end test
+      timeout-minutes: 5
+      run: npm run test:monitoring-e2e
+
+    - name: Upload monitoring dashboard screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: monitoring-e2e-screenshots-${{ matrix.os }}
+        path: e2e/http-monitoring/screenshots
+        if-no-files-found: ignore
