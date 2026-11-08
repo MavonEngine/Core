@@ -76,7 +76,7 @@ and state reconciliation.
 - **Latency simulation** — Test your netcode against artificial latency, jitter and packet loss
 - **AI assistant support (MCP)** — `mavonengine mcp` lets any MCP client and model inspect the running game:
   server metrics, scenes and entities, the browser tabs' renderer stats, console and screenshots, and one entity
-  compared on server and client
+  compared on server and client. It also reads the documentation on mavonengine.com
 - **Full TypeScript** — Comprehensive types throughout
 
 ## AI Assistants
@@ -93,7 +93,8 @@ register it as a stdio server:
 }
 ```
 
-Every tool is read-only. Scene, entity and client tools only work in development; see the
+Every tool is read-only. Scene, entity and client tools only work in development; the docs tools read the live
+documentation on mavonengine.com. See the
 [CLI README](packages/cli/README.md#mavonengine-mcp) for the full list.
 
 ## Why a Three.js Game Engine with Multiplayer?

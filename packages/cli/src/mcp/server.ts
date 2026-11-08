@@ -1,8 +1,10 @@
+import type { DocsClient } from './docs'
 import type GameServerClient from './GameServerClient'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { version } from '../../package.json'
 import { registerClientTools } from './clientTools'
+import { registerDocsTools } from './docs'
 import { LOG_LEVELS, READ_ONLY, run, vec3 } from './result'
 
 const INSTRUCTIONS = `Reads the live state of a running MavonEngine game: the game server (health, performance, players, scene,
@@ -10,7 +12,8 @@ entities, logs, HTTP requests) and, in development, the game tabs open in a brow
 network state, console logs, screenshots). Every tool is read-only.
 Server scene / entity tools need the server in development (NODE_ENV is not "production"); client tools need the client
 served by Vite in dev. Start with server_status and list_clients. Use type / near filters rather than paging through a world.
-compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.`
+compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.
+docs_list_pages / docs_get_page read the MavonEngine documentation: check it before guessing how an engine API works.`
 
 /** The metrics snapshot without its per-second history arrays */
 function summarize(metrics: any) {
@@ -29,7 +32,10 @@ function levelOf(level: string) {
   return level.toLowerCase().replace(/[^a-z]/g, '')
 }
 
-export function createMcpServer(client: GameServerClient): McpServer {
+/**
+ * The MCP server with the game server and client tools, and the docs_* tools when `docs` is given (left out with `--no-docs`)
+ */
+export function createMcpServer(client: GameServerClient, docs?: DocsClient): McpServer {
   const server = new McpServer({ name: 'mavonengine', version }, { instructions: INSTRUCTIONS })
 
   server.registerTool('server_status', {
@@ -155,6 +161,8 @@ export function createMcpServer(client: GameServerClient): McpServer {
   }))
 
   registerClientTools(server, client)
+  if (docs)
+    registerDocsTools(server, docs)
 
   return server
 }

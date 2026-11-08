@@ -1,6 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+/** The documentation site's own MCP server, which `mavonengine mcp` passes the docs_* tools through to */
+export const DEFAULT_DOCS_URL = 'https://mavonengine.com/mcp'
+
 /** Name the game server's MCP server is registered under in the client's config */
 export const MCP_SERVER_NAME = 'mavonengine'
 

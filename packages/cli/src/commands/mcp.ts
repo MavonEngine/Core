@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { parseArgs } from 'node:util'
+import { DEFAULT_DOCS_URL } from '../mcp/config'
 import GameServerClient from '../mcp/GameServerClient'
 import { UsageError } from './dashboard'
 
@@ -27,11 +28,16 @@ Options:
   --client-url <url>   Where Vite serves the client in dev (default: the server URL,
                        which serves it in the template), e.g. http://localhost:5173
   --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
+  --docs-url <url>     MCP server of the documentation for the docs_* tools
+                       (default: https://mavonengine.com/mcp)
+  --no-docs            Leave out the docs_* tools, e.g. offline
   -h, --help           Show this help
 `
 
 export interface McpOptions {
   client: GameServerClient
+  /** The documentation's MCP server, false without the docs tools */
+  docsUrl: string | false
 }
 
 export function parseMcpArgs(args: string[], env: Record<string, string | undefined> = process.env): McpOptions | 'help' {
@@ -43,10 +49,13 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
       'url': { type: 'string' },
       'client-url': { type: 'string' },
       'token': { type: 'string' },
+      'docs-url': { type: 'string' },
+      'docs': { type: 'boolean', default: true },
       'help': { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
     allowPositionals: false,
+    allowNegative: true,
   })
 
   if (values.help)
@@ -62,7 +71,7 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     url = `http://${host}:${port}`
   }
 
-  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']]] as const) {
+  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']], ['--docs-url', values['docs-url']]] as const) {
     try {
       if (value !== undefined)
         void new URL(value)
@@ -72,20 +81,25 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     }
   }
 
-  return { client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }) }
+  return {
+    client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }),
+    docsUrl: values.docs ? (values['docs-url'] ?? DEFAULT_DOCS_URL) : false,
+  }
 }
 
 /**
  * Serve MCP on stdin / stdout until the client disconnects. stdout carries the protocol, so nothing else may write to it.
  */
-export async function runMcpCommand({ client }: McpOptions): Promise<number> {
+export async function runMcpCommand({ client, docsUrl }: McpOptions): Promise<number> {
   // Loaded lazily so the other commands don't pay for the MCP SDK
-  const [{ StdioServerTransport }, { createMcpServer }] = await Promise.all([
+  const [{ StdioServerTransport }, { createMcpServer }, { DocsClient }] = await Promise.all([
     import('@modelcontextprotocol/sdk/server/stdio.js'),
     import('../mcp/server'),
+    import('../mcp/docs'),
   ])
 
-  const server = createMcpServer(client)
+  const docs = docsUrl ? new DocsClient(docsUrl) : undefined
+  const server = createMcpServer(client, docs)
   const transport = new StdioServerTransport()
 
   const closed = new Promise<void>((resolve) => {
@@ -98,5 +112,6 @@ export async function runMcpCommand({ client }: McpOptions): Promise<number> {
 
   await closed
   await server.close().catch(() => {})
+  await docs?.close()
   return 0
 }

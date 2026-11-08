@@ -193,6 +193,15 @@ Client tools, for the game tabs open while Vite serves the client in dev:
 | `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
 | `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
 
+Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
+
+| Tool | |
+| --- | --- |
+| `docs_list_pages` | Every docs page with its path, title, description and category |
+| `docs_get_page` | One docs page as Markdown, by path (e.g. `/networking/state-sync`) |
+
+They connect to the site the first time one is used, so the other tools also work offline. `--docs-url` points them at another docs server, `--no-docs` leaves them out.
+
 Client tools take a `clientId` from `list_clients`. Without one they ask the only open tab, or the only one not running the editor.
 
 Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`). When Vite serves the client on its own port instead of through the game server, pass `--client-url`, e.g. `http://localhost:5173`.

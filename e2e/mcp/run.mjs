@@ -8,7 +8,8 @@
  *    output, a screenshot, and the player compared on server and client
  * 4. a second tab opens the editor: both tabs are listed, and `auto` still picks the player's tab
  *
- * Needs Chrome, core and the CLI built and the template's dependencies installed.
+ * Needs Chrome, core and the CLI built and the template's dependencies installed. The docs tools are left out
+ * (--no-docs): they read mavonengine.com, which CI shouldn't depend on.
  *
  *   node e2e/mcp/run.mjs
  */
@@ -60,7 +61,7 @@ async function main() {
 
     log('\n== mcp')
     mcp = new Client({ name: 'e2e', version: '0' })
-    await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--port', String(PORT)], stderr: 'ignore' }))
+    await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--port', String(PORT), '--no-docs'], stderr: 'ignore' }))
 
     const call = async (name, args = {}) => {
       const result = await mcp.callTool({ name, arguments: args })
