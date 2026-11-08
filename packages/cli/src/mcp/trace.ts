@@ -229,7 +229,9 @@ export interface TraceAnalysis {
   durationMs: number
   frames: number
   fps: number
+  /** The display rate, or renderer.maxFps when that caps rendering */
   refreshRate: number | null
+  maxFps: number
   budgetMs: number | null
   frameInterval: ReturnType<typeof stats>
   renderCpu: ReturnType<typeof stats>
@@ -253,7 +255,11 @@ export interface TraceAnalysis {
 export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): TraceAnalysis {
   const frames = capture.frames
   const intervals = frames.map(f => f.interval).filter((n): n is number => n !== null)
-  const hz = refreshRate(intervals)
+  const display = refreshRate(intervals)
+  // Frames capped by renderer.maxFps run at the cap, not the display's rate
+  const maxFps = capture.maxFps ?? 0
+  const capped = maxFps > 0 && (display === null || maxFps < display * 1.05)
+  const hz = capped ? maxFps : display
   const budgetMs = hz ? 1000 / hz : null
   const medianInterval = percentile(intervals, 50)
   const gpuTimes = frames.map(f => f.gpu).filter((n): n is number => n !== null)
@@ -265,6 +271,8 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     notes.push('The tab was in the background: browsers throttle or stop rendering hidden tabs, so bring it to the front and trace again')
   if (frames.length < 2)
     notes.push('Fewer than two frames rendered while tracing: the tab is hidden, frozen or stuck before its first frame')
+  if (capped)
+    notes.push(`Rendering is capped at renderer.maxFps = ${maxFps}: frame times are measured against ${round(1000 / maxFps, 1)}ms. Set it to 0 to see how fast the game can render`)
   if (!capture.gpuTiming.enabled || capture.gpuTiming.note)
     notes.push(`GPU timing: ${capture.gpuTiming.enabled ? 'on' : 'off'}${capture.gpuTiming.note ? `, ${capture.gpuTiming.note}` : ''}`)
   if (!capture.jsProfile.enabled)
@@ -327,10 +335,10 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
   if (!budgetMs || frames.length < 5) {
     bottleneck = { verdict: 'unknown', reason: 'Too few frames to tell' }
   }
-  else if (medianInterval <= budgetMs * 1.15 && (hz! >= 60 || Math.max(cpuP50 + tickPerFrame, gpuP50 ?? 0) < medianInterval * 0.6)) {
+  else if (medianInterval <= budgetMs * 1.15 && (capped || hz! >= 60 || Math.max(cpuP50 + tickPerFrame, gpuP50 ?? 0) < medianInterval * 0.6)) {
     // Below 60Hz a steady rate is as likely a slow game as a slow display, so only call it vsync with headroom left
     const used = Math.max(cpuP50 + tickPerFrame, gpuP50 ?? 0)
-    bottleneck = { verdict: 'smooth', reason: `Frames keep up with the ${hz}Hz display: a typical frame uses ${round(used, 1)}ms of the ${round(budgetMs, 1)}ms budget (render CPU ${round(cpuP50, 1)}ms${gpuP50 !== null ? `, GPU ${round(gpuP50, 1)}ms` : ''}, game ticks ~${round(tickPerFrame, 1)}ms per frame)` }
+    bottleneck = { verdict: 'smooth', reason: `Frames keep up with ${capped ? `renderer.maxFps = ${maxFps}` : `the ${hz}Hz display`}: a typical frame uses ${round(used, 1)}ms of the ${round(budgetMs, 1)}ms budget (render CPU ${round(cpuP50, 1)}ms${gpuP50 !== null ? `, GPU ${round(gpuP50, 1)}ms` : ''}, game ticks ~${round(tickPerFrame, 1)}ms per frame)` }
   }
   else if (gpuP50 !== null && gpuP50 >= medianInterval * 0.75 && gpuP50 > cpuP50 + tickPerFrame) {
     bottleneck = { verdict: 'gpu-bound', reason: `The GPU needs ${round(gpuP50, 1)}ms per frame against frames every ${round(medianInterval, 1)}ms, while render CPU time is ${round(cpuP50, 1)}ms` }
@@ -407,6 +415,7 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     frames: frames.length,
     fps: round(frames.length / (capture.durationMs / 1000), 1),
     refreshRate: hz,
+    maxFps,
     budgetMs: budgetMs && round(budgetMs),
     frameInterval: stats(intervals),
     renderCpu: stats(cpuTimes),

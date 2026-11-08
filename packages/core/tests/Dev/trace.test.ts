@@ -65,6 +65,7 @@ function fakeGame(gl: FakeGL) {
     instance: { getContext: () => gl, getPixelRatio: () => 1, info },
     composer: { passes: [pass], render: () => pass.render() },
     perf: perf as typeof perf | undefined,
+    maxFps: 0,
     update(this: any, _delta: number) {
       this.perf?.begin()
       this.composer.render()

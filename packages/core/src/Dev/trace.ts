@@ -89,6 +89,8 @@ export interface TraceCapture {
   userAgent: string
   visible: boolean
   canvas: { width: number, height: number, pixelRatio: number }
+  /** renderer.maxFps while tracing, 0 when frames aren't capped */
+  maxFps: number
   /** Composer pass names, the order of TraceFrame.passes */
   passes: string[]
   gpuTiming: { enabled: boolean, note?: string }
@@ -201,6 +203,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
       userAgent: navigator.userAgent,
       visible: document.visibilityState === 'visible',
       canvas: { width: game.canvas.width, height: game.canvas.height, pixelRatio: three.getPixelRatio() },
+      maxFps: renderer.maxFps ?? 0,
       passes: renderer.composer.passes.map(pass => pass.constructor.name || 'Pass'),
       gpuTiming: { enabled: false },
       jsProfile: { enabled: false },

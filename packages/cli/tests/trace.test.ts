@@ -52,6 +52,7 @@ function capture(count = 60, patch: (frame: TraceFrame, index: number) => void =
     userAgent: 'test',
     visible: true,
     canvas: { width: 1920, height: 1080, pixelRatio: 2 },
+    maxFps: 0,
     passes: ['RenderPass', 'OutputPass'],
     gpuTiming: { enabled: true },
     jsProfile: { enabled: true },
@@ -104,6 +105,21 @@ describe('trace analysis', () => {
     }))
     expect(cpuBound.bottleneck.verdict).toBe('cpu-render-bound')
     expect(cpuBound.findings.some(f => f.includes('2400 draw calls'))).toBe(true)
+  })
+
+  it('measures capped frames against renderer.maxFps', () => {
+    // 30fps with little work per frame: capped, not a slow game
+    const analysis = analyzeTrace(capture(30, (frame, i) => {
+      frame.interval = i ? 33.3 : null
+    }, { maxFps: 30 }))
+
+    expect(analysis.refreshRate).toBe(30)
+    expect(analysis.bottleneck.verdict).toBe('smooth')
+    expect(analysis.bottleneck.reason).toContain('renderer.maxFps = 30')
+    expect(analysis.notes.join('\n')).toContain('capped at renderer.maxFps = 30')
+
+    // A cap above what the display reaches doesn't change anything
+    expect(analyzeTrace(capture(60, () => {}, { maxFps: 240 })).refreshRate).toBe(60)
   })
 
   it('explains a hitch with the work done before it', () => {
