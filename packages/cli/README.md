@@ -155,7 +155,7 @@ const server = new MyServer(logger, physicsWorld, {
 
 ## `mavonengine mcp`
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so an AI coding assistant can look at your running game server. It works with any MCP client and any model: Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, or a local model behind an MCP-capable client.
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so an AI coding assistant can look at your running game: the game server, and the game tabs open in a browser. It works with any MCP client and any model: Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, or a local model behind an MCP-capable client.
 
 Projects made with `mavonengine create` get a `.mcp.json` that registers it. Elsewhere, add it to your client as a stdio server; most clients take this JSON:
 
@@ -166,6 +166,8 @@ Projects made with `mavonengine create` get a `.mcp.json` that registers it. Els
   }
 }
 ```
+
+Game server tools:
 
 | Tool | |
 | --- | --- |
@@ -178,9 +180,28 @@ Projects made with `mavonengine create` get a `.mcp.json` that registers it. Els
 | `recent_logs` | Server log lines, filtered by level and text |
 | `recent_requests` | HTTP requests the server answered, filtered by path and status |
 
-Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`).
+Client tools, for the game tabs open while Vite serves the client in dev:
 
-The scene and entity tools read `GET /api/game/dev/*` on the game server. Those routes are only registered when `NODE_ENV` is not `production`: a metrics token does not turn them on there. Otherwise they follow the [server access](#server-access) rules of the metrics endpoint.
+| Tool | |
+| --- | --- |
+| `list_clients` | Open tabs: page, editor or player, the player's id on the server, visibility, FPS |
+| `client_status` | Draw calls and triangles of one frame, GPU geometries / textures / programs, JS heap, canvas, camera |
+| `client_entities` / `client_entity` | The tab's world, in the same shape as the server's, with its local player marked |
+| `client_scene` | The scene loaded in the tab, and which objects the client built |
+| `client_network` | Connection, ping, and inputs sent but not yet acknowledged by the server |
+| `client_logs` | Console output, uncaught errors and unhandled rejections, filtered by level and text |
+| `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
+| `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
+
+Client tools take a `clientId` from `list_clients`. Without one they ask the only open tab, or the only one not running the editor.
+
+Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`). When Vite serves the client on its own port instead of through the game server, pass `--client-url`, e.g. `http://localhost:5173`.
+
+The server scene and entity tools read `GET /api/game/dev/*` on the game server. Those routes are only registered when `NODE_ENV` is not `production`: a metrics token does not turn them on there. Otherwise they follow the [server access](#server-access) rules of the metrics endpoint.
+
+The client tools go through the dev bridge of the Vite plugin in `@mavonengine/core/vite.config` (Vite 8). In dev it adds a small module to the page that answers over Vite's hot-reload WebSocket, and serves `GET /__mavonengine/clients` to localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set for the dev server. Builds never include it. Turn it off with `mavonEnginePlugins({ devBridge: false })`.
+
+To let `compare_entity` match your own player with the server's, set `game.localPlayer` to the entity the tab controls, or give it `isLocalPlayer = true`: the server keys players by socket id, which the client often doesn't.
 
 ## Writing a plugin
 

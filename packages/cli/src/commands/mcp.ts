@@ -7,10 +7,12 @@ export const MCP_HELP = `Usage: mavonengine mcp [options]
 
 Model Context Protocol (MCP) server over stdio, for any MCP client and model
 (Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, local models, …).
-It lets the assistant read a running game server: status, metrics, players,
-the active scene, entities, logs and HTTP requests. Every tool is read-only.
-Scene and entity tools only work while the game server runs in development
-(NODE_ENV is not "production").
+It lets the assistant read a running game: the game server (status, metrics,
+players, scene, entities, logs, HTTP requests) and the game tabs open in a
+browser (renderer stats, entities, network, console, screenshots), and compare
+an entity on both sides. Every tool is read-only. Server scene and entity tools
+need the game server in development (NODE_ENV is not "production"); client
+tools need the client served by Vite in dev.
 
 Register it in your client as a stdio server with this command:
   npx -y @mavonengine/cli mcp [options]
@@ -22,6 +24,8 @@ Options:
   --host <host>        Server host (default: localhost)
   --port <port>        Server HTTP port (default: 8050)
   --url <url>          Server base URL, e.g. http://localhost:8050, overrides --host and --port
+  --client-url <url>   Where Vite serves the client in dev (default: the server URL,
+                       which serves it in the template), e.g. http://localhost:5173
   --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
   -h, --help           Show this help
 `
@@ -34,11 +38,12 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
   const { values } = parseArgs({
     args,
     options: {
-      host: { type: 'string', default: 'localhost' },
-      port: { type: 'string', default: '8050' },
-      url: { type: 'string' },
-      token: { type: 'string' },
-      help: { type: 'boolean', short: 'h', default: false },
+      'host': { type: 'string', default: 'localhost' },
+      'port': { type: 'string', default: '8050' },
+      'url': { type: 'string' },
+      'client-url': { type: 'string' },
+      'token': { type: 'string' },
+      'help': { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
     allowPositionals: false,
@@ -57,14 +62,17 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     url = `http://${host}:${port}`
   }
 
-  try {
-    void new URL(url)
-  }
-  catch {
-    throw new UsageError(`Invalid --url: ${url}`)
+  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']]] as const) {
+    try {
+      if (value !== undefined)
+        void new URL(value)
+    }
+    catch {
+      throw new UsageError(`Invalid ${flag}: ${value}`)
+    }
   }
 
-  return { client: new GameServerClient({ url, token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }) }
+  return { client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }) }
 }
 
 /**

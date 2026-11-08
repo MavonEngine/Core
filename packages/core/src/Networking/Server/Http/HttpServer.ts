@@ -5,15 +5,17 @@ import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
 import type ServerMetrics from '../Stats/ServerMetrics'
 import type WorldInspector from '../Stats/WorldInspector'
-import type { EntityQuery } from '../Stats/WorldInspector'
 import type { ClientOptions } from './ClientMiddleware'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import process from 'node:process'
 import express from 'express'
+import { parseEntityQuery } from '../../../Dev/inspect'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
+
+export { parseEntityQuery }
 
 export interface MetricsEndpointOptions {
   /**
@@ -213,7 +215,7 @@ export default class HttpServer {
     })
 
     this.app.get('/api/game/dev/entities', authorize, (req, res) => {
-      const query = parseEntityQuery(req.query)
+      const query = parseEntityQuery(req.query as Record<string, unknown>)
       if (typeof query === 'string') {
         res.status(400).json({ error: query })
         return
@@ -251,38 +253,6 @@ export default class HttpServer {
 
     next()
   }
-}
-
-/**
- * The entity filters of a query string, or an error message
- */
-export function parseEntityQuery(query: Request['query']): EntityQuery | string {
-  const result: EntityQuery = {}
-  const text = (key: string) => typeof query[key] === 'string' && query[key] !== '' ? query[key] as string : undefined
-
-  const type = text('type')
-  if (type)
-    result.type = type
-
-  const near = text('near')
-  if (near) {
-    const parts = near.split(',').map(Number)
-    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n)))
-      return 'near must be x,y,z'
-    result.near = { x: parts[0]!, y: parts[1]!, z: parts[2]! }
-  }
-
-  for (const key of ['radius', 'limit', 'offset'] as const) {
-    const value = text(key)
-    if (value === undefined)
-      continue
-    const n = Number(value)
-    if (!Number.isFinite(n) || n < 0)
-      return `${key} must be a number, at least 0`
-    result[key] = n
-  }
-
-  return result
 }
 
 function safeEqual(a: string, b: string) {

@@ -1,35 +1,16 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type GameServerClient from './GameServerClient'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { version } from '../../package.json'
+import { registerClientTools } from './clientTools'
+import { LOG_LEVELS, READ_ONLY, run, vec3 } from './result'
 
-const INSTRUCTIONS = `Reads the live state of a running MavonEngine game server: health, performance, players, the active scene,
-the entities in the world, its logs and the HTTP requests it served. Every tool is read-only.
-Scene and entity tools only work while the server runs in development (NODE_ENV is not "production").
-Start with server_status; use list_entities with type / near filters rather than paging through the whole world.`
-
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
-
-const LOG_LEVELS = ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'] as const
-
-const vec3 = z.object({ x: z.number(), y: z.number(), z: z.number() })
-
-function json(data: unknown): CallToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-}
-
-/**
- * Run a tool body, turning a failed request into a tool error the model can read
- */
-async function run(body: () => Promise<unknown>): Promise<CallToolResult> {
-  try {
-    return json(await body())
-  }
-  catch (err) {
-    return { isError: true, content: [{ type: 'text', text: (err as Error).message }] }
-  }
-}
+const INSTRUCTIONS = `Reads the live state of a running MavonEngine game: the game server (health, performance, players, scene,
+entities, logs, HTTP requests) and, in development, the game tabs open in a browser (renderer stats, the client's world,
+network state, console logs, screenshots). Every tool is read-only.
+Server scene / entity tools need the server in development (NODE_ENV is not "production"); client tools need the client
+served by Vite in dev. Start with server_status and list_clients. Use type / near filters rather than paging through a world.
+compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.`
 
 /** The metrics snapshot without its per-second history arrays */
 function summarize(metrics: any) {
@@ -172,6 +153,8 @@ export function createMcpServer(client: GameServerClient): McpServer {
 
     return { latestId, matched: matches.length, entries: matches.slice(-limit) }
   }))
+
+  registerClientTools(server, client)
 
   return server
 }

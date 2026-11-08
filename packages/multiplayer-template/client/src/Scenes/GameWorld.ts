@@ -32,6 +32,8 @@ export default class GameWorld extends GameObject {
       this.player = new Character('localPlayer', true, new Vector3(0, 0.5, 0))
       this.playerController = new PlayerController(this.player)
       Game.instance().world.add({ PlayerController: this.playerController })
+      // Lets dev tools (`mavonengine mcp`) find the player, which isn't in the world itself
+      Game.instance().localPlayer = this.player
     }
 
     this.gameSyncManager = new GameSyncManager(new NetworkManager(), this.playerController)
@@ -53,6 +55,8 @@ export default class GameWorld extends GameObject {
       }
     }
     this.player?.destroy()
+    if (Game.instance().localPlayer === this.player)
+      Game.instance().localPlayer = undefined
     this.player = null
     this.playerController = null
     this.gameSyncManager.playerController = null

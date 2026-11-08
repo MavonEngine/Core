@@ -5,6 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseMcpArgs } from '../src/commands/mcp'
+import { compareEntities } from '../src/mcp/clientTools'
 import { writeMcpConfig } from '../src/mcp/config'
 import GameServerClient from '../src/mcp/GameServerClient'
 import { createMcpServer } from '../src/mcp/server'
@@ -57,8 +58,17 @@ describe('mcp server', () => {
 
     const { tools } = await client.listTools()
     expect(tools.map(t => t.name).sort()).toEqual([
+      'client_entities',
+      'client_entity',
+      'client_logs',
+      'client_network',
+      'client_scene',
+      'client_screenshot',
+      'client_status',
+      'compare_entity',
       'get_entity',
       'get_scene',
+      'list_clients',
       'list_entities',
       'list_players',
       'recent_logs',
@@ -199,6 +209,96 @@ describe('mcp server', () => {
   })
 })
 
+describe('client tools', () => {
+  const bridge = '/__mavonengine/clients'
+
+  it('lists the open tabs', async () => {
+    const { call } = await connect({ [bridge]: { clients: [{ id: 'tab1', playerId: 'p1' }] } })
+
+    expect((await call('list_clients')).data).toEqual({ devServer: 'http://localhost:8050/', clients: [{ id: 'tab1', playerId: 'p1' }] })
+    const empty = await connect({ [bridge]: { clients: [] } })
+    expect((await empty.call('list_clients')).data.note).toContain('No game tab is open')
+  })
+
+  it('asks the auto tab unless a client id is given, passing filters', async () => {
+    const { call, calls } = await connect({
+      [`${bridge}/auto/status`]: { fps: 60 },
+      [`${bridge}/tab%202/entities`]: { total: 0, entities: [] },
+    })
+
+    expect((await call('client_status')).data).toEqual({ fps: 60 })
+
+    await call('client_entities', { clientId: 'tab 2', type: 'Rock', near: { x: 1, y: 2, z: 3 }, limit: 5 })
+    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ type: 'Rock', near: '1,2,3', limit: '5', offset: '0' })
+  })
+
+  it('filters client logs by console level', async () => {
+    const entries = [
+      { id: 1, timestamp: 0, level: 'log', message: 'hello' },
+      { id: 2, timestamp: 0, level: 'warn', message: 'careful' },
+      { id: 3, timestamp: 0, level: 'debug', message: 'noise' },
+      { id: 4, timestamp: 0, level: 'error', message: 'Uncaught TypeError' },
+    ]
+    const { call } = await connect({ [`${bridge}/auto/logs`]: { entries, latestId: 4 } })
+
+    expect((await call('client_logs', { level: 'info' })).data.entries.map((e: any) => e.id)).toEqual([1, 2, 4])
+    expect((await call('client_logs', { contains: 'typeerror' })).data.entries.map((e: any) => e.id)).toEqual([4])
+  })
+
+  it('returns a screenshot as an image', async () => {
+    const { client } = await connect({ [`${bridge}/auto/screenshot`]: { mimeType: 'image/jpeg', width: 640, height: 360, data: 'QUJD' } })
+
+    const result = await client.callTool({ name: 'client_screenshot', arguments: { maxWidth: 640 } }) as any
+    expect(result.content[0]).toEqual({ type: 'image', data: 'QUJD', mimeType: 'image/jpeg' })
+    expect(result.content[1].text).toBe('640x360 image/jpeg')
+  })
+
+  it('compares an entity on the server and a client', async () => {
+    const at = (x: number) => ({ x, y: 0, z: 0 })
+    const { call } = await connect({
+      '/api/game/dev/entities/p1': { entity: { id: 'p1', position: at(10), rotation: at(0), scale: at(1), serialized: { id: 'p1', health: 90, $typeName: 'Player' } } },
+      [`${bridge}/auto/entity`]: { entity: { id: 'localPlayer', position: at(10.5), rotation: at(0), scale: at(1), serialized: { id: 'localPlayer', health: 100, $typeName: 'Player' } } },
+    })
+
+    const { data } = await call('compare_entity', { id: 'p1' })
+    expect(data.clientId).toBe('localPlayer')
+    expect(data.positionDelta).toEqual({ x: 0.5, y: 0, z: 0, length: 0.5 })
+    expect(data.differentFields).toEqual([{ field: 'health', server: 90, client: 100 }])
+    expect(data.server.serialized).toBeUndefined()
+  })
+
+  it('explains an entity that exists on one side only', () => {
+    const entity = { id: 'a', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } }
+
+    expect(compareEntities('a', entity, null).note).toContain('Only the server has it')
+    expect(compareEntities('a', null, entity).note).toContain('Only the client has it')
+    expect(compareEntities('a', null, null).note).toBe('Neither side has this entity')
+  })
+
+  it('explains a dev server without the bridge, and passes on bridge errors', async () => {
+    const { call } = await connect({
+      [bridge]: () => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }),
+      [`${bridge}/auto/status`]: () => Response.json({ error: '2 game tabs are open, pick one by id: a, b' }, { status: 409 }),
+    })
+
+    const noBridge = await call('list_clients')
+    expect(noBridge.isError).toBe(true)
+    expect(noBridge.text).toContain('--client-url')
+
+    const ambiguous = await call('client_status')
+    expect(ambiguous.isError).toBe(true)
+    expect(ambiguous.text).toBe('2 game tabs are open, pick one by id: a, b')
+  })
+
+  it('asks a separate client URL when given', async () => {
+    const { fetch, calls } = fakeFetch({ '/vite/__mavonengine/clients': { clients: [] } })
+    const gameServer = new GameServerClient({ url: 'http://localhost:8050', clientUrl: 'http://localhost:5173/vite', fetch })
+
+    await gameServer.clients()
+    expect(calls[0]!.href).toBe('http://localhost:5173/vite/__mavonengine/clients')
+  })
+})
+
 describe('parseMcpArgs', () => {
   it('builds the server URL from host and port, or takes --url', () => {
     const fromPort = parseMcpArgs(['--port', '9000'], {})
@@ -209,6 +309,11 @@ describe('parseMcpArgs', () => {
 
     const fromUrl = parseMcpArgs(['--url', 'https://game.example.com/prefix'], {})
     expect(fromUrl !== 'help' && fromUrl.client.url).toBe('https://game.example.com/prefix/')
+    expect(fromUrl !== 'help' && fromUrl.client.clientUrl).toBe('https://game.example.com/prefix/')
+
+    const vite = parseMcpArgs(['--client-url', 'http://localhost:5173'], {})
+    expect(vite !== 'help' && vite.client.clientUrl).toBe('http://localhost:5173/')
+    expect(() => parseMcpArgs(['--client-url', 'nope'], {})).toThrow('Invalid --client-url')
   })
 
   it('rejects bad input and shows help', () => {

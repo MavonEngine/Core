@@ -1,6 +1,11 @@
 export interface GameServerClientOptions {
   /** Base URL of the game server's HTTP API, e.g. http://localhost:8050 */
   url: string
+  /**
+   * Where the client is served in dev, which answers the dev bridge (/__mavonengine/clients).
+   * Default `url`: the template serves the client from the game server. A standalone Vite server is e.g. http://localhost:5173
+   */
+  clientUrl?: string
   token?: string
   timeoutMs?: number
   fetch?: typeof globalThis.fetch
@@ -16,6 +21,8 @@ export interface EntityQuery {
 
 export class GameServerError extends Error { }
 
+export type ClientQuery = 'status' | 'entities' | 'entity' | 'scene' | 'network' | 'logs' | 'screenshot'
+
 const DEV_UNAVAILABLE = 'The dev endpoints are not available: the game server runs with NODE_ENV=production '
   + '(they are never served there), or it uses a @mavonengine/core release without them'
 
@@ -24,15 +31,19 @@ const DEV_UNAVAILABLE = 'The dev endpoints are not available: the game server ru
  */
 export default class GameServerClient {
   readonly url: string
+  readonly clientUrl: string
   private base: URL
+  private clientBase: URL
   private token?: string
   private timeoutMs: number
   private fetchImpl: typeof globalThis.fetch
 
-  constructor({ url, token, timeoutMs = 3000, fetch = globalThis.fetch }: GameServerClientOptions) {
+  constructor({ url, clientUrl, token, timeoutMs = 3000, fetch = globalThis.fetch }: GameServerClientOptions) {
     // Paths resolve relative to the base, so a server behind a path prefix works too
     this.base = new URL(url.endsWith('/') ? url : `${url}/`)
     this.url = this.base.href
+    this.clientBase = clientUrl ? new URL(clientUrl.endsWith('/') ? clientUrl : `${clientUrl}/`) : this.base
+    this.clientUrl = this.clientBase.href
     this.token = token
     this.timeoutMs = timeoutMs
     this.fetchImpl = fetch
@@ -74,6 +85,53 @@ export default class GameServerClient {
 
   entity(id: string) {
     return this.get(`api/game/dev/entities/${encodeURIComponent(id)}`, {}, DEV_UNAVAILABLE)
+  }
+
+  /** The game tabs open in a browser, through the dev bridge */
+  clients() {
+    return this.bridge('__mavonengine/clients', {})
+  }
+
+  /**
+   * Ask one tab. `clientId` defaults to the only open tab (or the only one not running the editor)
+   */
+  client(query: ClientQuery, params: Record<string, string | number | undefined> = {}, clientId = 'auto') {
+    const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+    // Longer than the dev server waits for the tab: a screenshot is encoded there, status waits for frames
+    const timeoutMs = query === 'screenshot' ? 15000 : query === 'status' ? 10000 : 8000
+    return this.bridge(`__mavonengine/clients/${encodeURIComponent(clientId)}/${query}`, defined, timeoutMs)
+  }
+
+  private async bridge(path: string, params: Record<string, string>, timeoutMs = 5000): Promise<any> {
+    const target = new URL(path, this.clientBase)
+    for (const [key, value] of Object.entries(params))
+      target.searchParams.set(key, value)
+
+    let res: Response
+    try {
+      res = await this.fetchImpl(target, {
+        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    }
+    catch (err) {
+      throw new GameServerError(`Can't reach the client dev server at ${this.clientUrl}: ${(err as Error).message}. Is it running?`)
+    }
+
+    // The bridge always answers JSON; anything else is a page, e.g. Vite's SPA fallback without the bridge
+    const isJson = res.headers.get('content-type')?.includes('application/json')
+    const body = isJson ? await res.json().catch(() => null) as any : null
+
+    if (!isJson || (res.status === 404 && !body?.error)) {
+      throw new GameServerError(`No dev bridge at ${this.clientUrl}. The game client must be served by Vite in dev with the mavonengine Vite plugin `
+        + '(@mavonengine/core/vite.config). If Vite runs on its own port, pass --client-url, e.g. http://localhost:5173')
+    }
+    if (res.status === 401 || res.status === 403)
+      throw new GameServerError(`${body?.error ?? 'Not allowed'}: pass --token or set MAVONENGINE_METRICS_TOKEN for both the CLI and the dev server`)
+    if (!res.ok)
+      throw new GameServerError(body?.error ?? `Client dev server responded ${res.status} ${res.statusText}`)
+
+    return body
   }
 
   private async get(path: string, params: Record<string, string> = {}, notFound?: string): Promise<any> {
