@@ -1,11 +1,15 @@
 import type { Buffer } from 'node:buffer'
 import type { MavonEngineConfig, PluginManifest } from '../../src/Plugins/ProjectConfig'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+/**
+ * A new project directory under the temp dir, as its long path: on Windows the temp dir can contain 8.3 short names
+ * (C:/Users/RUNNER~1/...), and Vite denies every path with a short-name segment
+ */
 export function tempProject(): string {
-  return mkdtempSync(join(tmpdir(), 'mavonengine-plugins-'))
+  return realpathSync.native(mkdtempSync(join(tmpdir(), 'mavonengine-plugins-')))
 }
 
 export function writeConfig(root: string, config: Partial<MavonEngineConfig> | string) {
