@@ -2,7 +2,7 @@ import type { Server as NodeServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/HttpServer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import HttpServer, { METRICS_CLIENT_TIMEOUT_MS } from '../../../../src/Networking/Server/Http/HttpServer'
+import HttpServer, { METRICS_CLIENT_TIMEOUT_MS, parseEntityQuery } from '../../../../src/Networking/Server/Http/HttpServer'
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 import RequestLog from '../../../../src/Networking/Server/Stats/RequestLog'
 
@@ -150,5 +150,79 @@ describe('httpServer', () => {
     await request('/api/game/metrics')
 
     expect(http.metricsClientActive()).toBe(false)
+  })
+
+  describe('dev endpoints', () => {
+    function fakeInspector() {
+      return {
+        scene: vi.fn(() => ({ name: 'Forest' })),
+        entities: vi.fn(() => ({ total: 0, entities: [] })),
+        entity: vi.fn((id: string) => id === 'rock' ? { id: 'rock' } : null),
+      } as any
+    }
+
+    it('serves the scene and entities', async () => {
+      const inspector = fakeInspector()
+      const request = await serve({ inspector })
+
+      expect(http.devEndpointsEnabled).toBe(true)
+      expect(await (await request('/api/game/dev/scene')).json()).toEqual({ scene: { name: 'Forest' } })
+      expect(await (await request('/api/game/dev/entities/rock')).json()).toEqual({ entity: { id: 'rock' } })
+      expect(await (await request('/api/game/dev/entities/nope')).json()).toEqual({ entity: null })
+
+      expect((await request('/api/game/dev/entities?type=Rock&near=1,2,3&radius=5&limit=2')).status).toBe(200)
+      expect(inspector.entities).toHaveBeenCalledWith({ type: 'Rock', near: { x: 1, y: 2, z: 3 }, radius: 5, limit: 2 })
+
+      const bad = await request('/api/game/dev/entities?near=1,2')
+      expect(bad.status).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'near must be x,y,z' })
+    })
+
+    it('are not registered without an inspector', async () => {
+      const request = await serve()
+
+      expect(http.devEndpointsEnabled).toBe(false)
+      expect((await request('/api/game/dev/scene')).status).toBe(404)
+    })
+
+    it('are protected like metrics', async () => {
+      const request = await serve({ inspector: fakeInspector(), metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/dev/scene')).status).toBe(401)
+      expect((await request('/api/game/dev/entities')).status).toBe(401)
+      expect((await request('/api/game/dev/scene?token=secret')).status).toBe(200)
+    })
+
+    it('follow metrics being turned off', async () => {
+      const request = await serve({ inspector: fakeInspector(), metrics: { enabled: false } })
+
+      expect((await request('/api/game/dev/scene')).status).toBe(404)
+    })
+
+    it('do not exist in production, even with a valid token', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const inspector = fakeInspector()
+
+      const request = await serve({ inspector, metrics: { token: 'secret' } })
+
+      expect(http.devEndpointsEnabled).toBe(false)
+      // Metrics still work with the token, the dev routes don't
+      expect((await request('/api/game/metrics?token=secret')).status).toBe(200)
+      expect((await request('/api/game/dev/scene?token=secret')).status).toBe(404)
+      expect((await request('/api/game/dev/entities?token=secret')).status).toBe(404)
+      expect((await request('/api/game/dev/entities/rock?token=secret')).status).toBe(404)
+      expect(inspector.scene).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('parseEntityQuery', () => {
+  it('ignores empty values and rejects bad numbers', () => {
+    expect(parseEntityQuery({})).toEqual({})
+    expect(parseEntityQuery({ type: '', limit: '' })).toEqual({})
+    expect(parseEntityQuery({ offset: '3' })).toEqual({ offset: 3 })
+    expect(parseEntityQuery({ limit: '-1' })).toBe('limit must be a number, at least 0')
+    expect(parseEntityQuery({ radius: 'far' })).toBe('radius must be a number, at least 0')
+    expect(parseEntityQuery({ near: '1,x,3' })).toBe('near must be x,y,z')
   })
 })

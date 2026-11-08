@@ -153,6 +153,35 @@ const server = new MyServer(logger, physicsWorld, {
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
 
+## `mavonengine mcp`
+
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so an AI coding assistant can look at your running game server. It works with any MCP client and any model: Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, or a local model behind an MCP-capable client.
+
+Projects made with `mavonengine create` get a `.mcp.json` that registers it. Elsewhere, add it to your client as a stdio server; most clients take this JSON:
+
+```json
+{
+  "mcpServers": {
+    "mavonengine": { "command": "npx", "args": ["-y", "@mavonengine/cli", "mcp"] }
+  }
+}
+```
+
+| Tool | |
+| --- | --- |
+| `server_status` | Uptime, tick time against its budget, CPU, bandwidth, memory, player / entity / physics counts |
+| `server_metrics` | The full metrics snapshot, optionally with its per-second history |
+| `list_players` | Connected players with position and connection details |
+| `get_scene` | The active scene: file, hot reload, unsaved changes, settings and objects (dev only) |
+| `list_entities` | Entities in the world, filtered by type and distance to a point (dev only) |
+| `get_entity` | One entity with the state it sends to clients (dev only) |
+| `recent_logs` | Server log lines, filtered by level and text |
+| `recent_requests` | HTTP requests the server answered, filtered by path and status |
+
+Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`).
+
+The scene and entity tools read `GET /api/game/dev/*` on the game server. Those routes are only registered when `NODE_ENV` is not `production`: a metrics token does not turn them on there. Otherwise they follow the [server access](#server-access) rules of the metrics endpoint.
+
 ## Writing a plugin
 
 A plugin is an npm package with a `mavonengine` field in its `package.json`:

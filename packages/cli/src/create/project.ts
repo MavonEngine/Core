@@ -7,6 +7,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
 import { formatBytes } from '../dashboard/format'
+import { MCP_CONFIG_FILE, writeMcpConfig } from '../mcp/config'
 
 export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.15-alpha.zip'
 export const TEMPLATE_SUBPATH = 'packages/multiplayer-template'
@@ -175,6 +176,10 @@ export async function createProject({ projectName, parentDir, report, signal, te
     pkg.name = projectName
     writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`)
   }
+
+  // Lets MCP clients (AI coding assistants) read the running game server through `mavonengine mcp`
+  if (writeMcpConfig(projectDir))
+    report.output(`Wrote ${MCP_CONFIG_FILE} so AI assistants with MCP support can inspect the running game server\n`)
 
   if (install) {
     signal?.throwIfAborted()

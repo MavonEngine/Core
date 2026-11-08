@@ -5,6 +5,7 @@ import { CREATE_HELP, parseCreateArgs, runCreateCommand } from './commands/creat
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
+import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 
 const HELP = `Usage: mavonengine <command> [options]
 
@@ -14,6 +15,7 @@ Commands:
   dev          Run the project's dev servers (game server and client)
   install      Install packages and register engine plugins in mavonengine.json
   build        Build the project for release, with the plugin assets it uses
+  mcp          MCP server so AI assistants (any MCP client) can inspect a running game server
 
 Options:
   -h, --help       Show help
@@ -83,6 +85,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runInstallCommand(options)
+  }
+
+  if (command === 'mcp') {
+    const options = parseMcpArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(MCP_HELP)
+      return 0
+    }
+
+    return runMcpCommand(options)
   }
 
   if (command === 'build') {
