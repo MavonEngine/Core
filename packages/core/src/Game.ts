@@ -141,16 +141,20 @@ export default class Game extends BaseGame {
       Game.devModeHook?.()
     }
 
-    const render = () => {
-      const delta = this.clock.getDelta()
+    // The tick and physics run on their own interval, so skipping frames here for `renderer.maxFps` doesn't affect them
+    const render = (now: number) => {
+      if (this.renderer.shouldRender(now)) {
+        // Measured since the last rendered frame, so the skipped frames' time isn't lost
+        const delta = this.clock.getDelta()
 
-      this.particleSystem.update(delta)
-      this.renderer.update(delta)
+        this.particleSystem.update(delta)
+        this.renderer.update(delta)
+      }
 
-      window.requestAnimationFrame(() => render())
+      window.requestAnimationFrame(render)
     }
 
-    render()
+    render(performance.now())
   }
 
   private createPluginHost() {
