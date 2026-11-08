@@ -39,6 +39,10 @@ export default class NetworkManager extends BaseNetworkManager {
       this.trigger(ServerCommand.SV_TREES, data)
     })
 
+    // The editor only watches: it never joins, so nobody sees it come in
+    if (this.editorMode)
+      return
+
     this.socket.emit(
       ClientCommand.CL_INIT,
       { name: this.store.value.playerName },

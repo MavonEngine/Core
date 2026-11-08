@@ -13,22 +13,28 @@ import NetworkManager from '../NetworkManager'
 import PlayerController from '../PlayerController'
 
 export default class GameWorld extends GameObject {
-  player: Character
-  playerController: PlayerController
+  /** Null while the editor watches the game */
+  player: Character | null = null
+  playerController: PlayerController | null = null
   gameSyncManager: GameSyncManager
   private updateCallback?: (delta: number) => void
 
-  constructor() {
+  /**
+   * @param spectate connect without a player, for the editor. The server sends everything, but nobody sees us
+   */
+  constructor(spectate = false) {
     super()
 
     this.setupGrid()
 
-    // Local player box (green)
-    this.player = new Character('localPlayer', true, new Vector3(0, 0.5, 0))
-    this.playerController = new PlayerController(this.player)
-    this.gameSyncManager = new GameSyncManager(new NetworkManager(), this.playerController)
+    if (!spectate) {
+      // Local player box (green)
+      this.player = new Character('localPlayer', true, new Vector3(0, 0.5, 0))
+      this.playerController = new PlayerController(this.player)
+      Game.instance().world.add({ PlayerController: this.playerController })
+    }
 
-    Game.instance().world.add({ PlayerController: this.playerController })
+    this.gameSyncManager = new GameSyncManager(new NetworkManager(), this.playerController)
 
     this.updateCallback = delta => this.update(delta)
     Game.instance().onUpdate(this.updateCallback)
@@ -46,7 +52,10 @@ export default class GameWorld extends GameObject {
         this.playerController.destroy()
       }
     }
-    this.player.destroy()
+    this.player?.destroy()
+    this.player = null
+    this.playerController = null
+    this.gameSyncManager.playerController = null
   }
 
   /**
@@ -70,7 +79,7 @@ export default class GameWorld extends GameObject {
 
   destroy(): void {
     Game.instance().unregisterOnUpdate(this.updateCallback!)
-    this.player.destroy()
+    this.player?.destroy()
     this.gameSyncManager.destroy()
 
     // Everything the session added; the scene's objects stay for the next session

@@ -42,6 +42,11 @@ RAPIER.init().then(() => {
 
   window.addEventListener('gameUIReady', joinServer)
 
+  // Opened the editor before joining: connect anyway, without a player, to show what the server sends (trees, players)
+  game.on('editorBoot', () => {
+    serverWorld ??= new GameWorld(true)
+  })
+
   let app: App<Element> | null = null
 
   game.on('documentReady', () => {

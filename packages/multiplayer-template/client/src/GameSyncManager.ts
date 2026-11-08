@@ -12,7 +12,8 @@ import Trees from './World/Trees'
 
 export default class GameSyncManager implements GameObjectInterface {
   private networkManager: NetworkManager
-  playerController: PlayerController
+  /** Null while the editor watches the game: it has no player of its own */
+  playerController: PlayerController | null
   private trees: Trees | null = null
 
   /**
@@ -21,7 +22,7 @@ export default class GameSyncManager implements GameObjectInterface {
    */
   static DESPAWN_DISTANCE = 150
 
-  constructor(networkManager: NetworkManager, playerController: PlayerController) {
+  constructor(networkManager: NetworkManager, playerController: PlayerController | null) {
     this.networkManager = networkManager
     this.playerController = playerController
 
@@ -40,7 +41,7 @@ export default class GameSyncManager implements GameObjectInterface {
       // Local player is keyed as 'localPlayer', not by socket id
       const isLocal = chat.playerId === this.networkManager.socket.id
       const entity = isLocal
-        ? this.playerController.player
+        ? this.playerController?.player
         : Game.instance().world.entities.items.get(chat.playerId)
 
       if (entity instanceof Character) {
@@ -80,16 +81,20 @@ export default class GameSyncManager implements GameObjectInterface {
       }
       else {
         // This is our own player coming back from the server
-        this.playerController.updateFromNetwork(inEntity)
+        this.playerController?.updateFromNetwork(inEntity)
       }
     }
 
-    // Despawn remote entities that left the sync radius
+    // Despawn remote entities that left the sync radius. The editor is sent every entity, so it has none
+    const player = this.playerController?.player
+    if (!player)
+      return
+
     for (const [id, entity] of Game.instance().world.entities.items) {
       if (
         !receivedIds.has(id)
         && entity instanceof NetworkedActor
-        && entity.position.distanceTo(this.playerController.player.position) > GameSyncManager.DESPAWN_DISTANCE
+        && entity.position.distanceTo(player.position) > GameSyncManager.DESPAWN_DISTANCE
       ) {
         this.handleEntityRemove(id)
       }

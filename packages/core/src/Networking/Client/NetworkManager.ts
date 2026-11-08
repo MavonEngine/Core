@@ -56,6 +56,9 @@ export default class NetworkManager extends EventEmitter {
      * The connection stays open when the editor boots, so what the server sends keeps showing in the editor.
      * The server is told so it stops treating this client as a player.
      */
+    // Created after the editor booted, e.g. the editor connects to watch the game without having joined
+    this._editorMode = !!(Game.instance() as { editor?: unknown }).editor
+
     Game.instance().on('editorBoot', () => {
       this._editorMode = true
       if (this._connected)

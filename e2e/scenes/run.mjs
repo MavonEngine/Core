@@ -127,6 +127,22 @@ async function main() {
     check(server.output().includes('Scene main.json changed, reloaded it'), 'the server logs the reload')
     await editor.screenshot({ path: join(screenshots, '2-after-save.png') })
 
+    log('\n== editor opened from the main menu, without joining')
+    const watcher = await context.newPage()
+    watch(watcher, 'watcher')
+    await watcher.goto(base)
+    await waitFor(watcher, () => window.Game?.activeScene?.name === 'main')
+    await watcher.locator('canvas').click({ position: { x: 700, y: 450 }, force: true })
+    await watcher.keyboard.press('Period')
+    await waitFor(watcher, () => (window.Game.world.entities.items.get('trees')?.instancedMeshes?.[0]?.count ?? 0) === 40)
+    check(true, 'it connects anyway and shows the trees the server seeded')
+    await waitFor(watcher, () => [...window.Game.world.entities.items.values()].some(e => e.$typeName))
+    check(true, 'and the player, live')
+    await delay(500)
+    const watched = await (await fetch(`${base}/api/game/metrics`)).json()
+    check(watched.players.length === 1, 'it never counts as a player')
+    check(!server.output().includes(' joined the game!') || server.output().split(' joined the game!').length === 3, 'it never joins, so nobody is told it came in')
+
     log('\n== custom panel')
     await editor.evaluate(() => window.Game.editor.addPanel({
       id: 'e2e',
