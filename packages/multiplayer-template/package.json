@@ -7,7 +7,8 @@
   ],
   "license": "MIT",
   "scripts": {
-    "dev": "npm run dev --prefix server",
+    "dev": "mavonengine dev",
+    "dev:server": "npm run dev --prefix server",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client",
     "lint": "eslint .",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
+    "@mavonengine/cli": "0.0.1",
     "@mavonengine/editor": "0.0.8",
     "@types/three": "0.184.1",
     "eslint": "^10.1.0",

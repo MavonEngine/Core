@@ -11,9 +11,12 @@ import { parseDashboardArgs, runDashboard, UsageError } from './dashboard'
 
 export const DEV_HELP = `Usage: mavonengine dev [options]
 
-Run the dev script of the MavonEngine project you are in (game server and client)
+Run the dev servers of the MavonEngine project you are in (game server and client)
 and show the dashboard for it. Once the game server is up, the game opens in the
 browser. Quitting the dashboard stops the dev servers.
+
+Runs the project's 'dev:server' script, or its 'dev' script when there is none.
+So 'dev' can be 'mavonengine dev' itself, as in the multiplayer template.
 
 Options:
   --cwd <dir>        Start looking for the project here (default: current directory)
@@ -50,6 +53,13 @@ const LOCKFILES: [string, PackageManager][] = [
 ]
 
 const WHITESPACE_RE = /\s+/
+const RUNS_MAVONENGINE_DEV_RE = /\bmavonengine\s+dev\b/
+
+/** Set for the dev script, so a `mavonengine dev` started by it notices it would start itself again */
+export const DEV_ENV_FLAG = 'MAVONENGINE_DEV_SCRIPT'
+
+/** Runs the dev servers when present, so `dev` itself can be `mavonengine dev` */
+export const DEV_SERVER_SCRIPT = 'dev:server'
 
 /** Flags shared by `mavonengine dev` and `mavonengine create` */
 export const DEV_FLAGS = {
@@ -112,6 +122,34 @@ function readPackageJson(dir: string): Record<string, any> | undefined {
 }
 
 /**
+ * The script that starts the dev servers: `dev:server` when the project has one, otherwise `dev`
+ */
+export function devScriptOf(pkg: Record<string, any> | undefined): string | undefined {
+  const scripts = pkg?.scripts ?? {}
+  if (typeof scripts[DEV_SERVER_SCRIPT] === 'string')
+    return DEV_SERVER_SCRIPT
+  return typeof scripts.dev === 'string' ? 'dev' : undefined
+}
+
+/**
+ * Throws when running `script` would start `mavonengine dev` again
+ */
+export function checkDevScript(root: string, env: Record<string, string | undefined> = process.env): string {
+  const pkg = readPackageJson(root)
+  const script = devScriptOf(pkg)
+  if (!script)
+    throw new UsageError(`${join(root, 'package.json')} has no '${DEV_SERVER_SCRIPT}' or 'dev' script`)
+
+  const command = String(pkg?.scripts?.[script] ?? '')
+  if (env[DEV_ENV_FLAG] || RUNS_MAVONENGINE_DEV_RE.test(command)) {
+    throw new UsageError(`the '${script}' script starts 'mavonengine dev' again. Put the command that starts the game server `
+      + `in a '${DEV_SERVER_SCRIPT}' script: 'mavonengine dev' runs that instead of 'dev'`)
+  }
+
+  return script
+}
+
+/**
  * Walk up from `start` to the nearest package.json that depends on @mavonengine/core and has a dev script.
  * Starting inside a workspace such as `client/` finds the project root above it.
  */
@@ -119,7 +157,7 @@ export function findProjectRoot(start: string): string | undefined {
   for (let dir = resolve(start); ; dir = dirname(dir)) {
     const pkg = readPackageJson(dir)
     const deps = { ...pkg?.dependencies, ...pkg?.devDependencies }
-    if ('@mavonengine/core' in deps && typeof pkg?.scripts?.dev === 'string')
+    if ('@mavonengine/core' in deps && devScriptOf(pkg))
       return dir
 
     if (dirname(dir) === dir)
@@ -236,9 +274,11 @@ export interface DevProcess {
  */
 export function startDev(root: string, { capture = false } = {}): DevProcess {
   const pm = detectPackageManager(root)
+  const script = checkDevScript(root)
 
-  const child = spawn(pm, ['run', 'dev'], {
+  const child = spawn(pm, ['run', script], {
     cwd: root,
+    env: { ...process.env, [DEV_ENV_FLAG]: '1' },
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     // npm, pnpm and yarn are .cmd shims on Windows
     shell: process.platform === 'win32',
@@ -250,7 +290,7 @@ export function startDev(root: string, { capture = false } = {}): DevProcess {
   }
 
   // The terminal may already belong to the dashboard
-  const announce = `mavonengine: running '${pm} run dev' in ${root}\n`
+  const announce = `mavonengine: running '${pm} run ${script}' in ${root}\n`
   if (capture)
     keep(announce)
   else
@@ -357,6 +397,9 @@ export async function runDevCommand(options: DevOptions): Promise<number> {
   const root = findProjectRoot(options.cwd)
   if (!root)
     throw new UsageError(`no MavonEngine project found in ${options.cwd} or its parents (looking for a package.json with @mavonengine/core and a dev script)`)
+
+  // Before the dashboard takes the terminal, so the message is readable
+  checkDevScript(root)
 
   // The dashboard needs an interactive terminal; without one (CI, piped output) just run the dev script
   if (options.dashboard && process.stdout.isTTY && process.stdin.isTTY)
