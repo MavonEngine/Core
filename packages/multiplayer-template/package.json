@@ -1,28 +1,34 @@
 {
   "name": "@mavonengine/multiplayer-template",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "workspaces": [
     "client",
     "server"
   ],
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently --kill-others -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "build": "concurrently \"npm run build --prefix server\" \"npm run build --prefix client\"",
+    "dev": "mavonengine dev",
+    "dev:server": "npm run dev --prefix server",
+    "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@mavonengine/core": "0.0.19"
+    "@mavonengine/core": "0.0.22"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
-    "@mavonengine/editor": "0.0.7",
-    "@types/three": "^0.176.0",
-    "concurrently": "^9.1.2",
+    "@mavonengine/cli": "0.0.2",
+    "@mavonengine/editor": "0.0.9",
+    "@types/three": "0.184.1",
     "eslint": "^10.1.0",
     "tsup": "^8.5.1",
-    "typescript": "5.9.2"
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "ts-api-utils": {
+      "typescript": "6.0.3"
+    }
   }
 }

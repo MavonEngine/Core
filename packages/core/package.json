@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/core",
   "type": "module",
-  "version": "0.0.19",
+  "version": "0.0.22",
   "description": "",
   "author": "",
   "license": "MIT",
@@ -34,10 +34,13 @@
     "vite",
     "vite.config.js"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "prepare": "node scripts/generate-version.js",
-    "build": "node scripts/generate-version.js && rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json && find src -name '*.glsl' -o -name '*.css' | while read f; do mkdir -p dist/$(dirname ${f#src/}) && cp $f dist/${f#src/}; done",
-    "dev": "node scripts/generate-version.js && rm -f tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json --watch",
+    "build": "node scripts/generate-version.js && node scripts/clean-buildinfo.js && tsc -p tsconfig.build.json && node scripts/copy-assets.js",
+    "dev": "node scripts/generate-version.js && node scripts/clean-buildinfo.js && tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "bench": "vitest bench",
@@ -47,35 +50,35 @@
     "test:dev": "vitest"
   },
   "peerDependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.21.0",
     "@geckos.io/client": "^3.0.2",
     "@geckos.io/server": "^3.0.0",
     "@tweakpane/plugin-essentials": "^0.2.1",
     "express": "5.1.0",
-    "three": "^0.176.0",
+    "three": "0.184.0",
     "three-perf": "^1.0.11",
     "tweakpane": "^4.0.5",
-    "vite": "^6.3.5",
+    "vite": "^8.3.5",
     "winston": "3.17.0"
   },
   "dependencies": {},
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.21.0",
     "@geckos.io/server": "^3.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@tweakpane/plugin-essentials": "^0.2.1",
     "@types/express": "^5.0.3",
-    "@types/three": "^0.176.0",
-    "@vitejs/plugin-react": "^5.1.2",
-    "@vitest/coverage-v8": "^3.2.4",
-    "@vitest/ui": "^3.2.4",
+    "@types/three": "0.184.1",
+    "@vitejs/plugin-react": "^6.2.1",
+    "@vitest/coverage-v8": "^5.1.0",
+    "@vitest/ui": "^5.1.0",
     "jsdom": "^28.1.0",
-    "three": "^0.176.0",
+    "three": "0.184.0",
     "three-perf": "^1.0.11",
     "tweakpane": "^4.0.5",
-    "typescript": "5.9.2",
-    "vite": "^6.3.5",
-    "vite-plugin-glsl": "^1.4.1",
-    "vitest": "^3.2.4"
+    "typescript": "7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-glsl": "^1.6.2",
+    "vitest": "^5.1.0"
   }
 }

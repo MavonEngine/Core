@@ -8,13 +8,15 @@ vi.mock('../../src/Game', () => ({
 }))
 
 vi.mock('../../src/Editor/EditorHelper', () => ({
-  default: vi.fn().mockImplementation((position, label, attachment) => ({
-    position,
-    label,
-    attachment,
-    owner: undefined as any,
-    dispose: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function (position, label, attachment) {
+    return {
+      position,
+      label,
+      attachment,
+      owner: undefined as any,
+      dispose: vi.fn(),
+    }
+  }),
 }))
 
 function createMockEditor() {

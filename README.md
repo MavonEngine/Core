@@ -8,13 +8,22 @@ rendering, physics, networking, animation, and debugging into a single cohesive 
 
 ## Get Started
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
+
+This downloads the multiplayer template, installs it, starts the game server and opens the game in
+your browser, with a live dashboard of the server in the terminal.
+
+Everything runs on one port: the game server serves the client (with hot reload in dev) and the
+game socket next to its own API.
 
 | URL | Description |
 | --- | --- |
-| http://localhost:5173/ | Client Game |
+| http://localhost:8050/ | Client game |
+| http://localhost:8050/#debug | Debug mode: debug UI and the server's physics colliders |
 | http://localhost:8050/api/game/health | Server health endpoint |
+
+Press `.` in the game to open the level editor.
 
 The multiplayer template includes the authoritative server setup, networking boilerplate, and a
 working client/server split out of the box.
@@ -55,9 +64,38 @@ and state reconciliation.
 - **Shared entity system** — Write once, run on server and client
 - **Skeletal animation** — GLTF + Draco support, smooth fade transitions, efficient skeleton cloning
 - **Particle system** — Built-in rain and smoke effects, custom shader support
-- **Level editor** — Early WIP, loads directly from the running game instance
+- **Level editor** — Early WIP, loads directly from the running game instance and stays connected to the server
+- **Scenes** — JSON scene files shared by client and server; each side builds only what it needs, and the server
+  reloads a scene when the editor saves it
 - **Prefab registry** — Community-built assets (grass, water, and more) ready to drop into your scene
+- **Engine plugins** — `mavonengine install` adds plugins with their client, server and asset parts;
+  `mavonengine build` ships only the assets your game uses
+- **Gamepad support** — Xbox, PlayStation and generic controllers with deadzones, button labels and rumble
+- **Monitoring** — `mavonengine dashboard` in the terminal, or the `@mavonengine/http-monitoring` plugin in the
+  browser: tick time, CPU, bandwidth, players, logs and HTTP requests
+- **Latency simulation** — Test your netcode against artificial latency, jitter and packet loss
+- **AI assistant support (MCP)** — `mavonengine mcp` lets any MCP client and model inspect the running game:
+  server metrics, scenes and entities, the browser tabs' renderer stats, console and screenshots, and one entity
+  compared on server and client. It also reads the documentation on mavonengine.com
 - **Full TypeScript** — Comprehensive types throughout
+
+## AI Assistants
+
+Projects created with `mavonengine create` include a `.mcp.json`, so MCP clients that read it (such as Claude Code)
+pick up the MavonEngine MCP server automatically. For other clients (Cursor, VS Code, Codex, Gemini CLI, Zed, …),
+register it as a stdio server:
+
+```json
+{
+  "mcpServers": {
+    "mavonengine": { "command": "npx", "args": ["-y", "@mavonengine/cli", "mcp"] }
+  }
+}
+```
+
+Every tool is read-only. Scene, entity and client tools only work in development; the docs tools read the live
+documentation on mavonengine.com. See the
+[CLI README](packages/cli/README.md#mavonengine-mcp) for the full list.
 
 ## Why a Three.js Game Engine with Multiplayer?
 

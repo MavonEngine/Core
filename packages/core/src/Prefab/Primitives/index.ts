@@ -182,10 +182,15 @@ export class OctahedronPrimitive extends Primitive {
 }
 
 export class PlanePrimitive extends Primitive {
+  readonly width: number
+  readonly height: number
+
   constructor(position: Vector3, width = 1, height = 1) {
     const geometry = new PlaneGeometry(width, height)
     geometry.rotateX(-Math.PI / 2)
     super(position, mesh(geometry), 'Plane')
+    this.width = width
+    this.height = height
   }
 }
 

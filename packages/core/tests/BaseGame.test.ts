@@ -2,13 +2,19 @@ import { Raycaster, Scene } from 'three'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import BaseGame from './../src/BaseGame'
 
+vi.mock('@dimforge/rapier3d-compat', () => ({
+  version: vi.fn().mockReturnValue('0.0.0'),
+}))
+
 vi.mock('three', async () => {
   const actual = await vi.importActual<typeof import('three')>('three')
   return {
     ...actual,
-    Clock: vi.fn().mockImplementation(() => ({
-      start: vi.fn(),
-    })),
+    Clock: vi.fn().mockImplementation(function () {
+      return {
+        start: vi.fn(),
+      }
+    }),
   }
 })
 

@@ -1,3 +1,5 @@
+import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import RAPIER from '@dimforge/rapier3d-compat'
 import logger from './Logger'
 import Server from './Server'
@@ -11,6 +13,17 @@ RAPIER.init().then(() => {
     groundBody,
   )
 
-  const server = new Server(logger, physicsWorld)
-  server.start()
+  const server = new Server(logger, physicsWorld, {
+    client: {
+      root: fileURLToPath(new URL('../../client', import.meta.url)),
+      // Set by `npm run dev`: serve the client source through Vite. Otherwise the built client/dist is served
+      dev: process.env.MAVONENGINE_DEV_CLIENT === '1',
+    },
+    // Engine plugins enabled in mavonengine.json, see `mavonengine install`
+    plugins: { root: fileURLToPath(new URL('../..', import.meta.url)) },
+  })
+  server.start().then(() => {
+    // scenes/main.json, shared with the client. In dev it is reloaded whenever the editor saves it
+    server.openScene('main')
+  })
 })

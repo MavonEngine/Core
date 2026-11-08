@@ -1,23 +1,55 @@
 import type { DragEvent } from 'react'
 import type { CubeTexture, Object3D, Scene } from 'three'
-import type { Font, GLTF, SVGResult } from 'three/examples/jsm/Addons.js'
+import type { Font } from 'three/examples/jsm/loaders/FontLoader.js'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { SVGResult } from 'three/examples/jsm/loaders/SVGLoader.js'
+import type { RawImage } from './TextureViewer'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
 import { getPreviewMap, spawnParticle } from '@mavonengine/core/Particles/System/ParticlePreviewRegistry'
 import Grass from '@mavonengine/core/Prefab/Grass/Grass'
 import { LIGHT_REGISTRY } from '@mavonengine/core/Prefab/Lights/index'
+import { getPrefabs, spawnPrefab } from '@mavonengine/core/Prefab/PrefabRegistry'
 import { PRIMITIVE_REGISTRY } from '@mavonengine/core/Prefab/Primitives/index'
-import Water from '@mavonengine/core/Prefab/Water/Water'
 import WaterManager from '@mavonengine/core/Prefab/Water/WaterManager'
 import AssetRenderer from '@mavonengine/core/Renderer/AssetRenderer'
+import { lightType, MODEL_TYPE, prefabType, primitiveType } from '@mavonengine/core/Scene/builtinSceneObjects'
 import { useEffect, useRef, useState } from 'react'
 import { Mesh, Plane, Texture, Vector2, Vector3 } from 'three'
+import { registerBuiltinPrefabs } from '../../builtinPrefabs'
+import { recordPrefabUsage } from '../../recordPrefabUsage'
 import Window from '../Window'
 import styles from './Assets.module.css'
 import AudioPlayer from './AudioPlayer'
 import ModelViewer from './ModelViewer'
 import ParticleViewer from './ParticleViewer'
 import TextureViewer, { getTextureUrl } from './TextureViewer'
+
+const NON_KEY_CHARS_RE = /\W+/g
+
+registerBuiltinPrefabs()
+
+/**
+ * Add an object to the active scene so it is saved with it. False when there is no scene or the type can't be built
+ */
+function placeInScene(type: string, position: Vector3, props?: Record<string, unknown>): boolean {
+  const scene = window.Game.activeScene
+  if (!scene)
+    return false
+
+  try {
+    return !!scene.create(type, { transform: { position: position.toArray(), rotation: [0, 0, 0], scale: [1, 1, 1] }, props })
+  }
+  catch (err) {
+    window.Game.logger?.warn(`Could not place ${type}: ${(err as Error).message}`)
+    return false
+  }
+}
+
+/** A plugin prefab's icon, SVG markup or an image URL, as an image source */
+function prefabIconSrc(icon: string): string {
+  return icon.trimStart().startsWith('<svg') ? `data:image/svg+xml;utf8,${encodeURIComponent(icon)}` : icon
+}
 
 export default () => {
   const editor = Game.instance().editor!
@@ -31,10 +63,7 @@ export default () => {
   const PRIMITIVES = Object.keys(PRIMITIVE_REGISTRY).map(name => ({ name, label: name }))
   const LIGHTS = Object.keys(LIGHT_REGISTRY).map(name => ({ name, label: name }))
 
-  const PREFABS = [
-    { name: 'Water', label: 'Water' },
-    { name: 'Grass', label: 'Grass' },
-  ] as const
+  const PREFABS = getPrefabs().map(prefab => ({ ...prefab, label: prefab.label ?? prefab.name }))
 
   const PARTICLES = Object.keys(getPreviewMap()).map(name => ({ name, label: name }))
 
@@ -130,33 +159,30 @@ export default () => {
       const dropPos = new Vector3()
       window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
 
-      if (prefabName === 'Water') {
-        const isFirst = !WaterManager.instance
-        if (isFirst) {
-          WaterManager.init()
-        }
-        const water = new Water(dropPos, 20)
-        WaterManager.instance!.waters.push(water)
-        window.Game.world.add({ [`prefab_water_${Date.now()}`]: water })
-        if (isFirst)
-          window.Game.editor?.trigger('prefabCreated', { label: 'Water', addBindings: WaterManager.instance!.addBindings.bind(WaterManager.instance!) })
-        window.Game.editor?.trigger('assetDropped')
-        window.Game.logger?.info(`Spawned Water prefab at ${dropPos.toArray()}`)
-      }
-      else if (prefabName === 'Grass') {
-        const grassGltfs = Object.entries(window.Game.resources.items)
-          .filter(([k, v]) => 'scene' in v && k.toLowerCase().includes('grass'))
-        if (grassGltfs.length >= 2) {
-          const grass = new Grass(grassGltfs[0][1] as GLTF, grassGltfs[1][1] as GLTF, 10000, 12.5, dropPos)
-          window.Game.world.add({ [`prefab_grass_${Date.now()}`]: grass })
-          window.Game.editor?.trigger('prefabPanesCleared')
-          window.Game.editor?.trigger('prefabCreated', { label: 'Grass', addBindings: grass.addBindings.bind(grass) })
+      const prefab = PREFABS.find(p => p.key === prefabName)
+      if (prefab && window.Game.activeScene) {
+        if (placeInScene(prefabType(prefabName), dropPos)) {
           window.Game.editor?.trigger('assetDropped')
-          window.Game.logger?.info(`Spawned Grass prefab at ${dropPos.toArray()}`)
+          window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin ? ` from ${prefab.plugin}` : ''} at ${dropPos.toArray()}`)
+          if (prefab.plugin)
+            void recordPrefabUsage(prefab.plugin, prefab.name)
         }
-        else {
-          window.Game.logger?.warn('Grass prefab requires two GLTF resources with "grass" in their name')
-        }
+        return
+      }
+
+      const result = spawnPrefab(prefabName, dropPos)
+      if (prefab && result) {
+        if (result.object)
+          window.Game.world.add({ [`prefab_${prefabName.toLowerCase().replace(NON_KEY_CHARS_RE, '_')}_${Date.now()}`]: result.object })
+        if (result.clearPanes)
+          window.Game.editor?.trigger('prefabPanesCleared')
+        if (result.addBindings)
+          window.Game.editor?.trigger('prefabCreated', { label: prefab.label, addBindings: result.addBindings })
+        window.Game.editor?.trigger('assetDropped')
+        window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin ? ` from ${prefab.plugin}` : ''} at ${dropPos.toArray()}`)
+
+        if (prefab.plugin)
+          void recordPrefabUsage(prefab.plugin, prefab.name)
       }
       return
     }
@@ -198,6 +224,12 @@ export default () => {
         const dropPos = new Vector3()
         window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
 
+        if (placeInScene(primitiveType(primitiveName), dropPos, { castShadow: true, receiveShadow: true })) {
+          window.Game.editor?.trigger('assetDropped')
+          window.Game.logger?.info(`Spawned ${primitiveName} primitive at ${dropPos.toArray()}`)
+          return
+        }
+
         const primitive = new PrimitiveClass(dropPos)
         window.Game.world.add({ [`primitive_${primitiveName.toLowerCase()}_${Date.now()}`]: primitive })
         window.Game.editor?.trigger('assetDropped')
@@ -220,6 +252,12 @@ export default () => {
         const groundPlane = new Plane(new Vector3(0, 1, 0), 0)
         const dropPos = new Vector3()
         window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
+
+        if (placeInScene(lightType(lightName), dropPos)) {
+          window.Game.editor?.trigger('assetDropped')
+          window.Game.logger?.info(`Spawned ${lightName} at ${dropPos.toArray()}`)
+          return
+        }
 
         const light = new LightClass(dropPos)
         window.Game.world.add({ [`light_${lightName.toLowerCase()}_${Date.now()}`]: light })
@@ -263,7 +301,20 @@ export default () => {
     }
 
     const scene = 'scene' in item ? item.scene as unknown as Scene : null
-    if (scene) {
+    if (scene && window.Game.activeScene) {
+      const canvas = window.Game.canvas
+      const rect = canvas.getBoundingClientRect()
+      window.Game.rayCaster.setFromCamera(new Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      ), window.Game.camera.instance)
+      const dropPos = new Vector3()
+      window.Game.rayCaster.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), 0), dropPos)
+
+      if (placeInScene(MODEL_TYPE, dropPos, { resource: key }))
+        window.Game.editor?.trigger('assetDropped')
+    }
+    else if (scene) {
       window.Game.scene.add(scene.clone())
       window.Game.editor?.trigger('assetDropped')
     }
@@ -356,7 +407,7 @@ export default () => {
           >
             {item instanceof AudioBuffer && <AudioPlayer buffer={item} />}
             {'scene' in item && <ModelViewer model={item.scene} animations={(item as GLTF).animations} />}
-            {item instanceof Texture && <TextureViewer texture={item} />}
+            {item instanceof Texture && <TextureViewer texture={item as Texture<RawImage>} />}
             {'particleName' in item && <ParticleViewer particleName={item.particleName} />}
           </Window>
         )
@@ -480,29 +531,38 @@ export default () => {
                   ? PREFABS
                       .filter(p => p.label.toLowerCase().includes(search.toLowerCase()))
                       .map(prefab => (
-                        <div className={styles.assetRow} key={prefab.name}>
+                        <div className={styles.assetRow} key={prefab.key} title={prefab.plugin ? `${prefab.label} (${prefab.plugin})` : prefab.label}>
                           <div
                             className={styles.assetIcon}
-                            onDragStart={e => onPrefabDragStart(e, prefab.name)}
+                            onDragStart={e => onPrefabDragStart(e, prefab.key)}
                             draggable
                           >
-                            {prefab.name === 'Water'
-                              ? (
-                                  <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M8 22 Q16 14 24 22 Q32 30 40 22 Q48 14 56 22" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" />
-                                    <path d="M8 34 Q16 26 24 34 Q32 42 40 34 Q48 26 56 34" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.7" />
-                                    <path d="M8 46 Q16 38 24 46 Q32 54 40 46 Q48 38 56 46" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.4" />
-                                  </svg>
-                                )
-                              : (
-                                  <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M32 54 Q30 42 26 24" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" />
-                                    <path d="M32 54 Q34 40 40 20" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" />
-                                    <path d="M32 54 Q22 44 14 30" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
-                                    <path d="M32 54 Q44 46 50 30" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
-                                    <line x1="8" y1="54" x2="56" y2="54" stroke="#4caf50" strokeWidth="2" opacity="0.4" />
-                                  </svg>
-                                )}
+                            {prefab.icon
+                              ? <img src={prefabIconSrc(prefab.icon)} alt="" draggable={false} />
+                              : prefab.key === 'Water'
+                                ? (
+                                    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M8 22 Q16 14 24 22 Q32 30 40 22 Q48 14 56 22" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" />
+                                      <path d="M8 34 Q16 26 24 34 Q32 42 40 34 Q48 26 56 34" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.7" />
+                                      <path d="M8 46 Q16 38 24 46 Q32 54 40 46 Q48 38 56 46" stroke="#4a9eff" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.4" />
+                                    </svg>
+                                  )
+                                : prefab.plugin
+                                  ? (
+                                      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M16 40 L16 24 L32 16 L48 24 L48 40 L32 48 Z" stroke="#c678dd" strokeWidth="2" fill="none" />
+                                        <path d="M16 24 L32 32 M48 24 L32 32 M32 48 L32 32" stroke="#c678dd" strokeWidth="1.5" fill="none" opacity="0.5" />
+                                      </svg>
+                                    )
+                                  : (
+                                      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M32 54 Q30 42 26 24" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" />
+                                        <path d="M32 54 Q34 40 40 20" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" />
+                                        <path d="M32 54 Q22 44 14 30" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
+                                        <path d="M32 54 Q44 46 50 30" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
+                                        <line x1="8" y1="54" x2="56" y2="54" stroke="#4caf50" strokeWidth="2" opacity="0.4" />
+                                      </svg>
+                                    )}
                           </div>
                           {prefab.label}
                         </div>
@@ -532,7 +592,7 @@ export default () => {
                                   onDoubleClick={() => openAsset(key, item)}
                                   onDragStart={e => onItemDragStart(e, key)}
                                   draggable
-                                  src={getTextureUrl(item)}
+                                  src={getTextureUrl(item as Texture<RawImage>)}
                                 />
                               )
                             : (

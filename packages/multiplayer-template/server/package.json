@@ -6,20 +6,21 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "cross-env LOG_LEVEL=debug node ./dist/index.js",
-    "dev": "tsup --watch --onSuccess \"npm run start\"",
+    "dev": "tsup --watch --onSuccess \"cross-env MAVONENGINE_DEV_CLIENT=1 npm run start\"",
     "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "0.18.2",
+    "@dimforge/rapier3d-compat": "0.21.0",
     "@geckos.io/server": "3.1.0",
     "express": "5.1.0",
-    "three": "^0.176.0",
+    "three": "0.184.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.0",
-    "cross-env": "^10.1.0"
+    "cross-env": "^10.1.0",
+    "vite": "^8.3.5"
   }
 }

@@ -1,6 +1,7 @@
 import type { SV_CHAT } from '@template/server/Commands/Server'
 import BaseNetworkManager from '@mavonengine/core/Networking/Client/NetworkManager'
-import { ClientCommand, ServerCommand } from '@template/server/Commands'
+import { ClientCommand } from '@template/server/Commands/Client'
+import { ServerCommand } from '@template/server/Commands/Server'
 import useStore from './stores/Game'
 import useChat from './UI/composables/useChat'
 import useNetworkState from './UI/composables/useNetworkState'
@@ -12,9 +13,10 @@ export default class NetworkManager extends BaseNetworkManager {
 
   constructor() {
     super({
-      /** @ts-expect-error port is null in prod when behind a reverse proxy */
-      port: import.meta.env.PROD ? null : 8081,
-      url: import.meta.env.PROD ? '/socket' : undefined,
+      // Same origin as the page: the game server answers /socket on its HTTP port, and so does a reverse proxy in front of it
+      /** @ts-expect-error port is null to use the page's own port */
+      port: null,
+      url: '/socket',
     })
   }
 
@@ -36,6 +38,10 @@ export default class NetworkManager extends BaseNetworkManager {
     this.socket.on(ServerCommand.SV_TREES, (data) => {
       this.trigger(ServerCommand.SV_TREES, data)
     })
+
+    // The editor only watches: it never joins, so nobody sees it come in
+    if (this.editorMode)
+      return
 
     this.socket.emit(
       ClientCommand.CL_INIT,

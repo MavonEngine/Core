@@ -1,18 +1,26 @@
-import type { LightPrimitive } from '@mavonengine/core/Prefab/Lights/index'
-import type { Primitive } from '@mavonengine/core/Prefab/Primitives/index'
+import type GameScene from '@mavonengine/core/Scene/GameScene'
+import type { SceneData } from '@mavonengine/core/Scene/types'
+import type { EditorPanel } from '@mavonengine/core/Types/IEditor'
 import type IEditor from '@mavonengine/core/Types/IEditor'
 import type GameObjectInterface from '@mavonengine/core/World/GameObjectInterface'
 import type { Root } from 'react-dom/client'
 import type { Material, MeshBasicMaterial, Object3DEventMap } from 'three'
-import type { TransformControlsMode } from 'three/examples/jsm/Addons.js'
+import type { TransformControlsMode } from 'three/examples/jsm/controls/TransformControls.js'
+import type { EditorPanelDefinition } from './Editor/panels'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
-import { AmbientLightPrimitive, DirectionalLightShadowPrimitive } from '@mavonengine/core/Prefab/Lights/index'
-import { BoxPrimitive, CapsulePrimitive, ConePrimitive, CylinderPrimitive, DodecahedronPrimitive, IcosahedronPrimitive, OctahedronPrimitive, PlanePrimitive, SpherePrimitive, TorusKnotPrimitive } from '@mavonengine/core/Prefab/Primitives/index'
+import { SCENE_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import EventEmitter from '@mavonengine/core/Utils/EventEmitter'
 import { Matrix4, Mesh, Object3D, Vector2, Vector3 } from 'three'
-import { FlyControls, OutlinePass, TransformControls } from 'three/examples/jsm/Addons.js'
+import { FlyControls } from 'three/examples/jsm/controls/FlyControls.js'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { applyShadeMode } from './Editor/applyShadeMode'
+import { DEFAULT_SCENE_NAME, demoScene } from './Editor/demoScene'
+import { registerEditorPanel, unregisterEditorPanel } from './Editor/panels'
+
+export type { EditorPanelDefinition, EditorPanelLocation } from './Editor/panels'
+export { registerEditorPanel, unregisterEditorPanel } from './Editor/panels'
 
 export type ShadeMode = 'solid' | 'flat' | 'wireframe'
 
@@ -30,9 +38,18 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   private helpers: EditorHelper[] = []
   private lightHelpers: Object3D[] = []
   private _showHelpers = true
+  private abort = new AbortController()
+  private saving?: Promise<boolean>
 
   availableAssetCategories!: string[]
   activeAssetCategory: 'Object' | '_texture' | 'CubeTexture' | 'AudioBuffer' | 'Font' = 'Object'
+
+  /**
+   * Dock a custom panel in the editor, before or after it booted. Same as `editor.addPanel()`
+   */
+  static registerPanel(panel: EditorPanelDefinition | EditorPanel): () => void {
+    return registerEditorPanel(panel)
+  }
 
   /**
    * The editor should only be instantiated when button is pressed
@@ -56,21 +73,19 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     Game.instance().trigger('editorBoot', this)
     Game.instance().trigger('uiDestroy', this)
 
-    Game.instance().world.destroy()
-    Game.instance().scene.traverse((child) => {
-      if (child instanceof Mesh) {
-        child.geometry?.dispose()
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose())
-        }
-        else {
-          child.material?.dispose()
-        }
-      }
-    })
-    Game.instance().scene.clear()
+    const scene = Game.instance().activeScene
+    if (scene) {
+      // Keep the running game: the scene, and what the server sent. Rebuilt so its objects get their editor helpers
+      scene.rebuild()
+    }
+    else {
+      this.clearGame()
+    }
 
     this.initEditorScene()
+
+    if (!scene)
+      void this.openDefaultScene()
 
     // Force removal of any previously mounted html
     Game.instance().contextMenuAbort.abort()
@@ -102,34 +117,19 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
 
     this.initFlyControls()
 
-    const ambientLight = new AmbientLightPrimitive(new Vector3(0, 5, 0))
-    const directionalLight = new DirectionalLightShadowPrimitive(new Vector3(10, 15, 5))
-    directionalLight.instance.intensity = 5
+    this.watchScene(Game.instance().activeScene)
+    Game.instance().on('sceneLoaded', (scene: GameScene) => {
+      this.deselect()
+      this.watchScene(scene)
+      this.trigger('sceneChanged')
+    })
 
-    const groundPlane = new PlanePrimitive(new Vector3(0, 0, 0), 50, 50)
-    groundPlane.setReceiveShadow(true)
-    if (groundPlane.instance instanceof Mesh) {
-      (groundPlane.instance.material as MeshBasicMaterial).color.set('#ffbe6f')
-    }
-
-    const r = 5
-    const sceneShapes = [
-      new BoxPrimitive(new Vector3(r, 0.5, 0)),
-      new SpherePrimitive(new Vector3(r * 0.707, 1, r * 0.707)),
-      new ConePrimitive(new Vector3(0, 0.5, r)),
-      new CylinderPrimitive(new Vector3(-r * 0.707, 0.5, r * 0.707)),
-      new OctahedronPrimitive(new Vector3(-r, 1, 0)),
-      new DodecahedronPrimitive(new Vector3(-r * 0.707, 1, -r * 0.707)),
-      new CapsulePrimitive(new Vector3(0, 1, -r)),
-      new IcosahedronPrimitive(new Vector3(r * 0.707, 1, -r * 0.707)),
-      new TorusKnotPrimitive(new Vector3(0, 3.5, 0)),
-    ]
-
-    sceneShapes.forEach(s => s.setCastShadow(true))
-
-    const worldEntries: Record<string, Primitive | LightPrimitive> = {};
-    [ambientLight, directionalLight, groundPlane, ...sceneShapes].forEach(o => (worldEntries[o.id] = o))
-    Game.instance().world.add(worldEntries)
+    window.addEventListener('keydown', (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.code === 'KeyS') {
+        ev.preventDefault()
+        void this.saveScene()
+      }
+    }, { signal: this.abort.signal })
 
     this.trigger('sceneChanged')
 
@@ -213,7 +213,13 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
         this.deselect()
 
         const helper = EditorHelper.from(root)
-        if (helper?.owner) {
+        const scene = Game.instance().activeScene
+        const entry = scene?.entryOfObject3D(root)
+          ?? (helper?.owner && scene?.getEntries().find(e => e.object === helper.owner))
+        if (scene && entry) {
+          scene.remove(entry.data.id)
+        }
+        else if (helper?.owner) {
           helper.owner.destroy()
         }
         else {
@@ -285,6 +291,93 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.transformControls.attach(this.activeItem!)
   }
 
+  addPanel(panel: EditorPanelDefinition | EditorPanel): () => void {
+    return registerEditorPanel(panel)
+  }
+
+  removePanel(id: string): void {
+    unregisterEditorPanel(id)
+  }
+
+  /**
+   * Save the active scene to `scenes/<name>.json` through the dev server.
+   * Triggers `sceneSaved` ({ name, file }) or `sceneSaveFailed` ({ name, error }).
+   */
+  saveScene(fetchFn: typeof fetch = fetch): Promise<boolean> {
+    const scene = Game.instance().activeScene
+    if (!scene) {
+      Game.instance().logger?.warn('No scene to save')
+      return Promise.resolve(false)
+    }
+
+    // A second Ctrl+S while saving waits for the first
+    if (this.saving)
+      return this.saving
+
+    const name = scene.source ?? DEFAULT_SCENE_NAME
+    const data = scene.serialize()
+    this.trigger('sceneSaving', { name })
+
+    const fail = (error: string) => {
+      Game.instance().logger?.error(`Could not save scene ${name}: ${error}`)
+      this.trigger('sceneSaveFailed', { name, error })
+      return false
+    }
+
+    this.saving = fetchFn(SCENE_SAVE_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, scene: data }),
+    }).then(async (res) => {
+      const body = await res.json().catch(() => ({})) as { error?: string, file?: string, scene?: SceneData }
+      if (!res.ok)
+        return fail(body.error ?? `${res.status} ${res.statusText}`)
+
+      scene.source = name
+      scene.markSaved(data)
+      Game.instance().logger?.info(`Saved scene ${name} to ${body.file ?? name}`)
+      this.trigger('sceneSaved', { name, file: body.file })
+      return true
+    }, (err: Error) => fail(err.message)).finally(() => {
+      this.saving = undefined
+    })
+
+    return this.saving
+  }
+
+  /** Without a scene loaded by the game, open `scenes/main.json`, or a demo scene when there is none yet */
+  private async openDefaultScene() {
+    try {
+      await Game.instance().openScene(DEFAULT_SCENE_NAME)
+    }
+    catch {
+      Game.instance().logger?.info(`No scenes/${DEFAULT_SCENE_NAME}.json yet, opening a demo scene. Save it with Ctrl+S`)
+      Game.instance().loadScene(demoScene(), DEFAULT_SCENE_NAME)
+    }
+  }
+
+  private watchScene(scene?: GameScene) {
+    scene?.on('changed', () => this.trigger('sceneChanged'))
+  }
+
+  /** The old way, for games that don't use scenes: start from an empty world */
+  private clearGame() {
+    Game.instance().world.destroy()
+    Game.instance().world.entities.items.clear()
+    Game.instance().scene.traverse((child) => {
+      if (child instanceof Mesh) {
+        child.geometry?.dispose()
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose())
+        }
+        else {
+          child.material?.dispose()
+        }
+      }
+    })
+    Game.instance().scene.clear()
+  }
+
   addHelper(helper: EditorHelper): void {
     this.helpers.push(helper)
     if (!this._showHelpers) {
@@ -336,6 +429,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   }
 
   destroy(): void {
+    this.abort.abort()
     this.reactRoot.unmount()
     this.outlinePass.dispose()
     this.shadeOverrideMaterials.forEach(m => m.dispose())

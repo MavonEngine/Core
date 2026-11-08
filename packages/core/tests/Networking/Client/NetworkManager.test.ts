@@ -41,9 +41,23 @@ describe('networkManager', () => {
     expect(mockSocket.onDisconnect).toHaveBeenCalled()
   })
 
-  it('registers editorBoot handler on the game instance', () => {
+  it('keeps the socket open when the editor boots and tells the server it is an editor', () => {
+    const nm = new NetworkManager({})
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    const [event, handler] = mockGame.on.mock.calls[0]
+    expect(event).toBe('editorBoot')
+    handler()
+    expect(mockSocket.close).not.toHaveBeenCalled()
+    expect(mockSocket.emit).toHaveBeenCalledWith('cl_editor', { type: 'cl_editor' }, { reliable: true })
+    expect(nm.editorMode).toBe(true)
+  })
+
+  it('announces the editor once it connects when the editor booted first', () => {
     const _nm = new NetworkManager({})
-    expect(mockGame.on).toHaveBeenCalledWith('editorBoot', expect.any(Function))
+    mockGame.on.mock.calls[0][1]()
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('cl_editor', expect.anything(), expect.anything())
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    expect(mockSocket.emit).toHaveBeenCalledWith('cl_editor', { type: 'cl_editor' }, { reliable: true })
   })
 
   it('sets connected=true and logs on successful connect', () => {
@@ -68,14 +82,6 @@ describe('networkManager', () => {
     expect(nm.connected).toBe(true)
     mockSocket.onDisconnect.mock.calls[0][0]()
     expect(nm.connected).toBe(false)
-  })
-
-  it('closes socket when editorBoot event fires', () => {
-    const _nm = new NetworkManager({})
-    const [event, handler] = mockGame.on.mock.calls[0]
-    expect(event).toBe('editorBoot')
-    handler()
-    expect(mockSocket.close).toHaveBeenCalled()
   })
 
   it('destroy() closes the socket when connected', () => {
@@ -124,5 +130,78 @@ describe('networkManager', () => {
     vi.advanceTimersByTime(1000)
     expect(mockSocket.emit).toHaveBeenCalledWith('ping')
     vi.useRealTimers()
+  })
+
+  describe('command queue', () => {
+    it('sendCommand assigns sequential sequenceIds starting at 0', () => {
+      const nm = new NetworkManager({})
+      const a = { type: 'cmd_a' as any }
+      const b = { type: 'cmd_b' as any }
+      const c = { type: 'cmd_c' as any }
+
+      nm.sendCommand(a)
+      nm.sendCommand(b)
+      nm.sendCommand(c)
+
+      expect(a.sequenceId).toBe(0)
+      expect(b.sequenceId).toBe(1)
+      expect(c.sequenceId).toBe(2)
+    })
+
+    it('sendCommand pushes the packet to the local queue and emits it on the socket', () => {
+      const nm = new NetworkManager({})
+      const packet = { type: 'cmd' as any }
+
+      nm.sendCommand(packet)
+
+      const queue = (nm as any).localCommandQueue
+      expect(queue).toHaveLength(1)
+      expect(queue[0]).toBe(packet)
+      expect(mockSocket.emit).toHaveBeenCalledWith('command', packet)
+    })
+
+    it('dropCommandsAtSequenceId removes acknowledged commands with sequenceId <= given', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+      nm.sendCommand({ type: 'd' as any })
+
+      nm.dropCommandsAtSequenceId(2)
+
+      const queue = (nm as any).localCommandQueue as { type: string, sequenceId: number }[]
+      expect(queue.map(p => p.sequenceId)).toEqual([3])
+    })
+
+    it('dropCommandsAtSequenceId keeps commands with sequenceId greater than given', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+
+      nm.dropCommandsAtSequenceId(0)
+
+      const queue = (nm as any).localCommandQueue as { sequenceId: number }[]
+      expect(queue.map(p => p.sequenceId)).toEqual([1, 2])
+    })
+
+    it('dropCommandsAtSequenceId clears the queue when the ack covers every command', () => {
+      const nm = new NetworkManager({})
+      nm.sendCommand({ type: 'a' as any })
+      nm.sendCommand({ type: 'b' as any })
+      nm.sendCommand({ type: 'c' as any })
+
+      nm.dropCommandsAtSequenceId(10)
+
+      const queue = (nm as any).localCommandQueue as unknown[]
+      expect(queue).toHaveLength(0)
+    })
+
+    it('dropCommandsAtSequenceId is a no-op on an empty queue', () => {
+      const nm = new NetworkManager({})
+
+      expect(() => nm.dropCommandsAtSequenceId(5)).not.toThrow()
+      expect((nm as any).localCommandQueue).toHaveLength(0)
+    })
   })
 })

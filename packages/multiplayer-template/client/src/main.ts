@@ -1,10 +1,14 @@
 import type { App } from 'vue'
 import RAPIER from '@dimforge/rapier3d-compat'
 import Game from '@mavonengine/core/Game'
+import plugins from 'virtual:mavonengine/plugins'
 import { createApp } from 'vue'
 import GameWorld from './Scenes/GameWorld'
 import Frame from './UI/Frame.vue'
 import './game.css'
+
+// Engine plugins from mavonengine.json, see `mavonengine install`
+Game.usePlugins(plugins)
 
 if (import.meta.env.DEV) {
   Game.devModeHook = () => {
@@ -26,6 +30,12 @@ RAPIER.init().then(() => {
     { name: 'character', type: 'gltfModel', path: '/character.glb' },
   ], physicsWorld)
 
+  // Cap the rendering, the game tick and physics keep their own rate
+  game.renderer.maxFps = 60
+
+  // The map: sky, lights and ground, shared with the server which builds the trees from it. Edit it in the editor (press .)
+  game.openScene('main').catch(err => game.logger?.error(`Could not load the scene: ${(err as Error).message}`))
+
   let serverWorld: GameWorld | null = null
 
   function joinServer() {
@@ -34,6 +44,11 @@ RAPIER.init().then(() => {
   }
 
   window.addEventListener('gameUIReady', joinServer)
+
+  // Opened the editor before joining: connect anyway, without a player, to show what the server sends (trees, players)
+  game.on('editorBoot', () => {
+    serverWorld ??= new GameWorld(true)
+  })
 
   let app: App<Element> | null = null
 

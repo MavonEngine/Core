@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MavonEngine monitoring</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body data-poll-interval="{{POLL_INTERVAL_MS}}">
+  <header class="header">
+    <span class="brand">MavonEngine</span>
+    <span class="muted" id="source"></span>
+    <span class="header-stat"><span class="muted">uptime</span> <span id="uptime">—</span></span>
+    <span class="header-stat"><span class="muted">engine</span> <span id="engine">—</span></span>
+    <span class="spacer"></span>
+    <span id="status" class="status connecting">CONNECTING</span>
+  </header>
+
+  <div id="latency" class="banner" hidden></div>
+  <div id="notice" class="notice" hidden></div>
+
+  <nav class="tabs" aria-label="Dashboard tabs">
+    <a href="#overview" data-tab="overview"><kbd>1</kbd> Overview</a>
+    <a href="#players" data-tab="players"><kbd>2</kbd> Players</a>
+    <a href="#logs" data-tab="logs"><kbd>3</kbd> Logs</a>
+    <a href="#http" data-tab="http"><kbd>4</kbd> HTTP</a>
+  </nav>
+
+  <main>
+    <section id="tab-overview" class="tab">
+      <div class="grid">
+        <article class="panel">
+          <h2>CPU</h2>
+          <div class="chart" id="cpu-chart"></div>
+          <div class="meters" id="cpu-meters"></div>
+        </article>
+        <article class="panel">
+          <h2>Network <span class="legend" id="net-legend"></span></h2>
+          <div class="chart" id="net-chart"></div>
+          <dl class="values spread" id="net-values"></dl>
+        </article>
+        <article class="panel">
+          <h2>Tick <span class="legend" id="tick-legend"></span></h2>
+          <div class="chart" id="tick-chart"></div>
+          <div id="tick-meter"></div>
+          <dl class="values spread" id="tick-values"></dl>
+        </article>
+        <article class="panel">
+          <h2>World</h2>
+          <dl class="values" id="world-values"></dl>
+          <div class="grow"></div>
+          <div id="heap-meter"></div>
+        </article>
+      </div>
+      <div class="row">
+        <article class="panel scroll">
+          <h2 id="overview-players-title">Players</h2>
+          <div class="table-wrap" id="overview-players"></div>
+        </article>
+        <article class="panel scroll">
+          <h2>Logs</h2>
+          <div class="log" id="overview-logs"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="tab-players" class="tab" hidden>
+      <div class="row players-row">
+        <article class="panel scroll">
+          <h2 id="players-title">Players</h2>
+          <div class="table-wrap" id="players"></div>
+        </article>
+        <aside class="panel details" id="player-details" hidden>
+          <h2 id="player-details-title"></h2>
+          <dl class="values" id="player-details-values"></dl>
+          <p class="muted" id="player-details-note" hidden>No live connection (a bot, or an older server)</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-logs" class="tab" hidden>
+      <article class="panel scroll fill">
+        <h2 id="logs-title">Logs</h2>
+        <div class="log" id="logs"></div>
+      </article>
+    </section>
+
+    <section id="tab-http" class="tab" hidden>
+      <article class="panel scroll fill">
+        <h2 id="requests-title">HTTP requests</h2>
+        <div class="table-wrap" id="requests"></div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer muted">
+    <span><kbd>1</kbd>–<kbd>4</kbd> tabs</span>
+    <span><kbd>r</kbd> refresh</span>
+    <span id="footer-players" hidden><kbd>↑</kbd> <kbd>↓</kbd> select player, <kbd>Esc</kbd> clear</span>
+    <span class="spacer"></span>
+    <span id="updated"></span>
+  </footer>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { Mesh, PCFSoftShadowMap, SkeletonHelper, SkinnedMesh, WebGLRenderer } fr
 import { ThreePerf } from 'three-perf'
 import { EffectComposer, OutputPass, RenderPass } from 'three/examples/jsm/Addons.js'
 import Game from './Game'
+import FrameLimiter from './Utils/FrameLimiter'
 import SkeletonAxesHelper from './Utils/SkeletonAxesHelper'
 
 export default class Renderer {
@@ -21,6 +22,20 @@ export default class Renderer {
   armatureHelpers: Object3D[] = []
 
   fps = 0
+  private frameLimiter = new FrameLimiter()
+
+  /**
+   * The most frames to render per second, 0 for no limit. Only throttles rendering:
+   * the game tick and physics keep running at `tickRate`.
+   */
+  get maxFps(): number {
+    return this.frameLimiter.maxFps
+  }
+
+  set maxFps(value: number) {
+    this.frameLimiter.maxFps = value
+  }
+
   private _fpsFrameCount = 0
   private _fpsElapsed = 0
 
@@ -57,10 +72,15 @@ export default class Renderer {
         anchorX: 'right',
         anchorY: 'bottom',
         memory: true,
+        // Count the frames actually rendered. Overclocking estimates the FPS the GPU could reach from idle time,
+        // which reads above maxFps (or the refresh rate) when frames are capped
+        overClock: false,
         guiVisible: false,
         domElement: document.body,
         renderer: this.instance,
       })
+
+      renderDebug.addBinding(this, 'maxFps', { label: 'max fps (0 = off)', min: 0, max: 240, step: 1 })
 
       renderDebug.addBinding(this.options, 'wireframe').on('change', () => {
         Game.instance().scene.traverse((object) => {
@@ -106,6 +126,14 @@ export default class Renderer {
       Game.instance().sizes.width,
       Game.instance().sizes.height,
     )
+  }
+
+  /**
+   * @param now the frame's timestamp in ms
+   * @returns whether this frame should be rendered under `maxFps`
+   */
+  shouldRender(now: number): boolean {
+    return this.frameLimiter.shouldRender(now)
   }
 
   update(delta: number) {

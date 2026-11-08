@@ -8,7 +8,7 @@ rendering, physics, networking, animation, and debugging into a single cohesive 
 
 ## Get Started
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
 
 | URL | Description |
@@ -58,6 +58,10 @@ and state reconciliation.
 - **Level editor** — Early WIP, loads directly from the running game instance
 - **Prefab registry** — Community-built assets (grass, water, and more) ready to drop into your scene
 - **Full TypeScript** — Comprehensive types throughout
+
+## Plugins
+
+Engine plugins are npm packages that hook into the game loop, the game server (HTTP routes, connections, ticks) and the editor, and can bring their own prefabs and assets. Install one with `npx @mavonengine/cli install <package>`, which offers to register it in `mavonengine.json`. See the [CLI README](https://github.com/MavonEngine/Core/tree/main/packages/cli#writing-a-plugin) for how to write one.
 
 ## Why a Three.js Game Engine with Multiplayer?
 

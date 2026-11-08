@@ -3,7 +3,7 @@
 Bootstrap this template instantly with:
 
 ```bash
-npx @mavonengine/create-bootstrap
+npx @mavonengine/cli create my-game
 ```
 
 A ready-to-use multiplayer 3D game template built on the [MavonEngine](https://mavonengine.com/) framework. It demonstrates a client-server architecture with authoritative physics, real-time state synchronisation, player animations, chat, and a 3D world with environmental objects.
@@ -70,9 +70,20 @@ States are layered: the server defines the logic, the client extends each state 
 
 **Entry point:** `server/src/index.ts` → initialises RAPIER physics world, then starts `Server`.
 
+## Scenes
+
+The map lives in `scenes/main.json`. Both sides load it; each builds only the scene objects it registered a factory for:
+
+| Object | Client | Server |
+|---|---|---|
+| `Light:*`, `Primitive:Plane` (sky, sun, ground) | rendered | kept as data |
+| `TreeField` | kept as data, renders the trees the server sends | colliders + `SV_TREES` |
+
+Press `.` in the game to open the editor on the running game: the connection to the server stays, so you see the trees and other players live, but the server stops treating you as a player. Edit the scene (the **Scene** tab lists what is saved, server-only objects get their props edited there) and save with Ctrl+S. The file is written, the server reloads it and every client gets the result.
+
 **`Server.ts`** extends `BaseServer<Player>` and is responsible for:
 
-- Spawning 15 trees at random positions within an 80-unit radius on startup and sending their data to each connecting client (`SV_TREES`) — this demonstrates that the environment is fully server-controlled; the server decides what exists in the world and where, so the same pattern can be applied to any world object (destructible props, spawnable items, dynamic obstacles, etc.)
+- Loading the map from `scenes/main.json` (shared with the client) and building the parts it needs: the `TreeField` scene object (`Base/Vegetation/TreeField.ts`) places its trees from a seed, creates their colliders and the server sends them to each connecting client (`SV_TREES`) — this demonstrates that the environment is server-controlled; the server decides what exists in the world and where, so the same pattern can be applied to any world object (destructible props, spawnable items, dynamic obstacles, etc.). The lights and ground in the same file are built by the client only. In dev the server reloads the scene whenever the editor saves it
 - Creating a player at a random spawn point on connection
 - Processing `CL_MOVE` commands (updates `keysPressed` and yaw rotation)
 - Relaying `CL_CHAT` messages to all clients as `SV_CHAT`
@@ -123,7 +134,7 @@ States are layered: the server defines the logic, the client extends each state 
 To view the scene from the server's perspective (what the authoritative physics world sees), navigate to:
 
 ```
-http://localhost:5173/#debug
+http://localhost:8050/#debug
 ```
 
 This enables the debug overlay and renders the server-side physics colliders and entity positions directly in the browser.
@@ -136,16 +147,28 @@ From the workspace root:
 
 ```bash
 npm install
-npm run dev        # starts both client and server in watch mode
+npm run dev          # mavonengine dev: the game server with the dashboard, and the game opens in the browser
+npm run dev:server   # only the game server in watch mode, with its output in the terminal
 ```
 
-The client runs at `http://localhost:5173` and the server listens on port `8081`.
+`npm run dev` runs `mavonengine dev`, which starts the `dev:server` script and shows the server's dashboard in the terminal (CPU, tick time, players, logs, HTTP requests). Quitting it (`q` or Ctrl-C) stops the server. Without an interactive terminal, e.g. in CI, it just runs `dev:server`. Pass options through npm, e.g. `npm run dev -- --no-open`.
+
+Open `http://localhost:8050`. The game server serves the client on its HTTP port, with hot reload for client changes. Server changes rebuild and restart the server, which reloads the page. The client connects to the game socket through `/socket` on the same port, so everything runs on `8050`.
 
 The game server exposes a JSON API with a health endpoint:
 
 ```
 GET http://localhost:8050/api/game/health
 ```
+
+### Production
+
+```bash
+npm run build
+npm start --prefix server
+```
+
+The server serves the built client from `client/dist` on port `8050`, and the game socket is reachable on the same port, so a single process is enough. Vite is never loaded outside `npm run dev`. Behind a reverse proxy or CDN you can still serve `client/dist` yourself and forward `/socket` to the game server's port `8050`.
 
 ---
 

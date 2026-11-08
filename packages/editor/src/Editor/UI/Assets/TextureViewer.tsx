@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import AssetStats from './AssetStats'
 import styles from './TextureViewer.module.css'
 
-type RawImage = HTMLImageElement | HTMLCanvasElement | ImageBitmap
+export type RawImage = HTMLImageElement | HTMLCanvasElement | ImageBitmap
+
+function isCubeTexture<HTMLImageElement>(t: Texture<RawImage> | CubeTexture<HTMLImageElement>): t is CubeTexture<HTMLImageElement> {
+  return Array.isArray(t.image)
+}
 
 function imageToUrl(img: RawImage): string {
   if (img instanceof HTMLImageElement)
@@ -20,8 +24,8 @@ function imageToUrl(img: RawImage): string {
   return ''
 }
 
-export function getTextureUrl(texture: Texture | CubeTexture): string {
-  const img = Array.isArray(texture.image) ? texture.image[0] : texture.image
+export function getTextureUrl(texture: Texture<RawImage> | CubeTexture<HTMLImageElement>): string {
+  const img = isCubeTexture<HTMLImageElement>(texture) ? texture.image[0] : texture.image
   return img ? imageToUrl(img) : ''
 }
 
@@ -38,7 +42,7 @@ function formatColorSpace(cs: string): string {
   return cs
 }
 
-// Three.js CubeTexture face order: +X, -X, +Y, -Y, +Z, -Z
+// Three.js CubeTexture<HTMLImageElement> face order: +X, -X, +Y, -Y, +Z, -Z
 // Cross layout (4 cols × 3 rows):
 //   .   +Y  .   .
 //  -X   +Z  +X  -Z
@@ -58,9 +62,9 @@ const CUBE_FACES: Array<{ label: string, faceIndex: number } | null> = [
   null, // [2,3]
 ]
 
-export default ({ texture }: { texture: Texture | CubeTexture }) => {
-  const isCube = Array.isArray(texture.image)
-  const img = isCube ? texture.image[0] : texture.image
+export default ({ texture }: { texture: Texture<RawImage> | CubeTexture<HTMLImageElement> }) => {
+  const isCube = isCubeTexture<HTMLImageElement>(texture)
+  const img = isCubeTexture<HTMLImageElement>(texture) ? texture.image[0] : texture.image
   const width = img?.width ?? 0
   const height = img?.height ?? 0
 
@@ -136,7 +140,7 @@ export default ({ texture }: { texture: Texture | CubeTexture }) => {
           className={styles.zoomInner}
           style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
         >
-          {isCube
+          {isCubeTexture<HTMLImageElement>(texture)
             ? (
                 <div className={styles.cubeCross}>
                   {CUBE_FACES.map((face, i) =>

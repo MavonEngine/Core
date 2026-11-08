@@ -38,7 +38,9 @@ export default class Trees extends GameObject {
       const dummy = new Object3D()
 
       for (const sourceMesh of meshes) {
-        sourceMesh.geometry.rotateX((90 * Math.PI) / 180)
+        // A copy: the model's geometry is shared, rotating it in place would rotate it again every time the server sends trees
+        const geometry = sourceMesh.geometry.clone()
+        geometry.rotateX((90 * Math.PI) / 180)
 
         const mat = sourceMesh.material as MeshStandardMaterial
         mat.depthTest = true
@@ -49,7 +51,7 @@ export default class Trees extends GameObject {
         }
 
         const instancedMesh = new InstancedMesh(
-          sourceMesh.geometry,
+          geometry,
           sourceMesh.material as Material,
           count,
         )
@@ -82,6 +84,7 @@ export default class Trees extends GameObject {
 
   destroy(): void {
     for (const mesh of this.instancedMeshes) {
+      mesh.geometry.dispose()
       mesh.dispose()
       Game.instance().scene.remove(mesh)
     }

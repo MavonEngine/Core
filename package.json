@@ -4,16 +4,26 @@
   "workspaces": [
     "packages/bootstrap",
     "packages/core",
-    "packages/editor"
+    "packages/editor",
+    "packages/cli",
+    "packages/plugins/*"
   ],
   "devDependencies": {
     "@antfu/eslint-config": "8.0.0",
-    "eslint": "10.1.0"
+    "bcryptjs": "^3.0.3",
+    "eslint": "10.1.0",
+    "playwright-core": "^1.65.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "lint:fix": "npm run lint:fix --workspaces --if-present"
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "test:plugin-e2e": "node e2e/plugin/run.mjs",
+    "test:monitoring-e2e": "node e2e/http-monitoring/run.mjs",
+    "test:scenes-e2e": "node e2e/scenes/run.mjs",
+    "test:mcp-e2e": "node e2e/mcp/run.mjs"
   }
 }

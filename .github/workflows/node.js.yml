@@ -29,7 +29,6 @@ jobs:
         cache: 'npm'
         cache-dependency-path: |
           package-lock.json
-          packages/bootstrap/package-lock.json
           packages/multiplayer-template/package-lock.json
     
     - name: Build and test
@@ -45,22 +44,76 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/bootstrap
 
+    # Needs core's dist from the build step, the snapshot types come from there
+    - name: Typecheck cli
+      run: npm run typecheck
+      working-directory: ./packages/cli
+
+    - name: Typecheck http-monitoring plugin
+      run: npm run typecheck
+      working-directory: ./packages/plugins/http-monitoring
+
+    # Run the built file directly: npm ci runs before the build, so npm skipped
+    # linking the `mavonengine` bin (its target didn't exist yet) and npx would
+    # fall back to looking it up on the registry
+    - name: Smoke test cli binary
+      run: |
+        node dist/index.js --version
+        node dist/index.js --help
+        node dist/index.js dashboard --help
+      working-directory: ./packages/cli
+
     - name: npm link core locally
       run: |
         npm link
       working-directory: ./packages/core
 
+    # The template's `npm run dev` is `mavonengine dev`, so it runs this repository's CLI
+    - name: npm link cli locally
+      run: |
+        npm link
+      working-directory: ./packages/cli
+
     # multiplayer-template has its own nested workspaces (client/server) that npm
-    # workspaces does not handle recursively, so we need a separate npm ci here
+    # workspaces does not handle recursively, so we need a separate npm ci here.
+    # Both in one call: each `npm link <pkg>` replaces the links of an earlier one
     - name: Build multiplayer-template
       run: |
-        npm link @mavonengine/core
+        npm link @mavonengine/core @mavonengine/cli
         npm run typecheck
         npm run build
         npm run lint
       working-directory: ./packages/multiplayer-template
 
+    # `npm run dev` is `mavonengine dev`; without a terminal it runs the dev:server script without the dashboard
     - name: Start dev servers and verify startup
       timeout-minutes: 1
       run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"
       working-directory: ./packages/multiplayer-template
+
+    # Installs e2e/plugin/hello-plugin into the template with `mavonengine install`, then checks it on the
+    # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
+    # install, since a real one would replace the npm-linked @mavonengine/core
+    - name: Plugin end-to-end test
+      timeout-minutes: 5
+      run: npm run test:plugin-e2e
+
+    # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
+    # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
+    - name: Monitoring dashboard end-to-end test
+      timeout-minutes: 5
+      run: npm run test:monitoring-e2e
+
+    - name: Upload monitoring dashboard screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: monitoring-e2e-screenshots-${{ matrix.os }}
+        path: e2e/http-monitoring/screenshots
+        if-no-files-found: ignore
+
+    # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
+    # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
+    - name: MCP end-to-end test
+      timeout-minutes: 5
+      run: npm run test:mcp-e2e

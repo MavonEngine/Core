@@ -1,9 +1,23 @@
-import type { CommandPacket, ServerCommand } from '../Commands'
+import {
+  ServerCommand as BaseServerCommand,
+} from '@mavonengine/core/Networking/Server/Commands'
 
-export type SV_REMOVE_ENTITY = CommandPacket<ServerCommand.SV_REMOVE_ENTITY> & {
-  id: string
+/**
+ * Define all available server commands here that get sent to the client.
+ */
+export enum LocalServerCommand {
+  SV_CHAT = 'sv_chat',
+  SV_TREES = 'sv_trees',
 }
 
+export const ServerCommand = {
+  ...LocalServerCommand,
+  ...BaseServerCommand,
+}
+
+/**
+ * Define the structure of the packets below for your defined packet names above
+ */
 export interface SV_CHAT {
   playerId: string
   playerName: string

@@ -1,9 +1,11 @@
 import type { ClientChannel } from '@geckos.io/client'
 import type { ClientOptions } from '@geckos.io/common/lib/types'
 
+import type { CommandPacket } from '../Server/Commands'
 import { geckos } from '@geckos.io/client'
 import Game from '../../BaseGame'
 import EventEmitter from '../../Utils/EventEmitter'
+import { ClientCommand } from '../Server/Commands'
 
 let instance: NetworkManager | undefined
 
@@ -12,11 +14,23 @@ export default class NetworkManager extends EventEmitter {
   ping = 1000
   pingNow = 0
   private _connected = false
+  private _editorMode = false
+
+  private currentSequenceId = 0
+
+  /**
+   * This command queue is used for replaying packets locally.
+   * When ServerCommand.SV_STATE comes in we drop anything thats below
+   * the lastProcessedSequenceId
+   */
+  private localCommandQueue: CommandPacket<any>[] = []
 
   constructor(options: ClientOptions) {
     super()
     // eslint-disable-next-line ts/no-this-alias
     instance = this
+    // Lets dev tools (the editor, the dev bridge) find the connection from the game
+    ;(Game.instance() as { network?: NetworkManager }).network = this
 
     this._socket = geckos(options)
 
@@ -28,6 +42,8 @@ export default class NetworkManager extends EventEmitter {
 
       Game.instance().logger?.info(`Socket connection established: ${this._socket.id}`)
       this._connected = true
+      if (this._editorMode)
+        this.announceEditor()
       this.onConnect()
     })
 
@@ -38,9 +54,27 @@ export default class NetworkManager extends EventEmitter {
       this.onDisconnect()
     })
 
+    /**
+     * The connection stays open when the editor boots, so what the server sends keeps showing in the editor.
+     * The server is told so it stops treating this client as a player.
+     */
+    // Created after the editor booted, e.g. the editor connects to watch the game without having joined
+    this._editorMode = !!(Game.instance() as { editor?: unknown }).editor
+
     Game.instance().on('editorBoot', () => {
-      this._socket.close()
+      this._editorMode = true
+      if (this._connected)
+        this.announceEditor()
     })
+  }
+
+  private announceEditor() {
+    this._socket.emit(ClientCommand.CL_EDITOR, { type: ClientCommand.CL_EDITOR }, { reliable: true })
+  }
+
+  /** Whether this client runs the editor and so is no player on the server */
+  get editorMode() {
+    return this._editorMode
   }
 
   protected onConnect() {
@@ -58,11 +92,29 @@ export default class NetworkManager extends EventEmitter {
 
     this._connected = false
     instance = undefined
+    const game = Game.instance() as { network?: NetworkManager }
+    if (game.network === this)
+      game.network = undefined
   }
 
-  protected onPong() {}
+  /**
+   * All commands need to go through here to get the
+   * sequenceId assigned and add it to the queue for local replay
+   */
+  public sendCommand(commandPacket: CommandPacket<any>) {
+    commandPacket.sequenceId = this.currentSequenceId++
 
-  protected onDisconnect() {}
+    this.localCommandQueue.push(commandPacket)
+    this.socket.emit('command', commandPacket)
+  }
+
+  public dropCommandsAtSequenceId(sequenceId: number) {
+    this.localCommandQueue = this.localCommandQueue.filter(packet => packet.sequenceId! > sequenceId)
+  }
+
+  protected onPong() { }
+
+  protected onDisconnect() { }
 
   protected pingCheck() {
     this.pingNow = performance.now()
