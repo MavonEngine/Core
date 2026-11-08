@@ -1,5 +1,5 @@
 import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { version } from '../../../package.json' with { type: 'json' }
 import ControllerDebug from './Controllers/ControllerDebug'
 import { useGamepads } from './Controllers/useGamepads'
@@ -11,11 +11,14 @@ export default function StatusBar() {
   const stats = useSceneStats()
   const gamepads = useGamepads()
   const [controllerDebugOpen, setControllerDebugOpen] = useState(false)
+  const scene = useActiveScene()
 
   return (
     <div className={styles.statusBar}>
       <div className={styles.section}>
-        <span className={styles.branch}>main</span>
+        <span className={styles.branch} title={scene ? `scenes/${scene.file}.json` : 'No scene loaded'}>
+          {scene ? `${scene.name}${scene.dirty ? ' ●' : ''}` : 'no scene'}
+        </span>
         <span className={styles.stat}>
           <span className={styles.statLabel}>FPS</span>
           {stats.fps}
@@ -76,4 +79,27 @@ export default function StatusBar() {
       )}
     </div>
   )
+}
+
+/** Name and unsaved state of the active scene */
+function useActiveScene() {
+  const [state, setState] = useState<{ name: string, file: string, dirty: boolean }>()
+
+  useEffect(() => {
+    const read = () => {
+      const scene = window.Game.activeScene
+      setState(scene ? { name: scene.name, file: scene.source ?? 'main', dirty: scene.isDirty() } : undefined)
+    }
+    read()
+    const timer = setInterval(read, 1000)
+    window.Game.editor?.on('sceneSaved', read)
+    window.Game.editor?.on('sceneChanged', read)
+    return () => {
+      clearInterval(timer)
+      window.Game.editor?.off('sceneSaved', read)
+      window.Game.editor?.off('sceneChanged', read)
+    }
+  }, [])
+
+  return state
 }

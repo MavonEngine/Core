@@ -1,22 +1,29 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
+import type { FSWatcher } from 'node:fs'
 import type winston from 'winston'
 import type { LoadedPlugin, ServerPlugin, ServerPluginContext } from '../../Plugins/types'
+import type GameScene from '../../Scene/GameScene'
 import type GameObject from '../../World/GameObject'
 import type NetworkedActor from '../NetworkedActor'
-import type { ClientCommand, CommandPacket, IncomingClientCommandPacket } from './Commands'
+import type { CommandPacket, IncomingClientCommandPacket } from './Commands'
 import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
 import { Buffer } from 'node:buffer'
+import { watch } from 'node:fs'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
+import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
+import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import Player from '../Entities/Player'
-import { ServerCommand } from './Commands'
+import NetworkedGameObject from '../NetworkedGameObject'
+import { ClientCommand, ServerCommand } from './Commands'
 import HttpServer from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
 import LogBuffer from './Stats/LogBuffer'
@@ -60,6 +67,20 @@ export interface ServerOptions {
    * when the server starts; or pass plugin objects directly.
    */
   plugins?: (ServerPlugin | LoadedPlugin<ServerPlugin>)[] | { root: string }
+
+  /**
+   * Project root, the directory with mavonengine.json and `scenes/`. Scene names given to `openScene()` are looked up there.
+   * Defaults to `plugins.root`
+   */
+  root?: string
+}
+
+export interface OpenSceneOptions {
+  /**
+   * Load the scene again whenever its file changes, e.g. when the editor saves it.
+   * Default: on while the client is served through Vite (`client.dev`)
+   */
+  watch?: boolean
 }
 
 function toLoadedPlugin(plugin: ServerPlugin | LoadedPlugin<ServerPlugin>, index: number): LoadedPlugin<ServerPlugin> {
@@ -92,6 +113,13 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private commandsProcessedThisTick = 0
   private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
+  private sceneWatcher?: FSWatcher
+
+  /**
+   * Channels of clients running the editor. They have no player in the world, so they aren't counted
+   * or simulated as players, and are sent every entity in the world.
+   */
+  readonly editorChannels = new Set<string>()
 
   /** The running plugins, once `start()` has loaded them */
   plugins?: PluginHost<ServerPlugin, ServerPluginContext>
@@ -145,6 +173,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
       this.plugins?.run('onConnection', channel, client)
 
+      channel.on(ClientCommand.CL_EDITOR, () => this.attachEditor(channel))
+
       channel.on('ping', () => {
         const pong = () => channel.emit('pong')
 
@@ -158,6 +188,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
       channel.onDisconnect(() => {
         const playerId = channel.id!
+
+        if (this.editorChannels.delete(playerId)) {
+          this.logger.info(`Editor disconnected: ${playerId}`)
+          return
+        }
+
         const disconnectedPlayer = BaseGame.instance().world.entities.items.get(playerId) as Player
 
         this.plugins?.run('onDisconnect', channel)
@@ -172,6 +208,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         this.gameSocket.connectionsManager.connections.forEach((conn, connId) => {
           if (connId === playerId)
             return
+
+          if (this.editorChannels.has(connId!)) {
+            conn.channel.emit(ServerCommand.SV_REMOVE_ENTITY, { id: playerId })
+            return
+          }
 
           const otherPlayer = this.game.world.entities.items.get(connId!) as Player
           if (!otherPlayer)
@@ -242,6 +283,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const trackedEntitiesForMarkingSyncd = new Map<string, NetworkedActor>() // Renamed to avoid confusion
 
     this.gameSocket.connectionsManager.connections.forEach((con, id) => {
+      if (this.editorChannels.has(id!)) {
+        this.sendState(con.channel, [...this.game.world.entities.items.values()].filter(entity => this.isSynced(entity)))
+        return
+      }
+
       const player = this.game.world.entities.items.get(id!) as Player
       if (!player)
         return
@@ -252,6 +298,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       const currentTickTrackedEntities = new Set<string>()
 
       this.game.world.entities.items.forEach((entity) => {
+        if (!this.isSynced(entity))
+          return
+
         const isWithinDistance = player.position.distanceTo(entity.position) < this.getStateSyncDistance()
 
         if (isWithinDistance) {
@@ -278,26 +327,62 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       // This is crucial for correctly handling re-entry.
       player.trackedEntities = currentTickTrackedEntities
 
-      const state = {
-        entities: entitiesToSend, // Use the new array
-        sequenceId: 0,
-        type: ServerCommand.SV_STATE,
-      }
-
-      this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Buffer.byteLength(JSON.stringify(state)))
-
-      const SendState = () => con.channel.emit(ServerCommand.SV_STATE, state)
-
-      if (this.latencySimulator) {
-        this.latencySimulator.handle(SendState)
-      }
-      else {
-        SendState()
-      }
+      this.sendState(con.channel, entitiesToSend)
     })
 
     // Mark entities as synced ONLY if they were actually sent to at least one client
     trackedEntitiesForMarkingSyncd.forEach(entity => entity.markSyncd())
+  }
+
+  /**
+   * Scene objects are map data the clients load from the scene file themselves (or get in their own packets),
+   * so they are only sent in SV_STATE when they are networked entities
+   */
+  private isSynced(entity: GameObject): boolean {
+    return !this.game.activeScene?.entryOf(entity) || entity instanceof NetworkedGameObject
+  }
+
+  private sendState(channel: ServerChannel, entities: GameObject[]) {
+    const state = {
+      entities,
+      sequenceId: 0,
+      type: ServerCommand.SV_STATE,
+    }
+
+    this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Buffer.byteLength(JSON.stringify(state)))
+
+    const SendState = () => channel.emit(ServerCommand.SV_STATE, state)
+
+    if (this.latencySimulator) {
+      this.latencySimulator.handle(SendState)
+    }
+    else {
+      SendState()
+    }
+  }
+
+  /**
+   * A client booted the editor: take its player out of the world, tell the other players it is gone,
+   * and from now on send it the whole world state.
+   */
+  private attachEditor(channel: ServerChannel) {
+    const id = channel.id!
+    if (this.editorChannels.has(id))
+      return
+    this.editorChannels.add(id)
+
+    const player = this.game.world.entities.items.get(id)
+    if (player) {
+      this.game.world.entities.items.delete(id)
+      player.destroy()
+
+      this.gameSocket.connectionsManager.connections.forEach((conn, connId) => {
+        if (connId !== id)
+          conn.channel.emit(ServerCommand.SV_REMOVE_ENTITY, { id })
+      })
+    }
+
+    this.logger.info(`${id} opened the editor, it is no longer a player. ${(this.game.world as ServerWorld).players.length} total players connected`)
   }
 
   /**
@@ -395,7 +480,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       game: this.game,
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
-      projectRoot: this.options.plugins && !Array.isArray(this.options.plugins) ? this.options.plugins.root : undefined,
+      projectRoot: this.projectRoot,
+      registerSceneObject: (definition) => {
+        registerSceneObject({ ...definition, plugin: loaded.package })
+        return sceneObjectKey({ ...definition, plugin: loaded.package })
+      },
     }), this.logger, 'server')
     this.plugins.run('setup')
 
@@ -427,12 +516,73 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     }
   }
 
+  get projectRoot(): string | undefined {
+    const plugins = this.options.plugins
+    return this.options.root ?? (plugins && !Array.isArray(plugins) ? plugins.root : undefined)
+  }
+
   /**
-   * Stop the metric sampling and logging timers and the plugins
+   * Load a scene file into the game world. Only the scene objects with a `server` factory are built.
+   * Listen to `game.on('sceneLoaded', scene => …)` to act on it, which also runs on every reload.
+   *
+   * @param scene a scene name, read from `<root>/scenes/<name>.json`, or a path to a scene file
+   */
+  openScene(scene: string, options: OpenSceneOptions = {}): GameScene {
+    const file = this.sceneFile(scene)
+    const loaded = this.game.loadScene(readSceneFile(file), sceneNameOf(file))
+
+    this.sceneWatcher?.close()
+    this.sceneWatcher = undefined
+    if (options.watch ?? !!this.options.client?.dev)
+      this.watchScene(file)
+
+    return loaded
+  }
+
+  private sceneFile(scene: string): string {
+    if (scene.endsWith('.json') || isAbsolute(scene))
+      return resolve(this.projectRoot ?? '.', scene)
+
+    const root = this.projectRoot
+    if (!root)
+      throw new Error(`Cannot find scene "${scene}": set the server's \`root\` option or pass a path to the scene file`)
+    return sceneFilePath(root, scene)
+  }
+
+  /**
+   * The editor writes scenes to a temporary file and renames it, so the directory is watched rather than the file
+   */
+  private watchScene(file: string) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const name = basename(file)
+
+    this.sceneWatcher = watch(dirname(file), (_event, changed) => {
+      if (changed !== name)
+        return
+
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        try {
+          this.game.loadScene(readSceneFile(file), sceneNameOf(file))
+          this.logger.info(`Scene ${name} changed, reloaded it`)
+        }
+        catch (err) {
+          this.logger.error(`Scene ${name} changed but could not be loaded, keeping the current one: ${(err as Error).message}`)
+        }
+      }, 50)
+    })
+    this.sceneWatcher.on('error', err => this.logger.warn(`Stopped watching scene ${name}: ${err.message}`))
+  }
+
+  /**
+   * Stop the metric sampling and logging timers, the scene watcher and the plugins
    */
   stop() {
     this.timers.forEach(timer => clearInterval(timer))
     this.timers = []
+
+    this.sceneWatcher?.close()
+    this.sceneWatcher = undefined
 
     this.plugins?.run('destroy')
     this.plugins = undefined

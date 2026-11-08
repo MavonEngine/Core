@@ -4,14 +4,7 @@ import type {
 import Game from '@mavonengine/core/Game'
 import GameObject from '@mavonengine/core/World/GameObject'
 import {
-  AmbientLight,
-  Color,
-  DirectionalLight,
-  FogExp2,
   GridHelper,
-  Mesh,
-  MeshStandardMaterial,
-  PlaneGeometry,
   Vector3,
 } from 'three'
 import Character from '../Entities/Player'
@@ -20,58 +13,55 @@ import NetworkManager from '../NetworkManager'
 import PlayerController from '../PlayerController'
 
 export default class GameWorld extends GameObject {
-  player: Character
-  playerController: PlayerController
+  /** Null while the editor watches the game */
+  player: Character | null = null
+  playerController: PlayerController | null = null
   gameSyncManager: GameSyncManager
   private updateCallback?: (delta: number) => void
 
-  constructor() {
+  /**
+   * @param spectate connect without a player, for the editor. The server sends everything, but nobody sees us
+   */
+  constructor(spectate = false) {
     super()
 
-    this.setupLighting()
-    this.setupGround()
+    this.setupGrid()
 
-    // Local player box (green)
-    this.player = new Character('localPlayer', true, new Vector3(0, 0.5, 0))
-    this.playerController = new PlayerController(this.player)
+    if (!spectate) {
+      // Local player box (green)
+      this.player = new Character('localPlayer', true, new Vector3(0, 0.5, 0))
+      this.playerController = new PlayerController(this.player)
+      Game.instance().world.add({ PlayerController: this.playerController })
+    }
+
     this.gameSyncManager = new GameSyncManager(new NetworkManager(), this.playerController)
-
-    Game.instance().world.add({ PlayerController: this.playerController })
 
     this.updateCallback = delta => this.update(delta)
     Game.instance().onUpdate(this.updateCallback)
+
+    // The editor is no player: the server drops ours, so drop the local one and its camera controls too.
+    // The connection stays, so the trees and other players the server sends keep showing in the editor
+    Game.instance().on('editorBoot', () => this.leaveForEditor())
   }
 
-  private setupLighting() {
-    const skyColor = new Color(0x87CEEB)
-    Game.instance().scene.background = skyColor
-    Game.instance().scene.fog = new FogExp2(skyColor, 0.012)
-
-    const ambient = new AmbientLight(0xFFFFFF, 0.6)
-    Game.instance().scene.add(ambient)
-
-    const sun = new DirectionalLight(0xFFF4E0, 1.2)
-    sun.position.set(20, 40, 20)
-    sun.shadow.mapSize.set(2048, 2048)
-    sun.shadow.camera.near = 0.5
-    sun.shadow.camera.far = 200
-    sun.shadow.camera.left = -50
-    sun.shadow.camera.right = 50
-    sun.shadow.camera.top = 50
-    sun.shadow.camera.bottom = -50
-    Game.instance().scene.add(sun)
+  private leaveForEditor() {
+    const world = Game.instance().world.entities.items
+    for (const [id, entity] of world) {
+      if (entity === this.playerController) {
+        world.delete(id)
+        this.playerController.destroy()
+      }
+    }
+    this.player?.destroy()
+    this.player = null
+    this.playerController = null
+    this.gameSyncManager.playerController = null
   }
 
-  private setupGround() {
-    // Large flat plane
-    const geo = new PlaneGeometry(200, 200)
-    const mat = new MeshStandardMaterial({ color: 0x4A7C59 })
-    const plane = new Mesh(geo, mat)
-    plane.rotation.x = -Math.PI / 2
-    plane.receiveShadow = true
-    Game.instance().scene.add(plane)
-
-    // Grid overlay for spatial reference
+  /**
+   * The sky, lights and ground come from scenes/main.json. The grid is a visual aid only, so it isn't part of the scene
+   */
+  private setupGrid() {
     const grid = new GridHelper(200, 40, 0x000000, 0x000000)
     const gridMat = grid.material as Material
     gridMat.opacity = 0.5
@@ -89,11 +79,17 @@ export default class GameWorld extends GameObject {
 
   destroy(): void {
     Game.instance().unregisterOnUpdate(this.updateCallback!)
-    Game.instance().scene.background = null
-    Game.instance().scene.fog = null
-    this.player.destroy()
+    this.player?.destroy()
     this.gameSyncManager.destroy()
-    Game.instance().world.destroy()
+
+    // Everything the session added; the scene's objects stay for the next session
+    const scene = Game.instance().activeScene
+    for (const [id, entity] of Game.instance().world.entities.items) {
+      if (!scene?.entryOf(entity)) {
+        entity.destroy()
+        Game.instance().world.entities.items.delete(id)
+      }
+    }
     super.destroy()
   }
 }

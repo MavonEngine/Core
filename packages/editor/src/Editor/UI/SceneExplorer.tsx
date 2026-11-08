@@ -6,17 +6,21 @@ interface SceneItem {
   uuid: string
   name: string
   type: string
+  /** Part of the scene file, so it is saved */
+  inScene: boolean
   children: SceneItem[]
 }
 
-function buildTree(object: Object3D): SceneItem {
+function buildTree(object: Object3D, parentInScene = false): SceneItem {
+  const inScene = parentInScene || !!object.userData.sceneObjectId
   return {
     uuid: object.uuid,
     name: object.name || object.type,
     type: object.type,
+    inScene,
     children: object.children
       .filter(c => !c.userData.isEditorInternal && c.userData.editorHelper?.mesh !== c)
-      .map(c => buildTree(c)),
+      .map(c => buildTree(c, inScene)),
   }
 }
 
@@ -94,7 +98,12 @@ function SceneNode({ item, selectedUuid, depth, onSelect }: NodeProps) {
             {icon.paths.map((d, i) => <path key={i} d={d} />)}
           </svg>
         </span>
-        <span className={styles.name}>{item.name}</span>
+        <span
+          className={`${styles.name} ${item.inScene ? '' : styles.runtime}`}
+          title={item.inScene ? undefined : 'Not part of the scene, it is not saved'}
+        >
+          {item.name}
+        </span>
       </div>
       {expanded && hasChildren && item.children.map(child => (
         <SceneNode

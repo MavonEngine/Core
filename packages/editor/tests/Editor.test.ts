@@ -3,6 +3,7 @@ import { Matrix4, Mesh, Object3D, Vector3 } from 'three'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Editor from '../src/Editor'
+import { getEditorPanels } from '../src/Editor/panels'
 
 /**
  * Create by claude 4.6
@@ -10,7 +11,7 @@ import Editor from '../src/Editor'
 
 // Provide minimal DOM globals for the node test environment
 beforeAll(() => {
-  ;(globalThis as any).window = { innerWidth: 800, innerHeight: 600 }
+  ;(globalThis as any).window = { innerWidth: 800, innerHeight: 600, addEventListener: vi.fn() }
   const mockBody = { removeAttribute: vi.fn() }
   const mockElement = {
     classList: { add: vi.fn() },
@@ -69,9 +70,13 @@ vi.mock('@mavonengine/core/Game', () => ({
 
 function createMockGame() {
   return {
-    logger: { info: vi.fn() },
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     trigger: vi.fn(),
-    world: { destroy: vi.fn(), add: vi.fn() },
+    on: vi.fn(),
+    world: { destroy: vi.fn(), add: vi.fn(), entities: { items: new Map() } },
+    activeScene: undefined as any,
+    openScene: vi.fn().mockRejectedValue(new Error('no scene file')),
+    loadScene: vi.fn(),
     scene: {
       traverse: vi.fn(),
       clear: vi.fn(),
@@ -371,6 +376,106 @@ describe('editor', () => {
 
       expect(mockGeometry.dispose).toHaveBeenCalled()
       expect(mockMaterial.dispose).toHaveBeenCalled()
+    })
+  })
+
+  describe('scenes', () => {
+    function mockScene() {
+      return {
+        name: 'main',
+        source: 'main',
+        rebuild: vi.fn(),
+        on: vi.fn(),
+        serialize: vi.fn().mockReturnValue({ version: 1, name: 'main', settings: {}, objects: [] }),
+        markSaved: vi.fn(),
+        entryOfObject3D: vi.fn(),
+        getEntries: vi.fn().mockReturnValue([]),
+        remove: vi.fn(),
+      }
+    }
+
+    it('keeps the running game and rebuilds the active scene for its helpers', () => {
+      const scene = mockScene()
+      mockGame.activeScene = scene
+
+      const _editor = new Editor()
+
+      expect(scene.rebuild).toHaveBeenCalled()
+      expect(mockGame.world.destroy).not.toHaveBeenCalled()
+      expect(mockGame.scene.clear).not.toHaveBeenCalled()
+      expect(mockGame.openScene).not.toHaveBeenCalled()
+    })
+
+    it('opens scenes/main.json, or a demo scene when there is none, without an active scene', async () => {
+      const _editor = new Editor()
+      await vi.waitFor(() => expect(mockGame.loadScene).toHaveBeenCalled())
+
+      expect(mockGame.openScene).toHaveBeenCalledWith('main')
+      const [data, source] = mockGame.loadScene.mock.calls[0]
+      expect(source).toBe('main')
+      expect(data.objects.length).toBeGreaterThan(0)
+    })
+
+    it('posts the serialized scene to the dev server on save', async () => {
+      const scene = mockScene()
+      mockGame.activeScene = scene
+      const editor = new Editor()
+      const saved = vi.fn()
+      editor.on('sceneSaved', saved)
+      const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ file: '/project/scenes/main.json' }) })
+
+      await expect(editor.saveScene(fetchFn as any)).resolves.toBe(true)
+
+      expect(fetchFn).toHaveBeenCalledWith('/__mavonengine/scene-save', expect.objectContaining({ method: 'POST' }))
+      expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ name: 'main', scene: scene.serialize() })
+      expect(scene.markSaved).toHaveBeenCalled()
+      expect(saved).toHaveBeenCalledWith({ name: 'main', file: '/project/scenes/main.json' })
+    })
+
+    it('reports a failed save', async () => {
+      mockGame.activeScene = mockScene()
+      const editor = new Editor()
+      const failed = vi.fn()
+      editor.on('sceneSaveFailed', failed)
+      const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'nope' }) })
+
+      await expect(editor.saveScene(fetchFn as any)).resolves.toBe(false)
+      expect(failed).toHaveBeenCalledWith({ name: 'main', error: 'nope' })
+    })
+
+    it('removes a scene object through the scene on Delete', () => {
+      const scene = mockScene()
+      scene.entryOfObject3D.mockReturnValue({ data: { id: 'box_1' } })
+      mockGame.activeScene = scene
+      const editor = new Editor()
+      const callback = vi.mocked(mockGame.input.on).mock.calls.filter(([event]) => event === 'keydown').at(-1)![1]
+
+      const mesh = new Object3D()
+      mesh.parent = mockGame.scene as any
+      editor.activeItem = mesh
+      callback({ code: 'Delete' } as KeyboardEvent)
+
+      expect(scene.remove).toHaveBeenCalledWith('box_1')
+      expect(mockGame.scene.remove).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('panels', () => {
+    it('registers custom panels before and after boot, and removes them', () => {
+      const removeEarly = Editor.registerPanel({ id: 'early', title: 'Early', location: 'left', mount: vi.fn() })
+      const editor = new Editor()
+      const removeLate = editor.addPanel({ id: 'late', title: 'Late', location: 'bottom', component: () => null })
+
+      expect(getEditorPanels().map(p => p.id)).toEqual(['early', 'late'])
+
+      removeEarly()
+      editor.removePanel('late')
+      expect(getEditorPanels()).toEqual([])
+      removeLate()
+    })
+
+    it('rejects a panel without a component or mount', () => {
+      expect(() => Editor.registerPanel({ id: 'bad', title: 'Bad', location: 'right' })).toThrow('needs a component or a mount')
     })
   })
 })

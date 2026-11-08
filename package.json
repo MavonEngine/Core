@@ -22,6 +22,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint:fix --workspaces --if-present",
     "test:plugin-e2e": "node e2e/plugin/run.mjs",
-    "test:monitoring-e2e": "node e2e/http-monitoring/run.mjs"
+    "test:monitoring-e2e": "node e2e/http-monitoring/run.mjs",
+    "test:scenes-e2e": "node e2e/scenes/run.mjs"
   }
 }

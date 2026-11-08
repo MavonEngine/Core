@@ -30,6 +30,9 @@ RAPIER.init().then(() => {
     { name: 'character', type: 'gltfModel', path: '/character.glb' },
   ], physicsWorld)
 
+  // The map: sky, lights and ground, shared with the server which builds the trees from it. Edit it in the editor (press .)
+  game.openScene('main').catch(err => game.logger?.error(`Could not load the scene: ${(err as Error).message}`))
+
   let serverWorld: GameWorld | null = null
 
   function joinServer() {
@@ -38,6 +41,11 @@ RAPIER.init().then(() => {
   }
 
   window.addEventListener('gameUIReady', joinServer)
+
+  // Opened the editor before joining: connect anyway, without a player, to show what the server sends (trees, players)
+  game.on('editorBoot', () => {
+    serverWorld ??= new GameWorld(true)
+  })
 
   let app: App<Element> | null = null
 

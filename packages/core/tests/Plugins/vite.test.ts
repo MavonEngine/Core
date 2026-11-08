@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { build, createServer } from 'vite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
-import { PREFAB_USED_PATH } from '../../src/Plugins/types'
+import { PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
 import { generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
@@ -82,6 +82,20 @@ describe('build', () => {
     expect(js).toContain('"tree.txt"')
     expect(js).toContain('density')
   })
+
+  it('ships the scene files', async () => {
+    writeFile(join(root, 'scenes', 'main.json'), '{"version":1,"name":"main","objects":[]}')
+    const outDir = join(root, 'client', 'dist')
+    await build({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [mavonEnginePlugins()],
+      build: { outDir, minify: false },
+    })
+
+    expect(JSON.parse(readFileSync(join(outDir, 'scenes', 'main.json'), 'utf8')).name).toBe('main')
+  })
 })
 
 describe('dev server', () => {
@@ -140,6 +154,50 @@ describe('dev server', () => {
     const res = await fetch(`${base}${PREFAB_USED_PATH}`, { method: 'POST', body: '{"plugin": 1}' })
 
     expect(res.status).toBe(400)
+  })
+
+  describe('scenes', () => {
+    const scene = {
+      version: 1,
+      name: 'main',
+      settings: {},
+      objects: [{ id: 'box_1', type: 'Primitive:Box', transform: { position: [1, 2, 3], rotation: [0, 0, 0], scale: [1, 1, 1] } }],
+    }
+    const save = (body: unknown) => fetch(`${base}${SCENE_SAVE_PATH}`, { method: 'POST', body: JSON.stringify(body) })
+
+    it('saves a scene to scenes/<name>.json in the project root and serves it back', async () => {
+      const res = await save({ name: 'main', scene })
+
+      expect(res.status).toBe(200)
+      expect(JSON.parse(readFileSync(join(root, 'scenes', 'main.json'), 'utf8'))).toEqual(scene)
+      expect(existsSync(join(root, 'scenes', 'main.json.tmp'))).toBe(false)
+
+      const served = await fetch(`${base}/scenes/main.json`)
+      expect(served.headers.get('cache-control')).toBe('no-store')
+      expect(await served.json()).toEqual(scene)
+    })
+
+    it('rejects names that could leave the scenes directory', async () => {
+      for (const name of ['../evil', 'a/b', '', 'x.json']) {
+        const res = await save({ name, scene })
+        expect(res.status).toBe(400)
+      }
+      expect(existsSync(join(root, 'evil.json'))).toBe(false)
+    })
+
+    it('rejects invalid scenes and keeps the file as it was', async () => {
+      await save({ name: 'main', scene })
+      const res = await save({ name: 'main', scene: { objects: [{ type: 'Primitive:Box' }] } })
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toContain('needs an "id"')
+      expect(JSON.parse(readFileSync(join(root, 'scenes', 'main.json'), 'utf8'))).toEqual(scene)
+    })
+
+    it('leaves requests for scenes that do not exist to vite', async () => {
+      const res = await fetch(`${base}/scenes/missing.json`)
+      expect(res.headers.get('cache-control')).not.toBe('no-store')
+    })
   })
 
   it('serves the virtual module without shipped assets in dev', async () => {

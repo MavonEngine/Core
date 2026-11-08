@@ -5,6 +5,7 @@ import type BaseGame from '../BaseGame'
 import type Game from '../Game'
 import type Server from '../Networking/Server/Server'
 import type { PrefabDefinition } from '../Prefab/PrefabRegistry'
+import type { SceneObjectDefinition } from '../Scene/SceneObjectRegistry'
 import type { Asset } from '../Types/Asset'
 import type IEditor from '../Types/IEditor'
 import type Logger from '../Utils/Logger'
@@ -22,6 +23,11 @@ interface PluginContextBase<TGame extends BaseGame> {
   readonly options: PluginOptions
   readonly game: TGame
   readonly logger: winston.Logger | Logger | null | undefined
+  /**
+   * Make a scene object type loadable on this side. Its key in scene files is `<package>:<type>`, which is returned.
+   * Register the same type in the plugin's client and server entries to build it on both.
+   */
+  registerSceneObject<T extends GameObject>(definition: Omit<SceneObjectDefinition<T>, 'plugin'>): string
 }
 
 export interface ClientPluginContext extends PluginContextBase<Game> {
@@ -115,3 +121,6 @@ export function pluginAssetBase(pkg: string): string {
 
 /** Dev only: the editor posts `{ plugin, prefab }` here when it places a plugin prefab, see `mavonEnginePlugins()` */
 export const PREFAB_USED_PATH = '/__mavonengine/prefab-used'
+
+/** Dev server endpoint the editor saves scenes to: POST { name, scene } */
+export const SCENE_SAVE_PATH = '/__mavonengine/scene-save'

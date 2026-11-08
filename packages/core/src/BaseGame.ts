@@ -1,9 +1,11 @@
 import type { KinematicCharacterController, World } from '@dimforge/rapier3d-compat'
 import type winston from 'winston'
+import type { SceneData, SceneSide } from './Scene/types'
 import type Logger from './Utils/Logger'
 import type GameObjectInterface from './World/GameObjectInterface'
 import { version as RAPIER_VERSION } from '@dimforge/rapier3d-compat'
 import { Clock, Raycaster, Scene, REVISION as THREE_REVISION } from 'three'
+import GameScene from './Scene/GameScene'
 import { bootBanner } from './Utils/BootBanner'
 import EventEmitter from './Utils/EventEmitter'
 import { version as ENGINE_VERSION } from './version'
@@ -31,6 +33,12 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
   scene: Scene
   rayCaster: Raycaster
   world: BaseWorld
+
+  /** The scene loaded with `loadScene()` */
+  activeScene?: GameScene
+
+  /** Which factories of the scene objects this game builds. The server builds no rendering */
+  readonly sceneSide: SceneSide = 'server'
 
   protected updateCallbacks: Set<(delta: number) => void> = new Set()
 
@@ -90,6 +98,27 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
 
   static instance() {
     return instance
+  }
+
+  /**
+   * Replace the active scene: destroy the objects of the current one and build the new one's into the world.
+   * Triggers `sceneLoaded` with the scene.
+   *
+   * @param data the scene file's JSON
+   * @param source the scene's file name without `.json`, so it can be saved back
+   */
+  loadScene(data: SceneData | unknown, source?: string): GameScene {
+    const scene = new GameScene(data, { side: this.sceneSide, world: this.world, source })
+
+    this.activeScene?.destroy()
+    this.activeScene = scene
+
+    this.trigger('sceneLoading', scene)
+    scene.instantiate()
+    this.logger?.info(`Loaded scene ${scene.name} (${scene.getEntries().filter(e => e.object).length} of ${scene.getEntries().length} objects on the ${this.sceneSide})`)
+    this.trigger('sceneLoaded', scene)
+
+    return scene
   }
 
   tick() {

@@ -1,17 +1,21 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite'
 import type { EnabledPlugin } from './ProjectConfig.js'
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
+import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
+import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
-import { pluginAssetBase, PREFAB_USED_PATH } from './types.js'
+import { pluginAssetBase, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
-export { PREFAB_USED_PATH }
+export { PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
 
 const MAX_BODY_BYTES = 4096
+const MAX_SCENE_BYTES = 20 * 1024 * 1024
+const SCENE_URL_RE = new RegExp(`^/${SCENES_DIR}/([\\w-]+)\\.json$`)
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -102,6 +106,14 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
           return
         }
 
+        if (req.method === 'POST' && url === SCENE_SAVE_PATH) {
+          handleSceneSave(req, res)
+          return
+        }
+
+        if ((req.method === 'GET' || req.method === 'HEAD') && SCENE_URL_RE.test(url) && serveScene(url, req, res))
+          return
+
         if ((req.method === 'GET' || req.method === 'HEAD') && url.startsWith('/plugins/') && servePluginAsset(url, req, res))
           return
 
@@ -112,6 +124,15 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     generateBundle() {
       if (config.command !== 'build' || config.build.ssr)
         return
+
+      const scenes = scenesDir()
+      if (existsSync(scenes)) {
+        const files = readdirSync(scenes).filter(file => file.endsWith('.json') && SCENE_NAME_RE.test(file.slice(0, -'.json'.length)))
+        for (const file of files)
+          this.emitFile({ type: 'asset', fileName: `${SCENES_DIR}/${file}`, source: readFileSync(join(scenes, file)) })
+        if (files.length)
+          config.logger.info(`[mavonengine] Shipping ${files.length} scene${files.length === 1 ? '' : 's'}`)
+      }
 
       const root = projectRoot()
       if (!root)
@@ -220,6 +241,69 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     return false
   }
 
+  /** `<project root>/scenes`, the Vite root when there is no mavonengine.json */
+  function scenesDir() {
+    return join(projectRoot() ?? config.root, SCENES_DIR)
+  }
+
+  /** Scenes are read from disk on every request so the game always gets what the editor saved last */
+  function serveScene(url: string, req: IncomingMessage, res: ServerResponse): boolean {
+    const name = SCENE_URL_RE.exec(url)![1]
+    const file = sceneFilePath(dirname(scenesDir()), name)
+    if (!existsSync(file))
+      return false
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Length', statSync(file).size)
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method === 'HEAD')
+      res.end()
+    else
+      createReadStream(file).pipe(res)
+    return true
+  }
+
+  function handleSceneSave(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(body))
+    }
+
+    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    readBody(req, MAX_SCENE_BYTES).then((body) => {
+      let name: unknown
+      let scene: unknown
+      try {
+        ({ name, scene } = JSON.parse(body))
+      }
+      catch {
+        reply(400, { error: 'Expected a JSON body' })
+        return
+      }
+
+      if (typeof name !== 'string' || !SCENE_NAME_RE.test(name)) {
+        reply(400, { error: 'Expected { name, scene } with a name of letters, digits, - and _' })
+        return
+      }
+
+      try {
+        const file = sceneFilePath(dirname(scenesDir()), name)
+        const written = writeSceneFile(file, scene)
+        config.logger.info(`[mavonengine] Saved scene ${name} (${written.objects.length} objects) to ${file}`)
+        reply(200, { saved: true, file, scene: written })
+      }
+      catch (err) {
+        reply(400, { error: (err as Error).message })
+      }
+    }, (err: Error) => reply(413, { error: err.message }))
+  }
+
   function handlePrefabUsed(req: IncomingMessage, res: ServerResponse) {
     const reply = (status: number, body?: object) => {
       res.statusCode = status
@@ -283,6 +367,22 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       }
     })
   }
+}
+
+function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk: string) => {
+      body += chunk
+      if (body.length > maxBytes) {
+        reject(new Error(`Body is larger than ${maxBytes} bytes`))
+        req.destroy()
+      }
+    })
+    req.on('end', () => resolve(body))
+    req.on('error', reject)
+  })
 }
 
 function shippedAssetsByPackage(root: string): Map<string, string[]> {
