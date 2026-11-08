@@ -153,6 +153,68 @@ const server = new MyServer(logger, physicsWorld, {
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
 
+## `mavonengine mcp`
+
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so an AI coding assistant can look at your running game: the game server, and the game tabs open in a browser. It works with any MCP client and any model: Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, or a local model behind an MCP-capable client.
+
+Projects made with `mavonengine create` get a `.mcp.json` that registers it. Elsewhere, add it to your client as a stdio server; most clients take this JSON:
+
+```json
+{
+  "mcpServers": {
+    "mavonengine": { "command": "npx", "args": ["-y", "@mavonengine/cli", "mcp"] }
+  }
+}
+```
+
+Game server tools:
+
+| Tool | |
+| --- | --- |
+| `server_status` | Uptime, tick time against its budget, CPU, bandwidth, memory, player / entity / physics counts |
+| `server_metrics` | The full metrics snapshot, optionally with its per-second history |
+| `list_players` | Connected players with position and connection details |
+| `get_scene` | The active scene: file, hot reload, unsaved changes, settings and objects (dev only) |
+| `list_entities` | Entities in the world, filtered by type and distance to a point (dev only) |
+| `get_entity` | One entity with the state it sends to clients (dev only) |
+| `recent_logs` | Server log lines, filtered by level and text |
+| `recent_requests` | HTTP requests the server answered, filtered by path and status |
+
+Client tools, for the game tabs open while Vite serves the client in dev:
+
+| Tool | |
+| --- | --- |
+| `list_clients` | Open tabs: page, editor or player, the player's id on the server, visibility, FPS |
+| `client_status` | Draw calls and triangles of one frame, GPU geometries / textures / programs, JS heap, canvas, camera |
+| `client_entities` / `client_entity` | The tab's world, in the same shape as the server's, with its local player marked |
+| `client_scene` | The scene loaded in the tab, and which objects the client built |
+| `client_network` | Connection, ping, and inputs sent but not yet acknowledged by the server |
+| `client_logs` | Console output, uncaught errors and unhandled rejections, filtered by level and text |
+| `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
+| `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, composer passes, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
+| `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
+
+Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
+
+| Tool | |
+| --- | --- |
+| `docs_list_pages` | Every docs page with its path, title, description and category |
+| `docs_get_page` | One docs page as Markdown, by path (e.g. `/networking/state-sync`) |
+
+They connect to the site the first time one is used, so the other tools also work offline. `--docs-url` points them at another docs server, `--no-docs` leaves them out.
+
+Client tools take a `clientId` from `list_clients`. Without one they ask the only open tab, or the only one not running the editor.
+
+Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`). When Vite serves the client on its own port instead of through the game server, pass `--client-url`, e.g. `http://localhost:5173`.
+
+The server scene and entity tools read `GET /api/game/dev/*` on the game server. Those routes are only registered when `NODE_ENV` is not `production`: a metrics token does not turn them on there. Otherwise they follow the [server access](#server-access) rules of the metrics endpoint.
+
+The client tools go through the dev bridge of the Vite plugin in `@mavonengine/core/vite.config` (Vite 8). In dev it adds a small module to the page that answers over Vite's hot-reload WebSocket, and serves `GET /__mavonengine/clients` to localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set for the dev server. Builds never include it. Turn it off with `mavonEnginePlugins({ devBridge: false })`.
+
+`client_trace` patches the tab only while it records and puts everything back afterwards. It times every frame and composer pass, counts the WebGL calls on the context, keeps slow single calls (shader compiles, texture uploads, `readPixels` / `getError` stalls), long animation frames with the scripts that ran, and your own `performance.measure()` spans. GPU time per frame needs `EXT_disjoint_timer_query_webgl2` (Chrome and Edge on most GPUs; the three-perf panel pauses while tracing since it uses the same queries). JS call stacks come from the [JS Self-Profiling API](https://wicg.github.io/js-self-profiling/) in Chromium browsers: the Vite plugin serves dev pages with `Document-Policy: js-profiling` for it, so reload tabs opened before you updated. The trace file is [Chrome Trace Event](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) JSON with tracks for frames, passes, GPU time, ticks, JS samples and slow WebGL calls: open it in [Perfetto](https://ui.perfetto.dev), `chrome://tracing` or [speedscope](https://www.speedscope.app). Keep the tab in the foreground while it records, browsers throttle hidden tabs.
+
+To let `compare_entity` match your own player with the server's, set `game.localPlayer` to the entity the tab controls, or give it `isLocalPlayer = true`: the server keys players by socket id, which the client often doesn't.
+
 ## Writing a plugin
 
 A plugin is an npm package with a `mavonengine` field in its `package.json`:

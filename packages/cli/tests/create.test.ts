@@ -91,6 +91,7 @@ describe('createProject', () => {
     expect(steps.some(s => s.includes(' B'))).toBe(true)
     expect(steps.at(-1)).toBe('Extracting the template…')
     expect(output()).toContain('Extracted 2 files')
+    expect(JSON.parse(readFileSync(join(projectDir, '.mcp.json'), 'utf8')).mcpServers.mavonengine.args).toEqual(['-y', '@mavonengine/cli', 'mcp'])
   })
 
   it('refuses an existing directory', async () => {

@@ -29,6 +29,8 @@ export default class NetworkManager extends EventEmitter {
     super()
     // eslint-disable-next-line ts/no-this-alias
     instance = this
+    // Lets dev tools (the editor, the dev bridge) find the connection from the game
+    ;(Game.instance() as { network?: NetworkManager }).network = this
 
     this._socket = geckos(options)
 
@@ -90,6 +92,9 @@ export default class NetworkManager extends EventEmitter {
 
     this._connected = false
     instance = undefined
+    const game = Game.instance() as { network?: NetworkManager }
+    if (game.network === this)
+      game.network = undefined
   }
 
   /**

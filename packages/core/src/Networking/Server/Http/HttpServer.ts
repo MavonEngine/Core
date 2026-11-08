@@ -4,13 +4,18 @@ import type winston from 'winston'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
 import type ServerMetrics from '../Stats/ServerMetrics'
+import type WorldInspector from '../Stats/WorldInspector'
 import type { ClientOptions } from './ClientMiddleware'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import process from 'node:process'
 import express from 'express'
+import { parseEntityQuery } from '../../../Dev/inspect'
+import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
+
+export { parseEntityQuery }
 
 export interface MetricsEndpointOptions {
   /**
@@ -35,6 +40,12 @@ export interface HttpServerOptions {
   requests?: RequestLog
   /** Serve the game client from this server, see `serveClient()` */
   client?: ClientOptions
+  /**
+   * Serves the scene and the world's entities on GET /api/game/dev/* when given (used by `mavonengine mcp`).
+   * These routes only exist outside production (NODE_ENV !== 'production'), whatever token is set,
+   * and are protected like the metrics endpoint.
+   */
+  inspector?: WorldInspector
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -53,6 +64,7 @@ export default class HttpServer {
   private logs?: LogBuffer
   private requests?: RequestLog
   private clientOptions?: ClientOptions
+  private inspector?: WorldInspector
   private lastMetricsRequestAt?: number
   private listener?: NodeServer
 
@@ -68,11 +80,22 @@ export default class HttpServer {
     this.logs = options.logs
     this.requests = options.requests
     this.clientOptions = options.client
+    this.inspector = options.inspector
 
     this.registerHealthEndpoint()
     this.registerMetricsEndpoint()
     this.registerLogsEndpoint()
     this.registerRequestsEndpoint()
+
+    if (this.devEndpointsEnabled)
+      this.registerDevEndpoints()
+  }
+
+  /**
+   * Whether GET /api/game/dev/* is registered: an inspector was given and the server isn't running in production
+   */
+  get devEndpointsEnabled() {
+    return !!this.inspector && devEndpointsEnabled()
   }
 
   start() {
@@ -173,6 +196,36 @@ export default class HttpServer {
 
       const after = Number(req.query.after ?? 0)
       res.json(this.requests.since(Number.isFinite(after) ? after : 0))
+    })
+  }
+
+  /**
+   * GET /api/game/dev/scene                    the active scene, `{ scene: null }` without one
+   * GET /api/game/dev/entities?type=&near=x,y,z&radius=&limit=&offset=
+   * GET /api/game/dev/entities/:id             one entity with its serialized state, `{ entity: null }` when there is none
+   *
+   * Never registered in production, so there they 404 like any unknown route.
+   */
+  private registerDevEndpoints() {
+    const inspector = this.inspector!
+    const authorize = (req: Request, res: Response, next: NextFunction) => this.authorizeMetrics(req, res, next)
+
+    this.app.get('/api/game/dev/scene', authorize, (_req, res) => {
+      res.json({ scene: inspector.scene() })
+    })
+
+    this.app.get('/api/game/dev/entities', authorize, (req, res) => {
+      const query = parseEntityQuery(req.query as Record<string, unknown>)
+      if (typeof query === 'string') {
+        res.status(400).json({ error: query })
+        return
+      }
+
+      res.json(inspector.entities(query))
+    })
+
+    this.app.get('/api/game/dev/entities/:id', authorize, (req, res) => {
+      res.json({ entity: inspector.entity(req.params.id as string) })
     })
   }
 

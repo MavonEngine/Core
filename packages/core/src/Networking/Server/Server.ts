@@ -12,6 +12,7 @@ import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
+import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
 import { watch } from 'node:fs'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
@@ -29,6 +30,7 @@ import LatencySimulator from './LatencySimulator'
 import LogBuffer from './Stats/LogBuffer'
 import RequestLog from './Stats/RequestLog'
 import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
+import WorldInspector from './Stats/WorldInspector'
 import ServerWorld from './World'
 
 let instance: Server<GameObject>
@@ -91,7 +93,7 @@ function toLoadedPlugin(plugin: ServerPlugin | LoadedPlugin<ServerPlugin>, index
   return { package: bare.name ?? `plugin-${index}`, options: {}, plugin: bare }
 }
 
-export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource {
+export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource {
   game: BaseGame
 
   private commandBuffer: IncomingClientCommandPacket<ClientCommand>[] = []
@@ -114,6 +116,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
   private sceneWatcher?: FSWatcher
+
+  /** File of the scene last opened with `openScene()` */
+  activeSceneFile?: string
 
   /**
    * Channels of clients running the editor. They have no player in the world, so they aren't counted
@@ -159,6 +164,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       logs: this.logs,
       requests: this.requests,
       client: this.options.client,
+      inspector: new WorldInspector(this),
     })
 
     this.gameSocket.onConnection((channel) => {
@@ -516,6 +522,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     }
   }
 
+  /** Whether the active scene's file is watched and reloaded on change */
+  get sceneWatched(): boolean {
+    return !!this.sceneWatcher
+  }
+
   get projectRoot(): string | undefined {
     const plugins = this.options.plugins
     return this.options.root ?? (plugins && !Array.isArray(plugins) ? plugins.root : undefined)
@@ -530,6 +541,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   openScene(scene: string, options: OpenSceneOptions = {}): GameScene {
     const file = this.sceneFile(scene)
     const loaded = this.game.loadScene(readSceneFile(file), sceneNameOf(file))
+    this.activeSceneFile = file
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined

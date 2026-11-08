@@ -111,3 +111,9 @@ jobs:
         name: monitoring-e2e-screenshots-${{ matrix.os }}
         path: e2e/http-monitoring/screenshots
         if-no-files-found: ignore
+
+    # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
+    # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
+    - name: MCP end-to-end test
+      timeout-minutes: 5
+      run: npm run test:mcp-e2e

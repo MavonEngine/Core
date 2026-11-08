@@ -5,6 +5,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { dirname, extname, join, resolve } from 'node:path'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
+import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { pluginAssetBase, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
@@ -12,6 +13,21 @@ export { PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
+
+/** Injected into every page Vite serves in dev, starts the dev bridge. Never part of a build */
+export const VIRTUAL_DEV_BRIDGE_ID = 'virtual:mavonengine/dev-bridge'
+const RESOLVED_VIRTUAL_DEV_BRIDGE_ID = `\0${VIRTUAL_DEV_BRIDGE_ID}`
+
+/**
+ * `import.meta.hot` only exists in modules Vite transforms, so this module hands it to the bridge in core,
+ * which may be pre-bundled. Imported like the game imports core, so both use the same copy.
+ */
+const DEV_BRIDGE_ENTRY = '@mavonengine/core/Dev/DevBridge'
+const DEV_BRIDGE_MODULE = `import { startDevBridge } from '${DEV_BRIDGE_ENTRY}'
+
+if (import.meta.hot)
+  startDevBridge(import.meta.hot)
+`
 
 const MAX_BODY_BYTES = 4096
 const MAX_SCENE_BYTES = 20 * 1024 * 1024
@@ -41,6 +57,12 @@ const CONTENT_TYPES: Record<string, string> = {
 export interface MavonEnginePluginsOptions {
   /** Directory with mavonengine.json. Default: the nearest one from the Vite root upwards */
   root?: string
+
+  /**
+   * In dev, let tools (`mavonengine mcp`) inspect the open game tabs through GET /__mavonengine/clients.
+   * Only localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set. Default true
+   */
+  devBridge?: boolean
 }
 
 /**
@@ -48,6 +70,7 @@ export interface MavonEnginePluginsOptions {
  * - `virtual:mavonengine/plugins` exports the client entries of the plugins enabled in mavonengine.json
  * - in dev, serves plugin assets under `/plugins/<package>/` and records the prefabs the editor places
  * - on build, copies only the plugin assets the release needs into `plugins/<package>/`
+ * - in dev, the dev bridge: tools can inspect the open game tabs (renderer, world, logs, screenshots)
  */
 export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plugin {
   let config: ResolvedConfig
@@ -63,6 +86,9 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
   const warn = (message: string) => config.logger.warn(`[mavonengine] ${message}`)
 
+  const devBridge = options.devBridge ?? true
+  let bridge: DevBridgeHub | undefined
+
   return {
     name: 'mavonengine-plugins',
 
@@ -71,10 +97,23 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     },
 
     resolveId(id) {
-      return id === VIRTUAL_PLUGINS_ID ? RESOLVED_VIRTUAL_PLUGINS_ID : undefined
+      if (id === VIRTUAL_PLUGINS_ID)
+        return RESOLVED_VIRTUAL_PLUGINS_ID
+      if (id === VIRTUAL_DEV_BRIDGE_ID && devBridge && config.command === 'serve')
+        return RESOLVED_VIRTUAL_DEV_BRIDGE_ID
+      return undefined
     },
 
-    load(id) {
+    async load(id) {
+      if (id === RESOLVED_VIRTUAL_DEV_BRIDGE_ID) {
+        // Without core where the game imports it from there is no game to inspect
+        if (!await this.resolve(DEV_BRIDGE_ENTRY, join(config.root, 'index.html'))) {
+          warn(`Dev bridge off: ${DEV_BRIDGE_ENTRY} can't be resolved from ${config.root}`)
+          return 'export {}\n'
+        }
+        return DEV_BRIDGE_MODULE
+      }
+
       if (id !== RESOLVED_VIRTUAL_PLUGINS_ID)
         return undefined
 
@@ -96,10 +135,32 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       return generatePluginsModule(plugins, shipped)
     },
 
+    transformIndexHtml() {
+      if (!devBridge || config.command !== 'serve')
+        return undefined
+
+      // First in <head> so it also catches errors thrown while the game starts
+      return [{
+        tag: 'script',
+        attrs: { type: 'module', src: `${config.base}@id/__x00__${VIRTUAL_DEV_BRIDGE_ID}` },
+        injectTo: 'head-prepend',
+      }]
+    },
+
     configureServer(server) {
       watchConfig(server)
+      if (devBridge)
+        bridge = new DevBridgeHub(server.ws)
+
       server.middlewares.use((req, res, next) => {
         const url = (req.url ?? '').split('?')[0]
+
+        if (bridge && handleBridgeRequest(bridge, req, res))
+          return
+
+        // Lets the dev bridge's `trace` sample JS stacks with the JS Self-Profiling API (Chromium). Only matters on pages
+        if (bridge)
+          res.setHeader('Document-Policy', 'js-profiling')
 
         if (req.method === 'POST' && url === PREFAB_USED_PATH) {
           handlePrefabUsed(req, res)

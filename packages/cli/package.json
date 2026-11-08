@@ -32,8 +32,10 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@profullstack/hqtui": "0.11.1",
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.5.16",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@mavonengine/core": "*",

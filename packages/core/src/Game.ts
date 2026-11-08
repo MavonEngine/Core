@@ -1,9 +1,11 @@
 import type { World } from '@dimforge/rapier3d-compat'
+import type NetworkManager from './Networking/Client/NetworkManager'
 import type { ClientPlugin, ClientPluginContext, LoadedPlugin } from './Plugins/types'
 import type GameScene from './Scene/GameScene'
 import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
 import type IEditor from './Types/IEditor'
+import type GameObject from './World/GameObject'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
 import Camera from './Camera'
@@ -46,6 +48,15 @@ export default class Game extends BaseGame {
   loadingScreen: LoadingScreen
 
   editor?: IEditor
+
+  /** The game server connection, once a NetworkManager was created */
+  network?: NetworkManager
+
+  /**
+   * The entity this client controls, if the game sets it. Dev tools use it to match it with the server's player,
+   * which the server keys by the connection's socket id
+   */
+  localPlayer?: GameObject
 
   /**
    * Optional hook invoked in dev mode after the game is initialized.
