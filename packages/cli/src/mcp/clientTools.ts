@@ -1,8 +1,13 @@
+import type { TraceCapture } from '@mavonengine/core/Dev/trace'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type GameServerClient from './GameServerClient'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { z } from 'zod'
 import { READ_ONLY, run, vec3 } from './result'
+import { analyzeTrace, toTraceEvents } from './trace'
 
 const CLIENT_LOG_LEVELS = ['error', 'warn', 'info', 'log', 'debug'] as const
 /** Severity of a console level, lower is more severe. `log` and `info` print alike */
@@ -57,6 +62,12 @@ export function compareEntities(id: string, server: Entity | null, client: Entit
     client: clientSummary,
     note: 'Client state of remote entities is interpolated and the local player is predicted, so small deltas are expected while moving',
   }
+}
+
+/** Where client_trace saves the trace file when no path is given */
+export function defaultTracePath(clientId: string, at = new Date()) {
+  const stamp = at.toISOString().replace(/[:.]/g, '-')
+  return join(tmpdir(), 'mavonengine-traces', `trace-${clientId}-${stamp}.json`)
 }
 
 export function registerClientTools(server: McpServer, client: GameServerClient) {
@@ -178,6 +189,43 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
       return { isError: true, content: [{ type: 'text', text: (err as Error).message }] }
     }
   })
+
+  server.registerTool('client_trace', {
+    title: 'Trace client rendering',
+    description: 'Record a tab for a few seconds and analyse its performance: frame time distribution, render CPU vs GPU time per '
+      + 'frame, time per composer pass, game tick time (physics, world.update), WebGL work per frame (draw calls, program / texture / '
+      + 'framebuffer switches, uniform calls, uploads), the bottleneck, and the worst hitches with their likely causes (shader '
+      + 'compiles, texture uploads, GPU syncs, GC, slow ticks, long scripts, hot JS functions). JS sampling uses the browser\'s JS '
+      + 'Self-Profiling API (Chromium) and GPU time EXT_disjoint_timer_query_webgl2. Also saves a Chrome Trace Event file to open '
+      + 'as a flame chart in https://ui.perfetto.dev or chrome://tracing. Keep the tab in the foreground while it records.',
+    inputSchema: {
+      clientId,
+      durationMs: z.number().int().min(500).max(15000).default(3000).describe('How long to record'),
+      jsProfile: z.boolean().default(true).describe('Sample JS call stacks'),
+      sampleIntervalMs: z.number().int().min(1).max(100).default(10).describe('JS sampling interval, the browser may round it up'),
+      gpu: z.boolean().default(true).describe('Time each frame on the GPU'),
+      maxHitches: z.number().int().min(0).max(50).default(10).describe('Worst late frames to explain'),
+      savePath: z.string().optional().describe('Where to write the trace file. Default: a file in the system temp directory'),
+      save: z.boolean().default(true).describe('Write the trace file'),
+    },
+    annotations: { ...READ_ONLY, idempotentHint: false },
+  }, ({ clientId, durationMs, jsProfile, sampleIntervalMs, gpu, maxHitches, savePath, save }) => run(async () => {
+    const capture = await client.client('trace', { durationMs, jsProfile: String(jsProfile), sampleIntervalMs, gpu: String(gpu) }, clientId) as TraceCapture
+    const analysis = analyzeTrace(capture, { maxHitches })
+
+    let traceFile: string | undefined
+    if (save) {
+      traceFile = savePath ? resolve(savePath) : defaultTracePath(clientId ?? 'auto')
+      await mkdir(dirname(traceFile), { recursive: true })
+      await writeFile(traceFile, JSON.stringify(toTraceEvents(capture)))
+    }
+
+    return {
+      ...analysis,
+      traceFile,
+      traceFileNote: traceFile ? 'Chrome Trace Event JSON: drag it into https://ui.perfetto.dev (or chrome://tracing, or speedscope.app) for the flame chart' : undefined,
+    }
+  }))
 
   server.registerTool('compare_entity', {
     title: 'Compare an entity on server and client',

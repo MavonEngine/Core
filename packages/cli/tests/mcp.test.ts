@@ -65,6 +65,7 @@ describe('mcp server', () => {
       'client_scene',
       'client_screenshot',
       'client_status',
+      'client_trace',
       'compare_entity',
       'get_entity',
       'get_scene',

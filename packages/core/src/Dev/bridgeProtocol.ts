@@ -19,8 +19,19 @@ export const BRIDGE_CLIENTS_PATH = '/__mavonengine/clients'
 /** Client id that picks the only open game tab (the only one not running the editor, if there are several) */
 export const AUTO_CLIENT_ID = 'auto'
 
-export const BRIDGE_QUERIES = ['info', 'status', 'entities', 'entity', 'scene', 'network', 'logs', 'screenshot'] as const
+export const BRIDGE_QUERIES = ['info', 'status', 'entities', 'entity', 'scene', 'network', 'logs', 'screenshot', 'trace'] as const
 export type BridgeQuery = typeof BRIDGE_QUERIES[number]
+
+/** Trace length limits, in ms. The dev server waits this long plus TRACE_GRACE_MS for the tab to answer */
+export const TRACE_DEFAULT_MS = 3000
+export const TRACE_MAX_MS = 15000
+export const TRACE_GRACE_MS = 10000
+
+/** How long a trace of `durationMs` (a query param) records, within the limits */
+export function traceDuration(durationMs: string | number | undefined): number {
+  const ms = Number(durationMs)
+  return Number.isFinite(ms) && ms > 0 ? Math.min(Math.max(Math.round(ms), 100), TRACE_MAX_MS) : TRACE_DEFAULT_MS
+}
 
 export interface BridgeClientInfo {
   /** Stays the same across reloads of the tab */

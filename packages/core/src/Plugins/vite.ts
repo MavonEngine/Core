@@ -158,6 +158,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         if (bridge && handleBridgeRequest(bridge, req, res))
           return
 
+        // Lets the dev bridge's `trace` sample JS stacks with the JS Self-Profiling API (Chromium). Only matters on pages
+        if (bridge)
+          res.setHeader('Document-Policy', 'js-profiling')
+
         if (req.method === 'POST' && url === PREFAB_USED_PATH) {
           handlePrefabUsed(req, res)
           return

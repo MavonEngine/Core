@@ -21,7 +21,7 @@ export interface EntityQuery {
 
 export class GameServerError extends Error { }
 
-export type ClientQuery = 'status' | 'entities' | 'entity' | 'scene' | 'network' | 'logs' | 'screenshot'
+export type ClientQuery = 'status' | 'entities' | 'entity' | 'scene' | 'network' | 'logs' | 'screenshot' | 'trace'
 
 const DEV_UNAVAILABLE = 'The dev endpoints are not available: the game server runs with NODE_ENV=production '
   + '(they are never served there), or it uses a @mavonengine/core release without them'
@@ -97,8 +97,10 @@ export default class GameServerClient {
    */
   client(query: ClientQuery, params: Record<string, string | number | undefined> = {}, clientId = 'auto') {
     const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
-    // Longer than the dev server waits for the tab: a screenshot is encoded there, status waits for frames
-    const timeoutMs = query === 'screenshot' ? 15000 : query === 'status' ? 10000 : 8000
+    // Longer than the dev server waits for the tab: a screenshot is encoded there, status waits for frames, a trace records
+    const timeoutMs = query === 'trace'
+      ? Number(params.durationMs ?? 3000) + 15000
+      : query === 'screenshot' ? 15000 : query === 'status' ? 10000 : 8000
     return this.bridge(`__mavonengine/clients/${encodeURIComponent(clientId)}/${query}`, defined, timeoutMs)
   }
 

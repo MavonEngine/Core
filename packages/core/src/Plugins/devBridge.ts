@@ -3,7 +3,7 @@ import type { BridgeClientInfo, BridgeQuery, BridgeRequest, BridgeResponse } fro
 import { Buffer } from 'node:buffer'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import process from 'node:process'
-import { AUTO_CLIENT_ID, BRIDGE_ANNOUNCE, BRIDGE_CLIENTS_PATH, BRIDGE_HELLO, BRIDGE_QUERIES, BRIDGE_REQUEST, BRIDGE_RESPONSE } from '../Dev/bridgeProtocol.js'
+import { AUTO_CLIENT_ID, BRIDGE_ANNOUNCE, BRIDGE_CLIENTS_PATH, BRIDGE_HELLO, BRIDGE_QUERIES, BRIDGE_REQUEST, BRIDGE_RESPONSE, TRACE_GRACE_MS, traceDuration } from '../Dev/bridgeProtocol.js'
 
 /** The parts of Vite's WebSocket server the hub uses */
 export interface BridgeSocketServer {
@@ -33,6 +33,11 @@ const ROUTE_RE = new RegExp(`^${BRIDGE_CLIENTS_PATH}(?:/([^/]+)/([a-z]+))?/?$`)
 
 /** Slower queries: a screenshot encodes an image, status waits up to 4s for two frames */
 const QUERY_TIMEOUT_MS: Partial<Record<BridgeQuery, number>> = { screenshot: 10000, status: 7000 }
+
+/** A trace records for its duration before it answers */
+function queryTimeout(query: BridgeQuery, params: Record<string, string>): number | undefined {
+  return query === 'trace' ? traceDuration(params.durationMs) + TRACE_GRACE_MS : QUERY_TIMEOUT_MS[query]
+}
 
 /**
  * Keeps track of the game tabs connected to the Vite dev server and asks them questions over Vite's WebSocket.
@@ -124,7 +129,7 @@ export class DevBridgeHub {
     throw new BridgeError(`${tabs.length} game tabs are open, pick one by id: ${tabs.map(tab => `${tab.info.id} (${tab.info.editor ? 'editor' : 'player'} ${tab.info.url})`).join(', ')}`, 409)
   }
 
-  ask(id: string, query: BridgeQuery, params: Record<string, string>, timeoutMs = QUERY_TIMEOUT_MS[query] ?? this.timeoutMs): Promise<unknown> {
+  ask(id: string, query: BridgeQuery, params: Record<string, string>, timeoutMs = queryTimeout(query, params) ?? this.timeoutMs): Promise<unknown> {
     const tab = this.tabs.get(this.resolve(id))!
     const requestId = randomUUID()
 

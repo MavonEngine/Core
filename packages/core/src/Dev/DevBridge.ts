@@ -2,8 +2,9 @@ import type Game from '../Game'
 import type GameObject from '../World/GameObject'
 import type { BridgeClientInfo, BridgeQuery, BridgeRequest, BridgeResponse } from './bridgeProtocol'
 import type { EntitySummary } from './inspect'
-import { BRIDGE_ANNOUNCE, BRIDGE_HELLO, BRIDGE_QUERIES, BRIDGE_REQUEST, BRIDGE_RESPONSE } from './bridgeProtocol'
+import { BRIDGE_ANNOUNCE, BRIDGE_HELLO, BRIDGE_QUERIES, BRIDGE_REQUEST, BRIDGE_RESPONSE, traceDuration } from './bridgeProtocol'
 import { describeScene, detailEntity, parseEntityQuery, queryEntities, summarizeEntity, vec } from './inspect'
+import { recordTrace } from './trace'
 
 /**
  * The part of Vite's `import.meta.hot` the bridge uses. Passed in by the virtual module the Vite plugin injects,
@@ -256,6 +257,15 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
 
     const dataUrl = copy.toDataURL(mimeType, 0.85)
     return { mimeType, width: copy.width, height: copy.height, data: dataUrl.slice(dataUrl.indexOf(',') + 1) }
+  },
+
+  trace({ durationMs, gpu, jsProfile, sampleIntervalMs }) {
+    return recordTrace(game(), {
+      durationMs: traceDuration(durationMs),
+      gpu: gpu !== 'false',
+      jsProfile: jsProfile !== 'false',
+      sampleIntervalMs: Math.max(1, Math.min(Number(sampleIntervalMs) || 10, 100)),
+    })
   },
 }
 
