@@ -72,6 +72,9 @@ export default class Renderer {
         anchorX: 'right',
         anchorY: 'bottom',
         memory: true,
+        // Count the frames actually rendered. Overclocking estimates the FPS the GPU could reach from idle time,
+        // which reads above maxFps (or the refresh rate) when frames are capped
+        overClock: false,
         guiVisible: false,
         domElement: document.body,
         renderer: this.instance,
