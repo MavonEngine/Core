@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "name": "main",
+  "settings": {
+    "background": "#87ceeb",
+    "fog": {
+      "color": "#87ceeb",
+      "density": 0.012
+    }
+  },
+  "objects": [
+    {
+      "id": "ambient_light",
+      "type": "Light:AmbientLight",
+      "name": "Ambient light",
+      "transform": {
+        "position": [0, 5, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "props": {
+        "color": "#ffffff",
+        "intensity": 0.6,
+        "castShadow": false
+      }
+    },
+    {
+      "id": "sun",
+      "type": "Light:DirectionalLight",
+      "name": "Sun",
+      "transform": {
+        "position": [20, 40, 20],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "props": {
+        "color": "#fff4e0",
+        "intensity": 1.2,
+        "castShadow": true,
+        "shadowMapSize": 2048,
+        "shadowArea": 50,
+        "shadowFar": 200
+      }
+    },
+    {
+      "id": "ground",
+      "type": "Primitive:Plane",
+      "name": "Ground",
+      "transform": {
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "props": {
+        "width": 200,
+        "height": 200,
+        "color": "#4a7c59",
+        "roughness": 1,
+        "metalness": 0,
+        "castShadow": false,
+        "receiveShadow": true
+      }
+    },
+    {
+      "id": "forest",
+      "type": "TreeField",
+      "name": "Forest",
+      "transform": {
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "props": {
+        "count": 15,
+        "area": 80,
+        "minScale": 0.01,
+        "maxScale": 0.015,
+        "seed": 1
+      }
+    }
+  ]
+}

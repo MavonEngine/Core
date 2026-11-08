@@ -41,9 +41,23 @@ describe('networkManager', () => {
     expect(mockSocket.onDisconnect).toHaveBeenCalled()
   })
 
-  it('registers editorBoot handler on the game instance', () => {
+  it('keeps the socket open when the editor boots and tells the server it is an editor', () => {
+    const nm = new NetworkManager({})
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    const [event, handler] = mockGame.on.mock.calls[0]
+    expect(event).toBe('editorBoot')
+    handler()
+    expect(mockSocket.close).not.toHaveBeenCalled()
+    expect(mockSocket.emit).toHaveBeenCalledWith('cl_editor', { type: 'cl_editor' }, { reliable: true })
+    expect(nm.editorMode).toBe(true)
+  })
+
+  it('announces the editor once it connects when the editor booted first', () => {
     const _nm = new NetworkManager({})
-    expect(mockGame.on).toHaveBeenCalledWith('editorBoot', expect.any(Function))
+    mockGame.on.mock.calls[0][1]()
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('cl_editor', expect.anything(), expect.anything())
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    expect(mockSocket.emit).toHaveBeenCalledWith('cl_editor', { type: 'cl_editor' }, { reliable: true })
   })
 
   it('sets connected=true and logs on successful connect', () => {
@@ -68,14 +82,6 @@ describe('networkManager', () => {
     expect(nm.connected).toBe(true)
     mockSocket.onDisconnect.mock.calls[0][0]()
     expect(nm.connected).toBe(false)
-  })
-
-  it('closes socket when editorBoot event fires', () => {
-    const _nm = new NetworkManager({})
-    const [event, handler] = mockGame.on.mock.calls[0]
-    expect(event).toBe('editorBoot')
-    handler()
-    expect(mockSocket.close).toHaveBeenCalled()
   })
 
   it('destroy() closes the socket when connected', () => {

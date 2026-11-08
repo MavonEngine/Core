@@ -5,41 +5,46 @@ import type winston from 'winston'
 import type { CL_CHAT, CL_INIT, CL_MOVE } from './Commands/Client'
 import type { SV_TREES } from './Commands/Server'
 import BaseServer from '@mavonengine/core/Networking/Server/Server'
+import { registerSceneObject } from '@mavonengine/core/Scene/SceneObjectRegistry'
 import { randRange } from '@mavonengine/core/Utils/Math'
 import { Vector3 } from 'three'
-import Tree from './Base/Vegetation/Tree'
+import TreeField, { TREE_FIELD_TYPE } from './Base/Vegetation/TreeField'
 import { ClientCommand } from './Commands/Client'
 import { ServerCommand } from './Commands/Server'
 import Player from './Server/Entities/Player'
 
-const TREE_COUNT = 15
-const SPAWN_AREA = 80
+/**
+ * Scene objects the server builds from scenes/*.json. Lights, the ground plane and other visuals
+ * are only built by the client; the server keeps their data untouched.
+ */
+registerSceneObject<TreeField>({
+  type: TREE_FIELD_TYPE,
+  label: 'Tree field',
+  server: data => new TreeField(data),
+})
 
 export default class Server extends BaseServer<Player> {
-  private treePositions: number[] = []
-  private treeRotations: number[] = []
-  private treeScales: number[] = []
-  private trees: Tree[] = []
-
   constructor(logger: winston.Logger, physicsWorld?: RAPIER.World, options?: ServerOptions) {
     super(logger, physicsWorld, options)
-    this.spawnTrees()
+
+    // Also runs when the scene file changes (the editor saved it): every client gets the new trees
+    this.game.on('sceneLoaded', () => {
+      this.gameSocket.emit(ServerCommand.SV_TREES, this.treesPacket(), { reliable: true })
+    })
   }
 
-  private spawnTrees() {
-    for (let i = 0; i < TREE_COUNT; i++) {
-      const x = randRange(-SPAWN_AREA, SPAWN_AREA)
-      const z = randRange(-SPAWN_AREA, SPAWN_AREA)
-      const rotY = Math.random() * Math.PI * 2
-      const scale = randRange(0.01, 0.015)
-
-      const position = new Vector3(x, 0, z)
-      this.trees.push(new Tree(position))
-
-      this.treePositions.push(x, 0, z)
-      this.treeRotations.push(0, rotY, 0)
-      this.treeScales.push(scale, scale, scale)
+  /** Every tree of every tree field in the scene */
+  private treesPacket(): SV_TREES {
+    const packet: SV_TREES = { positions: [], rotations: [], scales: [] }
+    for (const entry of this.game.activeScene?.getEntries() ?? []) {
+      if (entry.object instanceof TreeField) {
+        const trees = entry.object.packet
+        packet.positions.push(...trees.positions)
+        packet.rotations.push(...trees.rotations)
+        packet.scales.push(...trees.scales)
+      }
     }
+    return packet
   }
 
   getStateSyncDistance(): number {
@@ -52,12 +57,7 @@ export default class Server extends BaseServer<Player> {
     // y = 0.5 so the box bottom face sits on the ground plane (y = 0)
     const player = new Player(channel.id, new Vector3(spawnX, 0.5, spawnZ))
 
-    const treesData: SV_TREES = {
-      positions: this.treePositions,
-      rotations: this.treeRotations,
-      scales: this.treeScales,
-    }
-    channel.emit(ServerCommand.SV_TREES, treesData, { reliable: true })
+    channel.emit(ServerCommand.SV_TREES, this.treesPacket(), { reliable: true })
 
     channel.on(ClientCommand.CL_INIT, (command) => {
       const cmd = command as CL_INIT

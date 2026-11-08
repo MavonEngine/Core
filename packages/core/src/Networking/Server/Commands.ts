@@ -7,6 +7,11 @@ export enum ServerCommand {
 }
 export enum ClientCommand {
   CL_PING = 'cl_ping',
+  /**
+   * The client booted the editor. The server removes its player and keeps sending it the world state,
+   * so the editor shows the live game without being a player.
+   */
+  CL_EDITOR = 'cl_editor',
 }
 
 export type Command = ClientCommand | ServerCommand

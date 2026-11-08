@@ -1,5 +1,7 @@
 import type { World } from '@dimforge/rapier3d-compat'
 import type { ClientPlugin, ClientPluginContext, LoadedPlugin } from './Plugins/types'
+import type GameScene from './Scene/GameScene'
+import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
 import type IEditor from './Types/IEditor'
 import * as THREE from 'three'
@@ -12,6 +14,9 @@ import { pluginAssetBase } from './Plugins/types'
 import { registerPrefab } from './Prefab/PrefabRegistry'
 import Renderer from './Renderer'
 import { RapierDebugRenderer } from './Renderer/PhysicsRenderer'
+import { registerBuiltinSceneObjects } from './Scene/builtinSceneObjects'
+import { registerSceneObject, sceneObjectKey } from './Scene/SceneObjectRegistry'
+import { SCENE_NAME_RE, SCENES_DIR } from './Scene/types'
 import Debug from './Utils/Debug'
 import LoadingScreen from './Utils/LoadingScreen'
 import Logger from './Utils/Logger'
@@ -21,6 +26,7 @@ import ClientGameWorld from './World/World'
 import './style.css'
 
 const LEADING_SLASHES_RE = /^\/+/
+const JSON_EXT_RE = /\.json$/
 
 export default class Game extends BaseGame {
   canvas = document.createElement('canvas') as HTMLCanvasElement
@@ -63,6 +69,8 @@ export default class Game extends BaseGame {
   plugins: PluginHost<ClientPlugin, ClientPluginContext>
 
   declare world: ClientGameWorld
+
+  override readonly sceneSide: SceneSide = 'client'
 
   /**
    * Removing the prevention of right clicking
@@ -120,6 +128,12 @@ export default class Game extends BaseGame {
 
     this.world = new ClientGameWorld()
 
+    registerBuiltinSceneObjects()
+    this.on('sceneLoaded', (scene: GameScene) => {
+      this.applySceneSettings(scene.settings)
+      scene.on('settingsChanged', (settings: SceneSettings) => this.applySceneSettings(settings))
+    })
+
     this.plugins.run('setup')
     this.on('editorBoot', () => this.plugins.run('editor'))
 
@@ -152,6 +166,10 @@ export default class Game extends BaseGame {
       },
       assetUrl: path => `${pluginAssetBase(loaded.package)}${path.replace(LEADING_SLASHES_RE, '')}`,
       registerPrefab: prefab => registerPrefab({ ...prefab, plugin: loaded.package }),
+      registerSceneObject: (definition) => {
+        registerSceneObject({ ...definition, plugin: loaded.package })
+        return sceneObjectKey({ ...definition, plugin: loaded.package })
+      },
     }), this.logger, 'client')
   }
 
@@ -205,6 +223,46 @@ export default class Game extends BaseGame {
 
   static instance(): Game {
     return super.instance() as Game
+  }
+
+  /**
+   * Fetch a scene and load it once the resources are loaded, since scene objects may use them.
+   *
+   * @param scene a scene name, loaded from `/scenes/<name>.json`, a URL, or the scene data itself
+   */
+  async openScene(scene: string | SceneData): Promise<GameScene> {
+    if (typeof scene !== 'string') {
+      await this.resourcesReady()
+      return this.loadScene(scene)
+    }
+
+    const isName = SCENE_NAME_RE.test(scene)
+    const url = isName ? `/${SCENES_DIR}/${scene}.json` : scene
+    const response = await fetch(url, { cache: 'no-store' })
+    if (!response.ok)
+      throw new Error(`Could not load scene ${url}: ${response.status} ${response.statusText}`)
+
+    const data: unknown = await response.json()
+    await this.resourcesReady()
+
+    const source = isName ? scene : url.split('/').pop()?.replace(JSON_EXT_RE, '')
+    return this.loadScene(data, source && SCENE_NAME_RE.test(source) ? source : undefined)
+  }
+
+  /** Resolves once every resource has loaded */
+  resourcesReady(): Promise<void> {
+    if (this.resources.loaded >= this.resources.toLoad)
+      return Promise.resolve()
+    return new Promise(resolve => this.resources.on('loaded', () => resolve()))
+  }
+
+  private applySceneSettings(settings: SceneSettings) {
+    if (settings.background)
+      this.scene.background = new THREE.Color(settings.background)
+    else if (this.scene.background instanceof THREE.Color)
+      this.scene.background = null
+
+    this.scene.fog = settings.fog ? new THREE.FogExp2(settings.fog.color, settings.fog.density) : null
   }
 
   private resize() {

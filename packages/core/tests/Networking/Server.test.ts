@@ -1,12 +1,15 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type ServerWorld from '../../src/Networking/Server/World'
 import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
-import { ServerCommand } from '../../src/Networking/Server/Commands'
+import { ClientCommand, ServerCommand } from '../../src/Networking/Server/Commands'
 import Server from '../../src/Networking/Server/Server'
-import { installPlugin, tempProject, writeConfig } from '../Plugins/fixtures'
+import { clearSceneObjects, registerSceneObject } from '../../src/Scene/SceneObjectRegistry'
+import GameObject from '../../src/World/GameObject'
+import { installPlugin, tempProject, writeConfig, writeFile } from '../Plugins/fixtures'
 
 const mockGeckosOnConnection = vi.fn()
 
@@ -478,6 +481,154 @@ describe('server', () => {
 
       expect(cpuLog).toHaveBeenCalledTimes(1)
       expect(info).toHaveBeenCalledWith(expect.stringContaining('dashboard disconnected'))
+    })
+  })
+
+  describe('editor clients', () => {
+    function connect(id: string) {
+      const handlers: Record<string, (...args: any[]) => void> = {}
+      let disconnect = () => {}
+      const emit = vi.fn()
+      const channel = { id, emit, on: (event: string, cb: () => void) => (handlers[event] = cb), onDisconnect: (cb: () => void) => (disconnect = cb) }
+      mockGeckosOnConnection.mock.calls[0][0](channel)
+      mockGeckosServer.connectionsManager.connections.set(id, { channel })
+      return { channel, handlers, disconnect: () => disconnect() }
+    }
+
+    afterEach(() => {
+      mockGeckosServer.connectionsManager.connections = new Map()
+    })
+
+    it('stops being a player when it opens the editor, so metrics and other players no longer see it', () => {
+      const server = new TestServer(logger)
+      const other = connect('player')
+      const editor = connect('editor')
+      expect(server.metrics.snapshot().players).toHaveLength(2)
+
+      editor.handlers[ClientCommand.CL_EDITOR]()
+
+      expect(server.editorChannels.has('editor')).toBe(true)
+      expect(server.game.world.entities.items.has('editor')).toBe(false)
+      expect((server.game.world as ServerWorld).players.map(p => p.id)).toEqual(['player'])
+      expect(server.metrics.snapshot().players.map(p => p.id)).toEqual(['player'])
+      expect(server.metrics.health().players).toBe(1)
+      expect(other.channel.emit).toHaveBeenCalledWith(ServerCommand.SV_REMOVE_ENTITY, { id: 'editor' })
+
+      // A second announcement changes nothing
+      editor.handlers[ClientCommand.CL_EDITOR]()
+      expect(other.channel.emit).toHaveBeenCalledTimes(1)
+    })
+
+    it('sends the editor every entity, however far away', () => {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 10
+      const editor = connect('editor')
+      editor.handlers[ClientCommand.CL_EDITOR]()
+      const far = new TestClient('far')
+      far.position.set(1000, 0, 0)
+      server.game.world.entities.items.set('far', far)
+
+      ;(server as any).stateSync()
+
+      const [, state] = editor.channel.emit.mock.calls.find(([event]) => event === ServerCommand.SV_STATE)!
+      expect(state.entities.map((e: GameObject) => e.id)).toEqual(['far'])
+    })
+
+    it('tells the editor when a player leaves, and forgets the editor when it disconnects', () => {
+      const server = new TestServer(logger)
+      const player = connect('player')
+      const editor = connect('editor')
+      editor.handlers[ClientCommand.CL_EDITOR]()
+
+      player.disconnect()
+      expect(editor.channel.emit).toHaveBeenCalledWith(ServerCommand.SV_REMOVE_ENTITY, { id: 'player' })
+
+      editor.disconnect()
+      expect(server.editorChannels.size).toBe(0)
+    })
+  })
+
+  describe('scenes', () => {
+    class Crate extends GameObject {
+      update(): void {}
+    }
+
+    let root: string
+    beforeEach(() => {
+      root = tempProject()
+      registerSceneObject({ type: 'Crate', server: () => new Crate() })
+      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({
+        version: 1,
+        name: 'main',
+        objects: [
+          { id: 'crate', type: 'Crate', transform: { position: [1, 2, 3] } },
+          { id: 'light', type: 'Light:AmbientLight' },
+        ],
+      }))
+    })
+
+    afterEach(() => {
+      clearSceneObjects()
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('builds only the objects with a server factory from <root>/scenes/<name>.json', () => {
+      const server = new TestServer(logger, undefined, { root })
+      const loaded = vi.fn()
+      server.game.on('sceneLoaded', loaded)
+
+      const scene = server.openScene('main', { watch: false })
+
+      expect(server.game.activeScene).toBe(scene)
+      expect(loaded).toHaveBeenCalledWith(scene)
+      expect(server.game.world.entities.items.get('crate')?.position.toArray()).toEqual([1, 2, 3])
+      expect(server.game.world.entities.items.has('light')).toBe(false)
+      expect(scene.serialize().objects.map(o => o.id)).toEqual(['crate', 'light'])
+    })
+
+    it('reloads the scene when its file changes', async () => {
+      const server = new TestServer(logger, undefined, { root })
+      server.openScene('main', { watch: true })
+      const loaded = vi.fn()
+      server.game.on('sceneLoaded', loaded)
+
+      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({ objects: [{ id: 'crate2', type: 'Crate' }] }))
+
+      await vi.waitFor(() => expect(loaded).toHaveBeenCalled(), { timeout: 3000 })
+      server.stop()
+      expect([...server.game.world.entities.items.keys()]).toEqual(['crate2'])
+    })
+
+    it('keeps the current scene when the changed file is invalid', async () => {
+      const server = new TestServer(logger, undefined, { root })
+      const errors = vi.spyOn(logger, 'error')
+      server.openScene('main', { watch: true })
+
+      writeFile(join(root, 'scenes', 'main.json'), '{ not json')
+
+      await vi.waitFor(() => expect(errors).toHaveBeenCalled(), { timeout: 3000 })
+      server.stop()
+      expect(server.game.world.entities.items.has('crate')).toBe(true)
+    })
+
+    it('does not send scene objects in the state, they are not networked', () => {
+      const server = new TestServer(logger, undefined, { root })
+      server.getStateSyncDistance = () => 100
+      server.openScene('main', { watch: false })
+      const emit = vi.fn()
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', { channel: { emit } }]])
+      server.game.world.entities.items.set('p1', new TestClient('p1'))
+
+      ;(server as any).stateSync()
+      mockGeckosServer.connectionsManager.connections = new Map()
+
+      const [, state] = emit.mock.calls[0]
+      expect(state.entities.map((e: GameObject) => e.id)).toEqual(['p1'])
+    })
+
+    it('needs a root for scene names', () => {
+      const server = new TestServer(logger)
+      expect(() => server.openScene('main')).toThrow('set the server\'s `root` option')
     })
   })
 

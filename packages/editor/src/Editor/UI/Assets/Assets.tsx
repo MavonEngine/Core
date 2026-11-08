@@ -13,6 +13,7 @@ import { getPrefabs, spawnPrefab } from '@mavonengine/core/Prefab/PrefabRegistry
 import { PRIMITIVE_REGISTRY } from '@mavonengine/core/Prefab/Primitives/index'
 import WaterManager from '@mavonengine/core/Prefab/Water/WaterManager'
 import AssetRenderer from '@mavonengine/core/Renderer/AssetRenderer'
+import { lightType, MODEL_TYPE, prefabType, primitiveType } from '@mavonengine/core/Scene/builtinSceneObjects'
 import { useEffect, useRef, useState } from 'react'
 import { Mesh, Plane, Texture, Vector2, Vector3 } from 'three'
 import { registerBuiltinPrefabs } from '../../builtinPrefabs'
@@ -27,6 +28,23 @@ import TextureViewer, { getTextureUrl } from './TextureViewer'
 const NON_KEY_CHARS_RE = /\W+/g
 
 registerBuiltinPrefabs()
+
+/**
+ * Add an object to the active scene so it is saved with it. False when there is no scene or the type can't be built
+ */
+function placeInScene(type: string, position: Vector3, props?: Record<string, unknown>): boolean {
+  const scene = window.Game.activeScene
+  if (!scene)
+    return false
+
+  try {
+    return !!scene.create(type, { transform: { position: position.toArray(), rotation: [0, 0, 0], scale: [1, 1, 1] }, props })
+  }
+  catch (err) {
+    window.Game.logger?.warn(`Could not place ${type}: ${(err as Error).message}`)
+    return false
+  }
+}
 
 /** A plugin prefab's icon, SVG markup or an image URL, as an image source */
 function prefabIconSrc(icon: string): string {
@@ -142,6 +160,16 @@ export default () => {
       window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
 
       const prefab = PREFABS.find(p => p.key === prefabName)
+      if (prefab && window.Game.activeScene) {
+        if (placeInScene(prefabType(prefabName), dropPos)) {
+          window.Game.editor?.trigger('assetDropped')
+          window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin ? ` from ${prefab.plugin}` : ''} at ${dropPos.toArray()}`)
+          if (prefab.plugin)
+            void recordPrefabUsage(prefab.plugin, prefab.name)
+        }
+        return
+      }
+
       const result = spawnPrefab(prefabName, dropPos)
       if (prefab && result) {
         if (result.object)
@@ -196,6 +224,12 @@ export default () => {
         const dropPos = new Vector3()
         window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
 
+        if (placeInScene(primitiveType(primitiveName), dropPos, { castShadow: true, receiveShadow: true })) {
+          window.Game.editor?.trigger('assetDropped')
+          window.Game.logger?.info(`Spawned ${primitiveName} primitive at ${dropPos.toArray()}`)
+          return
+        }
+
         const primitive = new PrimitiveClass(dropPos)
         window.Game.world.add({ [`primitive_${primitiveName.toLowerCase()}_${Date.now()}`]: primitive })
         window.Game.editor?.trigger('assetDropped')
@@ -218,6 +252,12 @@ export default () => {
         const groundPlane = new Plane(new Vector3(0, 1, 0), 0)
         const dropPos = new Vector3()
         window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
+
+        if (placeInScene(lightType(lightName), dropPos)) {
+          window.Game.editor?.trigger('assetDropped')
+          window.Game.logger?.info(`Spawned ${lightName} at ${dropPos.toArray()}`)
+          return
+        }
 
         const light = new LightClass(dropPos)
         window.Game.world.add({ [`light_${lightName.toLowerCase()}_${Date.now()}`]: light })
@@ -261,7 +301,20 @@ export default () => {
     }
 
     const scene = 'scene' in item ? item.scene as unknown as Scene : null
-    if (scene) {
+    if (scene && window.Game.activeScene) {
+      const canvas = window.Game.canvas
+      const rect = canvas.getBoundingClientRect()
+      window.Game.rayCaster.setFromCamera(new Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      ), window.Game.camera.instance)
+      const dropPos = new Vector3()
+      window.Game.rayCaster.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), 0), dropPos)
+
+      if (placeInScene(MODEL_TYPE, dropPos, { resource: key }))
+        window.Game.editor?.trigger('assetDropped')
+    }
+    else if (scene) {
       window.Game.scene.add(scene.clone())
       window.Game.editor?.trigger('assetDropped')
     }

@@ -5,6 +5,7 @@ import type { CommandPacket } from '../Server/Commands'
 import { geckos } from '@geckos.io/client'
 import Game from '../../BaseGame'
 import EventEmitter from '../../Utils/EventEmitter'
+import { ClientCommand } from '../Server/Commands'
 
 let instance: NetworkManager | undefined
 
@@ -13,6 +14,7 @@ export default class NetworkManager extends EventEmitter {
   ping = 1000
   pingNow = 0
   private _connected = false
+  private _editorMode = false
 
   private currentSequenceId = 0
 
@@ -38,6 +40,8 @@ export default class NetworkManager extends EventEmitter {
 
       Game.instance().logger?.info(`Socket connection established: ${this._socket.id}`)
       this._connected = true
+      if (this._editorMode)
+        this.announceEditor()
       this.onConnect()
     })
 
@@ -48,9 +52,24 @@ export default class NetworkManager extends EventEmitter {
       this.onDisconnect()
     })
 
+    /**
+     * The connection stays open when the editor boots, so what the server sends keeps showing in the editor.
+     * The server is told so it stops treating this client as a player.
+     */
     Game.instance().on('editorBoot', () => {
-      this._socket.close()
+      this._editorMode = true
+      if (this._connected)
+        this.announceEditor()
     })
+  }
+
+  private announceEditor() {
+    this._socket.emit(ClientCommand.CL_EDITOR, { type: ClientCommand.CL_EDITOR }, { reliable: true })
+  }
+
+  /** Whether this client runs the editor and so is no player on the server */
+  get editorMode() {
+    return this._editorMode
   }
 
   protected onConnect() {
