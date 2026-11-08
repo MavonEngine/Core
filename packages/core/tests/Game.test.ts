@@ -21,7 +21,7 @@ vi.mock('three', async () => {
 })
 
 const mockCamera = { resize: vi.fn(), update: vi.fn() }
-const mockRenderer = { resize: vi.fn(), update: vi.fn() }
+const mockRenderer = { resize: vi.fn(), update: vi.fn(), shouldRender: vi.fn().mockReturnValue(true) }
 const mockResources = {}
 const mockSizes = { on: vi.fn() }
 const mockDebug = {}
@@ -109,6 +109,22 @@ describe('game', () => {
     expect(game.particleSystem).toBeDefined()
     expect(game.loadingScreen).toBeDefined()
     expect(game.world).toBeDefined()
+  })
+
+  it('skips rendering the frames the renderer limits, but keeps requesting them', () => {
+    mockRenderer.shouldRender.mockReturnValueOnce(false)
+    void new Game([])
+
+    expect(mockRenderer.update).not.toHaveBeenCalled()
+    expect(mockParticleSystem.update).not.toHaveBeenCalled()
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
+
+    const render = vi.mocked(requestAnimationFrame).mock.calls[0][0]
+    render(16)
+
+    expect(mockRenderer.shouldRender).toHaveBeenLastCalledWith(16)
+    expect(mockRenderer.update).toHaveBeenCalledWith(0.016)
+    expect(mockParticleSystem.update).toHaveBeenCalledWith(0.016)
   })
 
   describe('plugins', () => {

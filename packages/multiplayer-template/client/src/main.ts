@@ -30,6 +30,9 @@ RAPIER.init().then(() => {
     { name: 'character', type: 'gltfModel', path: '/character.glb' },
   ], physicsWorld)
 
+  // Cap the rendering, the game tick and physics keep their own rate
+  game.renderer.maxFps = 60
+
   // The map: sky, lights and ground, shared with the server which builds the trees from it. Edit it in the editor (press .)
   game.openScene('main').catch(err => game.logger?.error(`Could not load the scene: ${(err as Error).message}`))
 
