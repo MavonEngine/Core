@@ -147,8 +147,11 @@ From the workspace root:
 
 ```bash
 npm install
-npm run dev        # starts the game server in watch mode, which serves the client through Vite
+npm run dev          # mavonengine dev: the game server with the dashboard, and the game opens in the browser
+npm run dev:server   # only the game server in watch mode, with its output in the terminal
 ```
+
+`npm run dev` runs `mavonengine dev`, which starts the `dev:server` script and shows the server's dashboard in the terminal (CPU, tick time, players, logs, HTTP requests). Quitting it (`q` or Ctrl-C) stops the server. Without an interactive terminal, e.g. in CI, it just runs `dev:server`. Pass options through npm, e.g. `npm run dev -- --no-open`.
 
 Open `http://localhost:8050`. The game server serves the client on its HTTP port, with hot reload for client changes. Server changes rebuild and restart the server, which reloads the page. The client connects to the game socket through `/socket` on the same port, so everything runs on `8050`.
 

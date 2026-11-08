@@ -68,16 +68,24 @@ jobs:
         npm link
       working-directory: ./packages/core
 
+    # The template's `npm run dev` is `mavonengine dev`, so it runs this repository's CLI
+    - name: npm link cli locally
+      run: |
+        npm link
+      working-directory: ./packages/cli
+
     # multiplayer-template has its own nested workspaces (client/server) that npm
-    # workspaces does not handle recursively, so we need a separate npm ci here
+    # workspaces does not handle recursively, so we need a separate npm ci here.
+    # Both in one call: each `npm link <pkg>` replaces the links of an earlier one
     - name: Build multiplayer-template
       run: |
-        npm link @mavonengine/core
+        npm link @mavonengine/core @mavonengine/cli
         npm run typecheck
         npm run build
         npm run lint
       working-directory: ./packages/multiplayer-template
 
+    # `npm run dev` is `mavonengine dev`; without a terminal it runs the dev:server script without the dashboard
     - name: Start dev servers and verify startup
       timeout-minutes: 1
       run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"

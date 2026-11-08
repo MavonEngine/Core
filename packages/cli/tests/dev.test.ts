@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { descendants, detectPackageManager, findProjectRoot, parseDevArgs, runDevCommand, startDev } from '../src/commands/dev'
+import { checkDevScript, descendants, detectPackageManager, devScriptOf, findProjectRoot, parseDevArgs, runDevCommand, startDev } from '../src/commands/dev'
 
 let dir: string
 
@@ -62,6 +62,41 @@ describe('findProjectRoot', () => {
     writePackage(dir, { scripts: { dev: 'vite' } })
 
     expect(findProjectRoot(dir)).toBeUndefined()
+  })
+})
+
+describe('devScriptOf', () => {
+  it('prefers dev:server over dev', () => {
+    expect(devScriptOf({ scripts: { 'dev': 'mavonengine dev', 'dev:server': 'npm run dev --prefix server' } })).toBe('dev:server')
+    expect(devScriptOf({ scripts: { dev: 'vite' } })).toBe('dev')
+    expect(devScriptOf({ scripts: {} })).toBeUndefined()
+    expect(devScriptOf(undefined)).toBeUndefined()
+  })
+
+  it('lets findProjectRoot accept a project with only dev:server', () => {
+    writePackage(dir, { ...project, scripts: { 'dev:server': 'node server.js' } })
+
+    expect(findProjectRoot(dir)).toBe(dir)
+  })
+})
+
+describe('checkDevScript', () => {
+  it('returns the script to run', () => {
+    writePackage(dir, { ...project, scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node server.js' } })
+
+    expect(checkDevScript(dir, {})).toBe('dev:server')
+  })
+
+  it('refuses a dev script that starts mavonengine dev again', () => {
+    writePackage(dir, { ...project, scripts: { dev: 'mavonengine dev --no-open' } })
+
+    expect(() => checkDevScript(dir, {})).toThrow('the \'dev\' script starts \'mavonengine dev\' again')
+  })
+
+  it('refuses to run inside the dev script it started, whatever the script says', () => {
+    writePackage(dir, { ...project, scripts: { 'dev:server': 'npx some-wrapper' } })
+
+    expect(() => checkDevScript(dir, { MAVONENGINE_DEV_SCRIPT: '1' })).toThrow('starts \'mavonengine dev\' again')
   })
 })
 
@@ -155,6 +190,18 @@ describe('runDevCommand', () => {
 
     expect(await runDevCommand({ cwd: dir, dashboard: false })).toBe(3)
   })
+
+  it('runs dev:server when the project has one', async () => {
+    writePackage(dir, { ...project, scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node -e "process.exit(4)"' } })
+
+    expect(await runDevCommand({ cwd: dir, dashboard: false })).toBe(4)
+  })
+
+  it('fails before starting anything when dev would start itself', async () => {
+    writePackage(dir, { ...project, scripts: { dev: 'mavonengine dev' } })
+
+    await expect(runDevCommand({ cwd: dir, dashboard: false })).rejects.toThrow('dev:server')
+  })
 })
 
 describe.skipIf(process.platform === 'win32')('startDev', () => {
@@ -165,6 +212,16 @@ describe.skipIf(process.platform === 'win32')('startDev', () => {
 
     expect(await dev.exited).toBe(0)
     expect(dev.output()).toContain('hello from dev')
+  })
+
+  it('marks the environment of the dev script', async () => {
+    writePackage(dir, { ...project, scripts: { 'dev:server': 'node -e "console.log(\'flag=\' + process.env.MAVONENGINE_DEV_SCRIPT)"' } })
+
+    const dev = startDev(dir, { capture: true })
+
+    expect(await dev.exited).toBe(0)
+    expect(dev.output()).toContain('running \'npm run dev:server\'')
+    expect(dev.output()).toContain('flag=1')
   })
 
   it('stops the dev script and everything it started', async () => {

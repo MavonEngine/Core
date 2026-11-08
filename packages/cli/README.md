@@ -30,7 +30,9 @@ Asks for a name if none is given. While the template downloads and `npm install`
 
 ## `mavonengine dev`
 
-Runs the `dev` script of the MavonEngine project you are in and shows the [dashboard](#mavonengine-dashboard) for it. For the multiplayer template that starts the game server and the client together.
+Runs the dev script of the MavonEngine project you are in and shows the [dashboard](#mavonengine-dashboard) for it. For the multiplayer template that starts the game server and the client together.
+
+It runs the project's `dev:server` script, or `dev` when there is none. So `dev` can be `mavonengine dev` itself, as in the multiplayer template, and `npm run dev` brings up the dashboard. A `dev` script that would start `mavonengine dev` again, without a `dev:server` next to it, is refused instead of looping.
 
 While the game server starts, a startup screen shows the latest output of the dev script; the dashboard takes over as soon as the server answers. Once the server is up, the game it serves opens in your default browser (not over SSH, and only if the server answers `/` with a page); `--no-open` turns that off, and `o` opens it again any time. Quitting the dashboard (`q` or Ctrl-C) stops the dev script and everything it started. If the dev script exits on its own, the dashboard closes and its output is printed.
 
