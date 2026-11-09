@@ -1,10 +1,11 @@
 import type { DashboardState } from '../src/dashboard/MetricsClient'
+import type { PacketDetail, PacketLine } from '../src/dashboard/snapshot'
 import type { StartupInfo, ViewState } from '../src/dashboard/view'
 import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
-import { normalizeSnapshot } from '../src/dashboard/snapshot'
-import { handlePlayersKey, renderDashboard, tabForKey, toLogRows } from '../src/dashboard/view'
+import { normalizePackets, normalizeSnapshot, normalizeSync } from '../src/dashboard/snapshot'
+import { describePacket, handleNetworkKey, handlePlayersKey, initialViewState, messageStats, renderDashboard, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -30,11 +31,15 @@ async function liveState(samples = 30): Promise<DashboardState> {
       { id: 3, timestamp: 0, method: 'WS', path: '/hmr', status: 101, durationMs: 1.1, bytes: 129, address: '127.0.0.1' },
     ],
     requestsAvailable: true,
+    packets: normalizePackets(await source.fetchPackets!(0)).entries,
+    packetsAvailable: true,
+    sync: normalizeSync(await source.fetchSync!()),
+    packetDetail: null,
   }
 }
 
 function viewState(overrides: Partial<ViewState> = {}): ViewState {
-  return { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
+  return { ...initialViewState(), ...overrides }
 }
 
 function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab }), startup?: StartupInfo) {
@@ -42,7 +47,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null }
 }
 
 describe('dashboard view', () => {
@@ -177,7 +182,8 @@ describe('dashboard view', () => {
   it('maps number keys to tabs', () => {
     expect(tabForKey('1')).toBe(0)
     expect(tabForKey('4')).toBe(3)
-    expect(tabForKey('5')).toBeNull()
+    expect(tabForKey('5')).toBe(4)
+    expect(tabForKey('6')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -334,6 +340,213 @@ describe('dashboard view', () => {
     state.logsAvailable = false
 
     expect(render(state).contains('Not available')).toBe(true)
+  })
+})
+
+describe('network tab', () => {
+  const packet = (id: number, overrides: Partial<PacketLine> = {}): PacketLine => ({
+    id,
+    timestamp: id * 100,
+    kind: 'packet',
+    direction: 'out',
+    type: 'sv_state',
+    peer: 'p1',
+    bytes: 1000,
+    tick: id,
+    sequenceId: null,
+    reliable: false,
+    info: {},
+    ...overrides,
+  })
+
+  it('shows the state sync, what the traffic is made of and the packets, newest first', async () => {
+    const screen = render(await liveState(), 150, 40, false, 4)
+
+    for (const text of ['5 Network', 'State sync (tick 900)', '151 synced entities', 'out of every player\'s range', 'distance 200', 'By message (last 5 s)', 'sv_state', 'cl_move', 'pings hidden', 'p Show pings', 'e Events only'])
+      expect(screen.contains(text), text).toBe(true)
+    // Pings count in the summary but are left out of the list
+    expect(screen.find('pong')!.y).toBeLessThan(screen.find('Details')!.y)
+    expect(screen.contains('CPU')).toBe(false)
+    expect(screen.find('tick 900 ·')!.y).toBeLessThan(screen.find('tick 894 ·')!.y)
+  })
+
+  it('keeps the details on a narrow terminal', async () => {
+    const screen = render(await liveState(), 80, 44, false, 4)
+    expect(screen.contains('State sync')).toBe(true)
+    expect(screen.contains('By message')).toBe(true)
+    expect(screen.contains('tick 900 · entities')).toBe(true)
+  })
+
+  it('shows pings and only events on request', async () => {
+    const state = await liveState()
+    const view = viewState({ tab: 4, packetTopId: 40 })
+
+    expect(handleNetworkKey(view, 'p')).toBe(true)
+    expect(view).toMatchObject({ showPings: true, packetTopId: null })
+    expect(render(state, 150, 40, false, 4, view).contains('p Hide pings')).toBe(true)
+
+    expect(handleNetworkKey(view, 'e')).toBe(true)
+    const screen = render(state, 150, 40, false, 4, view)
+    expect(screen.contains('Events (')).toBe(true)
+    expect(screen.contains('sync_enter')).toBe(true)
+    expect(screen.contains('cl_move')).toBe(false)
+    expect(screen.contains('e All records')).toBe(true)
+
+    expect(handleNetworkKey(view, 'x')).toBe(false)
+    expect(handleNetworkKey(viewState({ tab: 0 }), 'p')).toBe(false)
+  })
+
+  it('keeps a scrolled table on the same packet as new ones arrive', async () => {
+    const state = await liveState()
+    state.packets = Array.from({ length: 80 }, (_, i) => packet(i + 1))
+    const view = viewState({ tab: 4, packetTopId: 60 })
+
+    state.packets.push(packet(81))
+    const screen = render(state, 150, 40, false, 4, view)
+
+    expect(screen.find('tick 60 ')!.y).toBe(screen.find('Details')!.y + 1)
+    expect(screen.contains('tick 81')).toBe(false)
+    expect(screen.contains('scroll up to follow')).toBe(true)
+    expect(view.packetTopId).toBe(60)
+  })
+
+  it('marks a player whose state updates fell behind', async () => {
+    const state = await liveState()
+    state.sync!.players[0].lastState = null
+    expect(render(state, 150, 40, false, 4).contains('none')).toBe(true)
+  })
+
+  it('waits for the first answer, and explains a server that records nothing', async () => {
+    const state = await liveState()
+    state.packets = []
+    state.sync = null
+    state.packetsAvailable = null
+    expect(render(state, 150, 40, false, 4).contains('Waiting for the server')).toBe(true)
+
+    state.packetsAvailable = false
+    const screen = render(state, 150, 40, false, 4)
+    expect(screen.contains('NODE_ENV=production')).toBe(true)
+    expect(screen.contains('State sync')).toBe(false)
+  })
+
+  it('opens a packet with the arrow keys and shows its content', async () => {
+    const state = await liveState()
+    const view = viewState({ tab: 4 })
+    const newestFirst = visiblePackets(state.packets, view).reverse()
+
+    expect(handleNetworkKey(view, 'down', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBe(newestFirst[0].id)
+    expect(handleNetworkKey(view, 'j', state.packets)).toBe(true)
+    expect(handleNetworkKey(view, 'k', state.packets)).toBe(true)
+    expect(handleNetworkKey(view, 'up', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBe(newestFirst[0].id)
+
+    // Its content is loaded after the selection changed
+    expect(render(state, 150, 40, false, 4, view).contains('Loading…')).toBe(true)
+
+    state.packetDetail = { id: view.selectedPacketId!, status: 'loaded', lines: ['{', '  "tick": 900,', '  "entities": []', '}'] }
+    const screen = render(state, 150, 40, false, 4, view)
+    for (const text of [`${newestFirst[0].type} out ·`, '"tick": 900,', 'esc Close', '↑↓ Open packet', 'By message'])
+      expect(screen.contains(text), text).toBe(true)
+    // The list stays next to it
+    expect(screen.find('"tick": 900,')!.x).toBeGreaterThan(screen.find('Details')!.x)
+
+    // The details of another packet are not shown for this one
+    state.packetDetail = { id: -1, status: 'loaded', lines: ['"other"'] }
+    expect(render(state, 150, 40, false, 4, view).contains('"other"')).toBe(false)
+
+    expect(handleNetworkKey(view, 'escape', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBeNull()
+    expect(handleNetworkKey(view, 'escape', state.packets)).toBe(false)
+    expect(render(state, 150, 40, false, 4, view).contains('esc Close')).toBe(false)
+  })
+
+  it('opens the first or last packet when none is selected, and stops at the ends', () => {
+    const packets = [packet(1), packet(2), packet(3)]
+    const view = viewState({ tab: 4, payloadOffset: 9 })
+
+    handleNetworkKey(view, 'up', packets)
+    expect(view).toMatchObject({ selectedPacketId: 1, payloadOffset: 0 })
+    handleNetworkKey(view, 'down', packets)
+    expect(view.selectedPacketId).toBe(1)
+
+    expect(handleNetworkKey(viewState({ tab: 4 }), 'down', [])).toBe(false)
+    expect(handleNetworkKey(viewState({ tab: 3 }), 'down', packets)).toBe(false)
+  })
+
+  it('puts the content under the list on a narrow terminal and scrolls long payloads', async () => {
+    const state = await liveState()
+    const id = state.packets.at(-1)!.id
+    state.packetDetail = { id, status: 'loaded', lines: Array.from({ length: 200 }, (_, i) => `line ${i}`) }
+    const view = viewState({ tab: 4, selectedPacketId: id, payloadOffset: 150 })
+
+    const screen = render(state, 80, 44, false, 4, view)
+
+    expect(screen.contains('Packets and events')).toBe(true)
+    expect(screen.contains('line 150')).toBe(true)
+    expect(screen.contains('line 149')).toBe(false)
+    expect(screen.find('line 150')!.y).toBeGreaterThan(screen.find('Details')!.y)
+
+    // A shorter payload than where the last one was scrolled to
+    state.packetDetail = { id, status: 'loaded', lines: ['only line'] }
+    expect(render(state, 80, 44, false, 4, view).contains('only line')).toBe(true)
+    expect(view.payloadOffset).toBe(0)
+  })
+
+  it('explains a packet without content', async () => {
+    const state = await liveState()
+    const id = state.packets.at(-1)!.id
+    const view = viewState({ tab: 4, selectedPacketId: id })
+    const shows = (detail: Partial<PacketDetail>, text: string) => {
+      state.packetDetail = { id, status: 'loaded', lines: [], ...detail }
+      return render(state, 150, 40, false, 4, view).contains(text)
+    }
+
+    expect(shows({ status: 'gone' }, 'no longer keeps this payload')).toBe(true)
+    expect(shows({ status: 'empty' }, 'No payload')).toBe(true)
+    expect(shows({ status: 'error', error: 'Can\'t reach the server' }, 'Can\'t reach the server')).toBe(true)
+
+    // A packet the dashboard no longer lists keeps its panel
+    view.selectedPacketId = 999999
+    state.packetDetail = { id: 999999, status: 'loaded', lines: ['"kept"'] }
+    const screen = render(state, 150, 40, false, 4, view)
+    expect(screen.contains('#999999')).toBe(true)
+    expect(screen.contains('"kept"')).toBe(true)
+  })
+
+  it('only needs the packets while its tab shows', () => {
+    expect(showsNetwork(viewState({ tab: 4 }))).toBe(true)
+    expect(showsNetwork(viewState({ tab: 3 }))).toBe(false)
+  })
+
+  it('sums the traffic per message over the window, largest first', () => {
+    const packets = [
+      packet(1, { timestamp: 0, bytes: 9999 }), // Before the window
+      packet(2, { timestamp: 6000, bytes: 1000 }),
+      packet(3, { timestamp: 8000, bytes: 3000 }),
+      packet(4, { timestamp: 9000, direction: 'in', type: 'command', bytes: 50 }),
+      packet(5, { timestamp: 9500, kind: 'event', direction: null, type: 'sync_leave', bytes: 0 }),
+      packet(6, { timestamp: 10000, direction: 'in', type: 'command', bytes: 50 }),
+    ]
+
+    expect(messageStats(packets, 5000)).toEqual([
+      { direction: 'out', type: 'sv_state', rate: 0.4, bytesPerSecond: 800, avgBytes: 2000 },
+      { direction: 'in', type: 'command', rate: 0.4, bytesPerSecond: 20, avgBytes: 50 },
+    ])
+    expect(messageStats([])).toEqual([])
+    // Half a second of data is not stretched to less than a second
+    expect(messageStats([packet(1, { timestamp: 0 }), packet(2, { timestamp: 500 })])[0]).toMatchObject({ rate: 2, bytesPerSecond: 2000 })
+  })
+
+  it('filters and describes packets', () => {
+    const packets = [packet(1), packet(2, { type: 'ping' }), packet(3, { kind: 'event', type: 'connect' })]
+
+    expect(visiblePackets(packets, { showPings: false, eventsOnly: false }).map(p => p.id)).toEqual([1, 3])
+    expect(visiblePackets(packets, { showPings: true, eventsOnly: false }).map(p => p.id)).toEqual([1, 2, 3])
+    expect(visiblePackets(packets, { showPings: true, eventsOnly: true }).map(p => p.id)).toEqual([3])
+
+    expect(describePacket(packet(1, { tick: 7, info: { entities: 3, ack: null } }))).toBe('tick 7 · entities 3')
+    expect(describePacket(packet(1, { tick: null, sequenceId: 4, reliable: true, info: { entities: ['a', 'b'], drop: { reason: 'x' } } }))).toBe('seq 4 · reliable · entities a, b · drop {"reason":"x"}')
   })
 })
 

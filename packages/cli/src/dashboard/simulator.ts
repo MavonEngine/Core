@@ -2,6 +2,10 @@ import type { MetricsSource } from './MetricsClient'
 import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
 
 const HISTORY_LENGTH = 60
+/** As many as a real server keeps */
+const PACKET_LIMIT = 2000
+/** State updates per player and second in the simulation: fewer than the tick rate, so the list stays readable */
+const STATES_PER_SECOND = 5
 
 /**
  * Small deterministic PRNG so --sim output is the same every run.
@@ -50,6 +54,17 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
     requests.push({ id: requests.length + 1, timestamp: now, method, path, status, durationMs: Math.round((1 + random() * 20) * 100) / 100, bytes, address })
   }
 
+  // The game socket's traffic, in the shape of GET /api/game/dev/net/packets
+  const packets: Record<string, unknown>[] = []
+  let packetId = 0
+  let tick = 0
+  let syncPlayers: Record<string, unknown>[] = []
+  const record = (entry: Record<string, unknown>, offsetMs = 0) => {
+    packets.push({ id: ++packetId, timestamp: now + offsetMs, hasPayload: entry.kind === 'packet', ...entry })
+    if (packets.length > PACKET_LIMIT)
+      packets.shift()
+  }
+
   log('info', 'Starting @mavon/engine - Socket Server')
   log('info', 'Starting @mavon/engine - HTTP Server')
 
@@ -93,14 +108,51 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         request('GET', '/favicon.ico', 404, 160, address)
         request('POST', '/.wrtc/v2/connections', 200, 2900, address)
         request('POST', `/.wrtc/v2/connections/${players[i].id}/additional-candidates`, 200, 600, address)
+        record({ kind: 'event', type: 'connect', peer: players[i].id })
+        record({ kind: 'packet', direction: 'in', type: 'cl_init', peer: players[i].id, bytes: 24, reliable: true })
+        record({ kind: 'event', type: 'sync_enter', peer: players[i].id, tick, info: { count: players[i].trackedEntities } })
         log('info', `Connected: ${players[i].id}`)
         log('info', `${i + 1} total players connected`)
       }
       for (let i = previousPlayers - 1; i >= playerCount; i--) {
+        record({ kind: 'event', type: 'disconnect', peer: `sim-${(i + 1).toString().padStart(2, '0')}` })
         log('info', `Disconnected sim-${(i + 1).toString().padStart(2, '0')}`)
         log('info', `${i} total players connected`)
       }
       previousPlayers = playerCount
+
+      // One second of traffic, spread over the sample
+      const lastStates = new Map<string, { tick: number, bytes: number, entities: number }>()
+      for (let state = 0; state < STATES_PER_SECOND; state++) {
+        const offset = Math.round(state * sampleIntervalMs / STATES_PER_SECOND) - sampleIntervalMs
+        tick += tickRate / STATES_PER_SECOND
+        for (const player of players) {
+          const bytes = 180 + player.trackedEntities * 96 + Math.floor(random() * 40)
+          if (state % 2 === 0)
+            record({ kind: 'packet', direction: 'in', type: 'command', peer: player.id, bytes: 58, sequenceId: player.lastProcessedSequenceId, info: { command: 'cl_move' } }, offset)
+          record({ kind: 'packet', direction: 'out', type: 'sv_state', peer: player.id, bytes, tick, info: { entities: player.trackedEntities, ack: player.lastProcessedSequenceId } }, offset + 2)
+          lastStates.set(player.id, { tick, bytes, entities: player.trackedEntities })
+        }
+      }
+      for (const player of players) {
+        record({ kind: 'packet', direction: 'in', type: 'ping', peer: player.id, bytes: 0 })
+        record({ kind: 'packet', direction: 'out', type: 'pong', peer: player.id, bytes: 0 })
+      }
+      if (step % 9 === 0)
+        record({ kind: 'event', type: 'sync_leave', peer: players[0].id, tick, info: { count: 2, entities: ['rock-12', 'rock-40'] } })
+      if (step % 13 === 0)
+        record({ kind: 'event', type: 'dropped', peer: players.at(-1)!.id, info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' } })
+      if (step % 4 === 0)
+        record({ kind: 'packet', direction: 'out', type: 'sv_chat', peer: players[0].id, bytes: 74, reliable: true })
+
+      syncPlayers = players.map(player => ({
+        id: player.id,
+        displayName: player.displayName,
+        position: player.position,
+        ack: player.lastProcessedSequenceId,
+        tracked: Array.from({ length: player.trackedEntities }, (_, i) => `entity-${i}`),
+        lastState: lastStates.get(player.id) ?? null,
+      }))
 
       if (step % 10 === 0)
         request('GET', '/api/game/health', 200, 180, '198.51.100.7')
@@ -183,6 +235,49 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
     },
     async fetchRequests(afterId) {
       return { entries: requests.filter(entry => entry.id > afterId), latestId: requests.length }
+    },
+    async fetchPackets(afterId) {
+      const records = packets.filter(entry => (entry.id as number) > afterId)
+      return { enabled: true, latestId: packetId, matched: records.length, records }
+    },
+    async fetchPacket(id) {
+      const found = packets.find(entry => entry.id === id)
+      if (!found)
+        return { record: null }
+      if (found.kind === 'event' || !found.bytes)
+        return { record: found }
+
+      const info = (found.info ?? {}) as { entities?: number, ack?: number }
+      const payload = found.type === 'sv_state'
+        ? {
+            type: 'sv_state',
+            sequenceId: 0,
+            tick: found.tick,
+            serverTime: found.timestamp,
+            ack: info.ack,
+            entities: Array.from({ length: info.entities ?? 0 }, (_, i) => ({
+              id: i === 0 ? found.peer : `entity-${i}`,
+              $typeName: i === 0 ? 'player' : 'rock',
+              position: { x: i * 3, y: 0, z: -i * 2 },
+              rotation: { x: 0, y: (i % 6) / 2, z: 0 },
+              scale: { x: 1, y: 1, z: 1 },
+            })),
+          }
+        : found.type === 'command'
+          ? { type: 'cl_move', sequenceId: found.sequenceId, keys: ['KeyW'], yaw: 1.57 }
+          : found.type === 'cl_init'
+            ? { name: `Player ${String(found.peer).slice(-2)}` }
+            : { playerId: found.peer, playerName: 'Player 1', message: 'hello' }
+
+      return { record: { ...found, payload } }
+    },
+    async fetchSync() {
+      const entities = [
+        ...syncPlayers.map(player => ({ id: player.id, type: 'player', player: true, trackedBy: syncPlayers.length })),
+        // The last few are out of every player's range
+        ...Array.from({ length: 140 }, (_, i) => ({ id: `entity-${i}`, type: 'rock', player: false, trackedBy: i < 134 ? 1 + (i % syncPlayers.length) : 0 })),
+      ]
+      return { tick, serverTime: now, tickRate, syncDistance: 200, players: syncPlayers, editors: [], entities }
     },
   }
 }

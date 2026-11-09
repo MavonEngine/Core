@@ -6,7 +6,7 @@ import { openBrowser, servesPage } from '../browser'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
-import { handlePlayersKey, renderDashboard, tabForKey } from '../dashboard/view'
+import { handleNetworkKey, handlePlayersKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
 
 export const DASHBOARD_HELP = `Usage: mavonengine dashboard [options]
 
@@ -107,15 +107,29 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
     intervalMs: options.intervalMs,
     startupIntervalMs: options.startup ? STARTUP_POLL_MS : undefined,
   })
-  const view: ViewState = { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true }
+  const view: ViewState = initialViewState()
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 
-  app.render(({ ui, theme }) => renderDashboard(ui, theme, client.state, view, {
-    transparent: options.transparent,
-    startup: options.startup?.(),
-    openKey: !!options.clientUrl,
-  }))
+  app.render(({ ui, theme }) => {
+    renderDashboard(ui, theme, client.state, view, {
+      transparent: options.transparent,
+      startup: options.startup?.(),
+      openKey: !!options.clientUrl,
+    })
+
+    // The tab changes by key or by mouse, so what was drawn decides. Packets are only fetched for the Network tab
+    const watch = showsNetwork(view)
+    if (watch && !client.watchNetwork) {
+      client.watchNetwork = true
+      void client.refresh()
+    }
+    client.watchNetwork = watch
+
+    // A click or a key picked another packet: load its content
+    if ((client.state.packetDetail?.id ?? null) !== view.selectedPacketId)
+      void client.inspectPacket(view.selectedPacketId)
+  })
 
   client.onChange(() => app.invalidate())
 
@@ -144,7 +158,7 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
       app.invalidate()
     }
 
-    if (handlePlayersKey(view, client.state.snapshot, event.key))
+    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets))
       app.invalidate()
   })
 
