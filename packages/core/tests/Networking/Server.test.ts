@@ -548,6 +548,159 @@ describe('server', () => {
     })
   })
 
+  describe('network debugging', () => {
+    /** A channel with the parts of a geckos channel the recorder hooks into */
+    function connect(id: string) {
+      const handlers: Record<string, (...args: any[]) => void> = {}
+      let drop = (_drop: { reason: string, event: string }) => {}
+      const sent = vi.fn()
+      const channel = {
+        id,
+        _emit: sent,
+        emit(event: string, data?: unknown) {
+          this._emit(event, data)
+        },
+        eventEmitter: {
+          emit: (event: string, data?: unknown) => handlers[event]?.(data),
+        },
+        on: (event: string, cb: () => void) => (handlers[event] = cb),
+        onDisconnect: (cb: () => void) => (handlers.disconnect = cb),
+        onDrop: (cb: typeof drop) => (drop = cb),
+      }
+      mockGeckosOnConnection.mock.calls[0][0](channel)
+      mockGeckosServer.connectionsManager.connections.set(id, { channel })
+      return { channel, sent, handlers, drop: (reason: string, event: string) => drop({ reason, event }) }
+    }
+
+    afterEach(() => {
+      mockGeckosServer.connectionsManager.connections = new Map()
+      vi.unstubAllEnvs()
+    })
+
+    function syncedServer() {
+      const server = new TestServer(logger)
+      server.getStateSyncDistance = () => 10
+      return server
+    }
+
+    it('stamps every state with the tick, the server time and the player\'s last processed input', () => {
+      const server = syncedServer()
+      const { sent } = connect('p1')
+      ;(server.game.world.entities.items.get('p1') as TestClient).updateLastProcessedSequenceId(41)
+
+      server.game.update(0.1)
+      server.game.update(0.1)
+
+      const states = sent.mock.calls.filter(([event]) => event === ServerCommand.SV_STATE).map(([, state]) => state)
+      expect(states.map(state => state.tick)).toEqual([1, 2])
+      expect(states[1]).toMatchObject({ type: ServerCommand.SV_STATE, ack: 41, sequenceId: 0 })
+      expect(Math.abs(states[1].serverTime - Date.now())).toBeLessThan(1000)
+      expect(server.tickCount).toBe(2)
+    })
+
+    it('sends an editor a null ack', () => {
+      const server = syncedServer()
+      const editor = connect('editor')
+      editor.handlers[ClientCommand.CL_EDITOR]()
+
+      server.game.update(0.1)
+
+      const [, state] = editor.sent.mock.calls.find(([event]) => event === ServerCommand.SV_STATE)!
+      expect(state).toMatchObject({ tick: 1, ack: null })
+    })
+
+    it('records what each client is sent and sends, and the events of its connection', () => {
+      const server = syncedServer()
+      const { channel, handlers, drop } = connect('p1')
+
+      channel.eventEmitter.emit('command', { type: 'cl_move', sequenceId: 3 })
+      channel.eventEmitter.emit('ping')
+      server.game.update(0.1)
+      drop('DROPPED_FROM_BUFFERING', 'sv_state')
+      handlers.disconnect()
+
+      const records = server.net.list().records.map(({ kind, direction, type, peer, tick, sequenceId, info }) => ({ kind, direction, type, peer, tick, sequenceId, info }))
+      expect(records).toEqual([
+        { kind: 'event', direction: undefined, type: 'connect', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
+        { kind: 'packet', direction: 'in', type: 'command', peer: 'p1', tick: undefined, sequenceId: 3, info: { command: 'cl_move' } },
+        { kind: 'packet', direction: 'in', type: 'ping', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
+        { kind: 'packet', direction: 'out', type: 'pong', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
+        { kind: 'event', direction: undefined, type: 'sync_enter', peer: 'p1', tick: 1, sequenceId: undefined, info: { count: 1, entities: ['p1'] } },
+        { kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', tick: 1, sequenceId: undefined, info: { entities: 1, ack: 3 } },
+        { kind: 'event', direction: undefined, type: 'dropped', peer: 'p1', tick: undefined, sequenceId: undefined, info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' } },
+        { kind: 'event', direction: undefined, type: 'disconnect', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
+      ])
+
+      const state = server.net.list({ type: 'sv_state' }).records[0]
+      expect(server.net.get(state.id)).toMatchObject({ payload: { tick: 1, ack: 3, entities: [{ id: 'p1' }] } })
+      expect(state.bytes).toBe(JSON.stringify(server.net.get(state.id)!.payload).length)
+    })
+
+    it('records entities entering and leaving a player\'s sync distance', () => {
+      const server = syncedServer()
+      connect('p1')
+      const rock = new TestClient('rock')
+      rock.position.set(5, 0, 0)
+      server.game.world.entities.items.set('rock', rock)
+
+      server.game.update(0.1)
+      rock.position.set(50, 0, 0)
+      server.game.update(0.1)
+
+      expect(server.net.list({ kind: 'event', type: 'sync_enter,sync_leave' }).records).toMatchObject([
+        { type: 'sync_enter', peer: 'p1', tick: 1, info: { count: 2, entities: ['p1', 'rock'] } },
+        { type: 'sync_leave', peer: 'p1', tick: 2, info: { count: 1, entities: ['rock'] } },
+      ])
+    })
+
+    it('describes the state sync', () => {
+      const server = syncedServer()
+      connect('p1')
+      const near = new TestClient('near')
+      near.position.set(5, 0, 0)
+      const far = new TestClient('far')
+      far.position.set(500, 0, 0)
+      server.game.world.entities.items.set('near', near)
+      server.game.world.entities.items.set('far', far)
+
+      server.game.update(0.1)
+      const sync = server.syncSnapshot()
+
+      expect(sync).toMatchObject({ tick: 1, tickRate: server.game.tickRate, syncDistance: 10, editors: [] })
+      expect(sync.players).toHaveLength(3)
+      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 } })
+      expect(sync.players[0].lastState!.bytes).toBeGreaterThan(0)
+      // near and far are players without a connection here, so they track what is around them but are sent nothing
+      expect(sync.players[2]).toMatchObject({ id: 'far', lastState: null })
+
+      expect(sync.entities.map(({ id, trackedBy, lastSentTick, position }) => ({ id, trackedBy, lastSentTick, x: position.x }))).toEqual([
+        { id: 'p1', trackedBy: 1, lastSentTick: 1, x: 0 },
+        { id: 'near', trackedBy: 1, lastSentTick: 1, x: 5 },
+        { id: 'far', trackedBy: 0, lastSentTick: null, x: 500 },
+      ])
+    })
+
+    it('tells when the game\'s server has no sync distance', () => {
+      const server = new TestServer(logger)
+      expect(server.syncSnapshot()).toMatchObject({ tick: 0, syncDistance: null, players: [], entities: [] })
+    })
+
+    it('records nothing in production', () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const server = syncedServer()
+      const { channel, sent } = connect('p1')
+
+      channel.eventEmitter.emit('ping')
+      server.game.update(0.1)
+
+      expect(server.net.enabled).toBe(false)
+      expect(server.net.latestId).toBe(0)
+      // The channel is left as it was
+      expect(channel._emit).toBe(sent)
+      expect(sent).toHaveBeenCalledWith(ServerCommand.SV_STATE, expect.objectContaining({ tick: 1 }))
+    })
+  })
+
   describe('scenes', () => {
     class Crate extends GameObject {
       update(): void {}

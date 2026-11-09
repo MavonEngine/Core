@@ -21,7 +21,26 @@ export interface EntityQuery {
 
 export class GameServerError extends Error { }
 
-export type ClientQuery = 'status' | 'entities' | 'entity' | 'scene' | 'network' | 'logs' | 'screenshot' | 'trace'
+export type ClientQuery = 'status' | 'entities' | 'entity' | 'scene' | 'network' | 'packets' | 'packet' | 'logs' | 'screenshot' | 'trace'
+
+export interface PacketQuery {
+  after?: number
+  kind?: 'packet' | 'event'
+  direction?: 'in' | 'out'
+  /** Message or event name, several separated by commas */
+  type?: string
+  /** Channel id of a client, which is its player id */
+  peer?: string
+  limit?: number
+}
+
+const NET_UNAVAILABLE = 'The network debug endpoints are not available: the game server runs with NODE_ENV=production '
+  + '(they are never served there), or it uses a @mavonengine/core release without them'
+
+/** A packet query as query string params, without the unset fields */
+export function packetParams(query: PacketQuery): Record<string, string> {
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]))
+}
 
 const DEV_UNAVAILABLE = 'The dev endpoints are not available: the game server runs with NODE_ENV=production '
   + '(they are never served there), or it uses a @mavonengine/core release without them'
@@ -85,6 +104,21 @@ export default class GameServerClient {
 
   entity(id: string) {
     return this.get(`api/game/dev/entities/${encodeURIComponent(id)}`, {}, DEV_UNAVAILABLE)
+  }
+
+  /** Packets and network events the server recorded, oldest first */
+  packets(query: PacketQuery = {}) {
+    return this.get('api/game/dev/net/packets', packetParams(query), NET_UNAVAILABLE)
+  }
+
+  /** One recorded packet with its payload */
+  packet(id: number) {
+    return this.get(`api/game/dev/net/packets/${id}`, {}, NET_UNAVAILABLE)
+  }
+
+  /** Who is sent which entities */
+  sync() {
+    return this.get('api/game/dev/net/sync', {}, NET_UNAVAILABLE)
   }
 
   /** The game tabs open in a browser, through the dev bridge */

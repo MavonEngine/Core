@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { version } from '../../package.json'
 import { registerClientTools } from './clientTools'
 import { registerDocsTools } from './docs'
+import { registerNetworkTools } from './networkTools'
 import { LOG_LEVELS, READ_ONLY, run, vec3 } from './result'
 
 const INSTRUCTIONS = `Reads the live state of a running MavonEngine game: the game server (health, performance, players, scene,
@@ -13,6 +14,8 @@ network state, console logs, screenshots). Every tool is read-only.
 Server scene / entity tools need the server in development (NODE_ENV is not "production"); client tools need the client
 served by Vite in dev. Start with server_status and list_clients. Use type / near filters rather than paging through a world.
 compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.
+network_packets / client_packets list the packets each side sent and received, network_timeline merges both sides for one
+client, and network_sync tells which entities each player is sent: use them when something does not arrive or arrives late.
 client_trace records a few seconds of a tab for frame drops, stutter and slow rendering: the bottleneck, hitches with
 their causes, hot JS functions, WebGL load, and a trace file for flame charts.
 docs_list_pages / docs_get_page read the MavonEngine documentation: check it before guessing how an engine API works.`
@@ -163,6 +166,7 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient): Mc
   }))
 
   registerClientTools(server, client)
+  registerNetworkTools(server, client)
   if (docs)
     registerDocsTools(server, docs)
 

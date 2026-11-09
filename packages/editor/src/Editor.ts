@@ -17,6 +17,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
 import { applyShadeMode } from './Editor/applyShadeMode'
 import { DEFAULT_SCENE_NAME, demoScene } from './Editor/demoScene'
+import NetworkOverlay from './Editor/Network/NetworkOverlay'
 import { registerEditorPanel, unregisterEditorPanel } from './Editor/panels'
 
 export type { EditorPanelDefinition, EditorPanelLocation } from './Editor/panels'
@@ -40,6 +41,9 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   private _showHelpers = true
   private abort = new AbortController()
   private saving?: Promise<boolean>
+
+  /** Server ghosts and sync rings in the viewport, switched on from the Network panel */
+  networkOverlay!: NetworkOverlay
 
   availableAssetCategories!: string[]
   activeAssetCategory: 'Object' | '_texture' | 'CubeTexture' | 'AudioBuffer' | 'Font' = 'Object'
@@ -116,6 +120,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     Game.instance().renderer.composer.addPass(this.outlinePass)
 
     this.initFlyControls()
+    this.networkOverlay = new NetworkOverlay()
 
     this.watchScene(Game.instance().activeScene)
     Game.instance().on('sceneLoaded', (scene: GameScene) => {
@@ -412,6 +417,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   update(delta: number): void {
     this.updateCamera(delta)
     this.helpers.forEach(h => h.update(delta))
+    this.networkOverlay.update()
   }
 
   updateCamera(delta: number) {
@@ -432,6 +438,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.abort.abort()
     this.reactRoot.unmount()
     this.outlinePass.dispose()
+    this.networkOverlay.dispose()
     this.shadeOverrideMaterials.forEach(m => m.dispose())
     this.shadeOverrideMaterials.clear()
     this.originalMaterials.clear()
