@@ -127,6 +127,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private lastSentTick = new Map<string, number>()
   /** The last sv_state sent to each channel, kept while `net` records */
   private lastStates = new Map<string, SyncStateSummary>()
+  /** The transport's byte counters per channel, as they were when bandwidth was last recorded */
+  private transportBytes = new Map<string, { sent: number, received: number }>()
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -223,6 +225,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
         this.net.event('disconnect', { peer: playerId })
         this.lastStates.delete(playerId)
+        // Count what it sent and received since the last sample before its counters are gone
+        this.recordTransportBytes(channel)
+        this.transportBytes.delete(playerId)
 
         if (this.editorChannels.delete(playerId)) {
           this.logger.info(`Editor disconnected: ${playerId}`)
@@ -265,12 +270,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         this.logger.info(`${(this.game.world as ServerWorld).players.length - 1} total players connected`)
       })
 
-      channel.on('command', (data) => {
-        const bytes = Buffer.byteLength(JSON.stringify(data))
-        this.bandwidthTracker.recordReceived(SERVER_BANDWIDTH_ID, bytes)
-
-        this.bufferIncomingCommand(channel, data)
-      })
+      channel.on('command', data => this.bufferIncomingCommand(channel, data))
     })
 
     this.game.onUpdate(delta => this.tick(delta))
@@ -286,6 +286,40 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   get bandwidthTracker() {
     return this.metrics.bandwidth
+  }
+
+  /**
+   * Add the bytes a channel sent and received since it was last looked at to the bandwidth tracker.
+   * Read from the WebRTC connection's own counters, so every message counts and none is serialized just to be measured.
+   */
+  private recordTransportBytes(channel: ServerChannel) {
+    const peer = channel.webrtcConnection?.peerConnection
+    if (!peer)
+      return
+
+    let sent: number
+    let received: number
+    // node-datachannel throws once the peer connection is closed
+    try {
+      sent = peer.bytesSent()
+      received = peer.bytesReceived()
+    }
+    catch {
+      return
+    }
+
+    const before = this.transportBytes.get(channel.id!) ?? { sent: 0, received: 0 }
+    this.transportBytes.set(channel.id!, { sent, received })
+    this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Math.max(0, sent - before.sent))
+    this.bandwidthTracker.recordReceived(SERVER_BANDWIDTH_ID, Math.max(0, received - before.received))
+  }
+
+  /**
+   * Close the current sampling window of the metrics, with the bytes every connection moved in it
+   */
+  private sampleMetrics() {
+    this.gameSocket.connectionsManager.connections.forEach(con => this.recordTransportBytes(con.channel))
+    this.metrics.sample()
   }
 
   get latencySimulation() {
@@ -431,14 +465,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       ack,
     }
 
-    const json = JSON.stringify(state)
-    const bytes = Buffer.byteLength(json)
-    this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, bytes)
-
+    // Serialized here for the dev tools only: geckos.io serializes the state itself when it sends it
     if (this.net.enabled) {
+      const json = JSON.stringify(state)
       // The tap on the channel records the packet when it is really sent, after any simulated latency
       rememberJson(state, json)
-      this.lastStates.set(channel.id!, { tick: state.tick, bytes, entities: entities.length })
+      this.lastStates.set(channel.id!, { tick: state.tick, bytes: Buffer.byteLength(json), entities: entities.length })
       for (const entity of entities)
         this.lastSentTick.set(entity.id, state.tick)
     }
@@ -747,7 +779,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private startMetrics() {
     const logIntervalMs = this.options.metrics?.logIntervalMs ?? 5000
 
-    this.timers.push(setInterval(() => this.metrics.sample(), this.metrics.sampleIntervalMs))
+    this.timers.push(setInterval(() => this.sampleMetrics(), this.metrics.sampleIntervalMs))
 
     this.timers.push(setInterval(() => this.logStats(logIntervalMs), logIntervalMs))
   }

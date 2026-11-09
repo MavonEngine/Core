@@ -484,6 +484,105 @@ describe('server', () => {
     })
   })
 
+  describe('bandwidth', () => {
+    function connect(id: string, counters: { sent: number, received: number }) {
+      const handlers: Record<string, (...args: any[]) => void> = {}
+      let disconnect = () => {}
+      const peerConnection = { bytesSent: () => counters.sent, bytesReceived: () => counters.received }
+      const channel = { id, emit: vi.fn(), on: (event: string, cb: () => void) => (handlers[event] = cb), onDisconnect: (cb: () => void) => (disconnect = cb), webrtcConnection: { peerConnection } }
+      mockGeckosOnConnection.mock.calls[0][0](channel)
+      mockGeckosServer.connectionsManager.connections.set(id, { channel })
+      return { channel, handlers, disconnect: () => disconnect() }
+    }
+
+    function startServer() {
+      const server = new TestServer(logger, undefined, { metrics: { sampleIntervalMs: 1000 } })
+      ;(server.gameSocket as any).listen = vi.fn()
+      vi.spyOn(server.http, 'start').mockImplementation(() => {})
+      vi.spyOn(server.metrics.cpu, 'sample').mockImplementation(() => undefined as any)
+      vi.spyOn(server, 'getStateSyncDistance').mockReturnValue(100)
+      server.start()
+      return server
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+      mockGeckosServer.connectionsManager.connections = new Map()
+    })
+
+    it('samples what the connections sent and received from the transport\'s counters', () => {
+      vi.useFakeTimers()
+      const server = startServer()
+      const one = { sent: 1000, received: 200 }
+      const two = { sent: 50, received: 5 }
+      connect('p1', one)
+      connect('p2', two)
+
+      vi.advanceTimersByTime(1000)
+      expect(server.bandwidthTracker.history.at(-1)).toMatchObject({ sent: 1050, received: 205 })
+
+      // Only what was added since the last sample counts
+      one.sent += 300
+      two.received += 20
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(server.bandwidthTracker.history.at(-1)).toMatchObject({ sent: 300, received: 20 })
+    })
+
+    it('counts the last bytes of a connection that closed between two samples', () => {
+      vi.useFakeTimers()
+      const server = startServer()
+      const counters = { sent: 100, received: 10 }
+      const { disconnect } = connect('p1', counters)
+
+      vi.advanceTimersByTime(1000)
+      counters.sent += 40
+      counters.received += 4
+      disconnect()
+      mockGeckosServer.connectionsManager.connections.delete('p1')
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(server.bandwidthTracker.history.at(-1)).toMatchObject({ sent: 40, received: 4 })
+    })
+
+    it('skips a connection whose counters cannot be read', () => {
+      vi.useFakeTimers()
+      const server = startServer()
+      const { channel } = connect('p1', { sent: 100, received: 10 })
+      channel.webrtcConnection.peerConnection.bytesSent = () => {
+        throw new Error('closed')
+      }
+      // Without a WebRTC connection, like a mocked channel
+      mockGeckosServer.connectionsManager.connections.set('p2', { channel: { id: 'p2', emit: vi.fn() } })
+
+      vi.advanceTimersByTime(1000)
+      server.stop()
+
+      expect(server.bandwidthTracker.history.at(-1)).toMatchObject({ sent: 0, received: 0 })
+    })
+
+    it('does not serialize a state just to measure it', () => {
+      const server = new TestServer(logger)
+      vi.spyOn(server, 'getStateSyncDistance').mockReturnValue(100)
+      const player = new TestClient('p1')
+      const toJSON = vi.fn(() => player.serialize())
+      ;(player as any).toJSON = toJSON
+      server.game.world.entities.items.set('p1', player)
+      mockGeckosServer.connectionsManager.connections = new Map([['p1', { channel: { id: 'p1', emit: vi.fn() } }]])
+
+      server.net.enabled = false
+      ;(server as any).stateSync()
+      expect(toJSON).not.toHaveBeenCalled()
+
+      // The dev tools show the packet, so they need it serialized
+      server.net.enabled = true
+      ;(server as any).stateSync()
+      expect(toJSON).toHaveBeenCalled()
+    })
+  })
+
   describe('editor clients', () => {
     function connect(id: string) {
       const handlers: Record<string, (...args: any[]) => void> = {}
