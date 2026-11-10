@@ -34,6 +34,27 @@ describe('pluginHost', () => {
     expect(calls).toEqual(['p0:0.5', 'p2:0.5'])
   })
 
+  it('lets the caller make each plugin\'s call, to tell what that plugin did', () => {
+    const calls: string[] = []
+    const { host: h } = host([
+      { tick: (delta, ctx) => calls.push(`${ctx.pkg}:${delta}`) },
+      {},
+      {
+        tick: () => {
+          throw new Error('boom')
+        },
+      },
+    ])
+
+    h.runAround('tick', (plugin, call) => {
+      calls.push(`before ${plugin.package}`)
+      call()
+      calls.push(`after ${plugin.package}`)
+    }, 2)
+
+    expect(calls).toEqual(['before p0', 'p0:2', 'after p0', 'before p1', 'after p1', 'before p2', 'after p2'])
+  })
+
   it('calls hooks with the plugin as this', () => {
     const plugin = {
       count: 0,

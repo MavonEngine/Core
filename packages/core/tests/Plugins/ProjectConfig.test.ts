@@ -5,7 +5,9 @@ import {
   addPluginToConfig,
   enabledPlugins,
   findConfigRoot,
+  MAX_README_CHARS,
   PluginConfigError,
+  pluginInfos,
   readConfig,
   readPluginManifest,
   recordPrefabUsage,
@@ -13,7 +15,7 @@ import {
   resolveInside,
   shippedAssetPaths,
 } from '../../src/Plugins/ProjectConfig'
-import { installPlugin, tempProject, writeConfig } from './fixtures'
+import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
 let root: string
 
@@ -244,5 +246,73 @@ describe('resolveInside', () => {
     expect(resolveInside(base, '../c')).toBeUndefined()
     expect(resolveInside(base, resolve('/etc/passwd'))).toBeUndefined()
     expect(resolveInside(base, '')).toBeUndefined()
+  })
+})
+
+describe('plugin infos', () => {
+  const manifest = { target: 'server' as const, server: './server.js', engine: '^0.1.0', assets: { prefabs: { Tree: ['tree.glb'] } } }
+
+  it('describes a plugin from its package.json, manifest and readme', () => {
+    const dir = installPlugin(root, '@acme/chat', manifest, { 'Readme.md': '# Chat\n\nTalk to each other.' })
+    writeFile(join(dir, 'package.json'), JSON.stringify({
+      name: '@acme/chat',
+      version: '2.3.1',
+      description: 'In-game chat',
+      license: 'MIT',
+      repository: { url: 'https://example.com/chat.git' },
+      mavonengine: manifest,
+    }))
+    writeConfig(root, { plugins: { '@acme/chat': { prefabs: ['Tree', 7 as any] } } })
+
+    expect(pluginInfos(root)).toEqual([{
+      package: '@acme/chat',
+      enabled: true,
+      installed: true,
+      version: '2.3.1',
+      description: 'In-game chat',
+      license: 'MIT',
+      homepage: 'https://example.com/chat.git',
+      target: 'server',
+      engine: '^0.1.0',
+      readme: '# Chat\n\nTalk to each other.',
+      declaredPrefabs: ['Tree'],
+      usedPrefabs: ['Tree'],
+    }])
+  })
+
+  it('lists plugins that are turned off, missing or invalid, and says what is wrong', () => {
+    installPlugin(root, 'off', manifest)
+    installPlugin(root, 'not-a-plugin', undefined)
+    installPlugin(root, 'broken', { target: 'sideways' } as any)
+    writeConfig(root, { plugins: { 'off': { enabled: false }, 'missing': {}, 'not-a-plugin': {}, 'broken': {} } })
+
+    const infos = pluginInfos(root)
+
+    expect(infos.map(info => [info.package, info.enabled, info.installed])).toEqual([
+      ['off', false, true],
+      ['missing', true, false],
+      ['not-a-plugin', true, false],
+      ['broken', true, false],
+    ])
+    expect(infos[0].problem).toBeUndefined()
+    expect(infos[1].problem).toContain('not installed')
+    expect(infos[2].problem).toContain('no "mavonengine" field')
+    // Still says what the package is
+    expect(infos[2].version).toBe('1.0.0')
+    expect(infos[3].problem).toContain('target')
+  })
+
+  it('cuts off a very long readme', () => {
+    installPlugin(root, 'wordy', manifest, { 'README.md': 'x'.repeat(MAX_README_CHARS + 50) })
+    writeConfig(root, { plugins: { wordy: {} } })
+
+    const [{ readme }] = pluginInfos(root)
+
+    expect(readme!.length).toBeLessThan(MAX_README_CHARS + 50)
+    expect(readme).toContain('cut off')
+  })
+
+  it('lists nothing for a project without plugins', () => {
+    expect(pluginInfos(root)).toEqual([])
   })
 })

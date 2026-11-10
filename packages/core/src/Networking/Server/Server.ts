@@ -3,7 +3,7 @@ import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
 import type { FSWatcher } from 'node:fs'
 import type winston from 'winston'
-import type { LoadedPlugin, ServerPlugin, ServerPluginContext } from '../../Plugins/types'
+import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
 import type GameScene from '../../Scene/GameScene'
 import type GameObject from '../../World/GameObject'
 import type { NetDebugSource, SyncSnapshot, SyncStateSummary } from '../Debug/sync'
@@ -21,6 +21,7 @@ import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
+import { pluginInfos } from '../../Plugins/ProjectConfig'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
@@ -190,6 +191,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       client: this.options.client,
       inspector: new WorldInspector(this),
       net: this,
+      plugins: () => this.pluginInfos(),
     })
 
     this.gameSocket.onConnection((channel) => {
@@ -668,7 +670,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
-    this.plugins.run('setup')
+    // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
+    const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
+      this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
+
+    this.plugins.runAround('setup', asPlugin)
 
     this.http.start()
     this.startMetrics()
@@ -680,7 +686,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.onHttpCallback(this.httpServer)
     }
 
-    this.plugins.run('http', this.httpServer)
+    this.plugins.runAround('http', asPlugin, this.httpServer)
 
     // Last, because the client answers every page request the routes above leave
     const servesClient = this.http.serveClient() && !!this.http.server
@@ -701,6 +707,33 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   /** Whether the active scene's file is watched and reloaded on change */
   get sceneWatched(): boolean {
     return !!this.sceneWatcher
+  }
+
+  /**
+   * The plugins of the project, for GET /api/game/plugins: everything in mavonengine.json when the server knows
+   * its project root, and in any case the plugins it runs, also those passed to it directly.
+   */
+  pluginInfos(): ServerPluginInfo[] {
+    const running = new Set(this.plugins?.plugins.map(loaded => loaded.package))
+    let infos: ServerPluginInfo[] = []
+
+    const root = this.projectRoot
+    if (root) {
+      try {
+        infos = pluginInfos(root, { readme: false }).map(({ readme: _readme, ...info }) => ({ ...info, runningOnServer: running.has(info.package) }))
+      }
+      catch (err) {
+        this.logger.warn(`Could not read the project's plugins: ${(err as Error).message}`)
+      }
+    }
+
+    const listed = new Set(infos.map(info => info.package))
+    for (const pkg of running) {
+      if (!listed.has(pkg))
+        infos.push({ package: pkg, enabled: true, installed: true, target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true })
+    }
+
+    return infos
   }
 
   get projectRoot(): string | undefined {

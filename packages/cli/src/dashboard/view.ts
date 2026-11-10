@@ -1,7 +1,11 @@
+import type { InstallJob } from '@mavonengine/core/Plugins/install'
+import type { AvailablePlugin } from '@mavonengine/core/Plugins/registry'
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
+import type AvailablePlugins from './available'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { LogLine, PacketDetail, PacketLine, RequestLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
+import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
+import { notInProject } from '@mavonengine/core/Plugins/registry'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
 import { DEFAULT_COLOR, hex } from '@profullstack/hqtui'
 import { formatBytes, formatDuration, formatMs, formatPercent, formatRate } from './format'
@@ -35,6 +39,19 @@ export interface ViewState {
   followSelectedPacket: boolean
   /** First line of the payload shown in the details panel */
   payloadOffset: number
+  /** Rows the Routes table is scrolled down by */
+  routeOffset?: number
+  /** Package of the plugin shown in the details on the Plugins tab, the first one while unset */
+  selectedPlugin?: string | null
+  /** Package the Plugins tab asks to confirm the install of, unset when it asks nothing */
+  confirmInstall?: string | null
+}
+
+/** What the dashboard needs of the installer `mavonengine dev` gives it */
+export interface DashboardInstaller {
+  /** The running or last install */
+  readonly job: InstallJob | null
+  readonly busy: boolean
 }
 
 export function initialViewState(): ViewState {
@@ -51,6 +68,10 @@ export interface RenderOptions {
   openKey?: boolean
   /** Set while `mavonengine dev` or `mavonengine create` waits for the game server it started */
   startup?: StartupInfo
+  /** The plugins that can be installed, shown on the Plugins tab and fetched when it is first drawn */
+  available?: AvailablePlugins
+  /** Set under `mavonengine dev`: plugins can be installed from the Plugins tab */
+  installer?: DashboardInstaller
 }
 
 export interface StartupInfo {
@@ -66,7 +87,7 @@ export interface StartupInfo {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network'] as const
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins'] as const
 
 /** Whether the tab showing needs the packets and the state sync, which are only fetched for it */
 export function showsNetwork(view: ViewState): boolean {
@@ -232,6 +253,87 @@ export function describePacket(packet: PacketLine): string {
   return parts.join(' · ')
 }
 
+/** The plugins of the public list the project doesn't have, once the list was read */
+function installable(plugins: PluginLine[], available?: AvailablePlugins): AvailablePlugin[] {
+  return available ? notInProject(available.state.plugins, plugins.map(p => p.package)) : []
+}
+
+/**
+ * The plugin the Plugins tab shows: one of the project's or one that can be installed.
+ * Nothing picked yet shows the project's first one, or the first one to install when it has none.
+ */
+export function selectedPlugin(view: ViewState, plugins: PluginLine[], rest: AvailablePlugin[] = []): { installed?: PluginLine, available?: AvailablePlugin } {
+  const installed = plugins.find(p => p.package === view.selectedPlugin)
+  if (installed)
+    return { installed }
+
+  const available = rest.find(p => p.package === view.selectedPlugin)
+  if (available)
+    return { available }
+
+  return plugins.length ? { installed: plugins[0] } : { available: rest[0] }
+}
+
+/**
+ * Arrow keys / j k move the plugin selection on the Plugins tab, through the project's plugins and on
+ * into the ones that can be installed. Returns whether the key was used.
+ */
+export function handlePluginsKey(view: ViewState, plugins: PluginLine[], key: string, rest: AvailablePlugin[] = []): boolean {
+  if (DASHBOARD_TABS[view.tab] !== 'Plugins' || view.confirmInstall)
+    return false
+
+  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  const packages = [...plugins, ...rest].map(p => p.package)
+  if (delta === 0 || packages.length === 0)
+    return false
+
+  const shown = selectedPlugin(view, plugins, rest)
+  const current = Math.max(0, packages.indexOf((shown.installed ?? shown.available)!.package))
+  view.selectedPlugin = packages[Math.max(0, Math.min(packages.length - 1, current + delta))]
+  return true
+}
+
+/**
+ * The keys that install a plugin from the Plugins tab: `i` asks whether to install the selected one,
+ * then `y` installs it and `n` or escape doesn't. Returns the package to install now, true when the key
+ * was used otherwise, false when it wasn't.
+ */
+export function handleInstallKey(view: ViewState, plugins: PluginLine[], key: string, rest: AvailablePlugin[], installer?: DashboardInstaller): string | boolean {
+  if (DASHBOARD_TABS[view.tab] !== 'Plugins' || !installer)
+    return false
+
+  if (view.confirmInstall) {
+    const pkg = view.confirmInstall
+    if (key === 'y') {
+      view.confirmInstall = null
+      return installer.busy ? true : pkg
+    }
+    if (key === 'n' || key === 'escape') {
+      view.confirmInstall = null
+      return true
+    }
+    return false
+  }
+
+  const { available } = selectedPlugin(view, plugins, rest)
+  if (key !== 'i' || !available || installer.busy)
+    return false
+
+  view.confirmInstall = available.package
+  return true
+}
+
+function pluginKeys(state: DashboardState, view: ViewState, available?: AvailablePlugins, installer?: DashboardInstaller) {
+  if (view.confirmInstall)
+    return [{ key: 'y', label: 'Install' }, { key: 'n', label: 'Cancel' }]
+
+  const rest = installable(state.plugins, available)
+  return [
+    ...(state.plugins.length + rest.length > 1 ? [{ key: '↑↓', label: 'Select plugin' }] : []),
+    ...(installer && !installer.busy && selectedPlugin(view, state.plugins, rest).available ? [{ key: 'i', label: 'Install' }] : []),
+  ]
+}
+
 function statusColor(status: ConnectionStatus, theme: Theme): Color {
   if (status === 'live')
     return theme.success
@@ -243,7 +345,7 @@ function statusColor(status: ConnectionStatus, theme: Theme): Color {
 /**
  * Draw the whole dashboard. Pure apart from `view`, so it can be rendered in tests.
  */
-export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup, openKey = false }: RenderOptions = {}) {
+export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup, openKey = false, available, installer }: RenderOptions = {}) {
   const { snapshot } = state
   const starting = !snapshot && !!startup && (state.status === 'connecting' || state.status === 'unreachable')
 
@@ -286,6 +388,12 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       else if (tab === 'Network') {
         networkTab(root, theme, state, view, transparent)
       }
+      else if (tab === 'Routes') {
+        routesPanel(root, theme, state, view, transparent)
+      }
+      else if (tab === 'Plugins') {
+        pluginsTab(root, theme, state, view, transparent, available, installer)
+      }
       else {
         root.responsive({
           [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
@@ -313,6 +421,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
               ...(view.selectedPacketId !== null ? [{ key: 'esc', label: 'Close' }] : []),
             ]
           : []),
+        ...(snapshot && DASHBOARD_TABS[view.tab] === 'Plugins' ? pluginKeys(state, view, available, installer) : []),
       ],
       right: [starting
         ? { label: 'STARTING', color: statusColor('connecting', theme) }
@@ -1011,6 +1120,340 @@ function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: 
         { key: 'peer', title: 'Client', width: narrow ? 8 : 26, color: theme.muted, render: p => p.peer ?? '—' },
         { key: 'bytes', title: 'Size', width: narrow ? 9 : 10, align: 'right', render: p => p.kind === 'packet' ? formatBytes(p.bytes) : '' },
         { key: 'info', title: 'Details', render: describePacket },
+      ],
+    })
+  })
+}
+
+function methodColor(method: string, theme: Theme): Color | undefined {
+  if (method === 'GET')
+    return theme.success
+  if (method === 'DELETE')
+    return theme.danger
+  if (method === 'ALL')
+    return theme.muted
+  return theme.warning
+}
+
+/** Who registered a route: the engine, the game's own server, or the plugin's package */
+export function routeSource(route: RouteLine): string {
+  return route.source === 'plugin' ? route.plugin ?? 'plugin' : route.source
+}
+
+/** Whether a route only exists in development or is served in production too */
+export function routeEnvironment(route: RouteLine): string {
+  return route.devOnly ? 'dev only' : 'prod + dev'
+}
+
+function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
+  const rows = state.routes
+  const maxOffset = Math.max(0, rows.length - 1)
+  const offset = Math.min(view.routeOffset ?? 0, maxOffset)
+  view.routeOffset = offset
+
+  const fromPlugins = rows.filter(r => r.source === 'plugin')
+  const plugins = new Set(fromPlugins.map(routeSource)).size
+  const devOnly = rows.filter(r => r.devOnly).length
+  const counts = [
+    `${rows.filter(r => r.source === 'engine').length} engine`,
+    `${rows.filter(r => r.source === 'game').length} game`,
+    `${fromPlugins.length} from ${plugins} plugin${plugins === 1 ? '' : 's'}`,
+    `${devOnly} dev only`,
+  ]
+
+  ui.panel({ title: `HTTP endpoints (${rows.length}: ${counts.join(', ')})`, size: '1fr' }, (panel) => {
+    if (state.routesAvailable === false) {
+      panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/routes')
+      return
+    }
+
+    if (rows.length === 0) {
+      panel.label(state.routesAvailable === null ? 'Asking the server for its endpoints…' : 'The server has no endpoints')
+      return
+    }
+
+    panel.table<RouteLine>({
+      rows,
+      offset,
+      scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
+      size: '1fr',
+      // The table won't scroll past the last full page, so keep our offset on the row it actually drew
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          view.routeOffset = index
+      },
+      onScroll: (delta) => {
+        view.routeOffset = Math.max(0, Math.min(maxOffset, offset + delta))
+        ui.ctx.invalidate()
+      },
+      columns: [
+        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        { key: 'path', title: 'Path' },
+        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
+        { key: 'source', title: 'From', width: 30, color: r => r.source === 'engine' ? theme.muted : r.source === 'plugin' ? theme.primary : undefined, render: routeSource },
+        { key: 'summary', title: 'What it does', color: theme.muted, render: r => r.summary ?? '' },
+      ],
+    })
+  })
+}
+
+const PLUGIN_TARGETS = { client: 'client', server: 'server', both: 'client + server' }
+
+/** One word for whether a plugin is in use, with the colour to show it in */
+export function pluginStatus(plugin: PluginLine, theme: Theme): { label: string, color: Color } {
+  if (plugin.problem)
+    return { label: 'problem', color: theme.danger }
+  if (!plugin.enabled)
+    return { label: 'disabled', color: theme.muted }
+  // Its server entry should run here but doesn't: it failed to load, or the server needs a restart
+  if ((plugin.target === 'server' || plugin.target === 'both') && !plugin.runningOnServer)
+    return { label: 'not loaded', color: theme.warning }
+  return { label: 'enabled', color: theme.success }
+}
+
+function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean, available?: AvailablePlugins, installer?: DashboardInstaller) {
+  const { plugins } = state
+
+  // Only asked for once someone looks at this tab
+  void available?.load()
+
+  const rest = installable(plugins, available)
+  const shown = selectedPlugin(view, plugins, rest)
+  const endpoints = (plugin: PluginLine) => state.routes.filter(r => r.source === 'plugin' && r.plugin === plugin.package)
+  // Something on the list may have been installed since it was asked about
+  const confirm = rest.find(p => p.package === view.confirmInstall)
+  if (!confirm)
+    view.confirmInstall = null
+
+  if (state.pluginsAvailable === false || plugins.length === 0) {
+    ui.panel({ title: 'Plugins', size: available ? 3 : '1fr' }, (panel) => {
+      if (state.pluginsAvailable === false)
+        panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/plugins')
+      else
+        panel.label(state.pluginsAvailable === null ? 'Asking the server for its plugins…' : 'The project has no plugins. Add one with: mavonengine install <package>')
+    })
+  }
+  else {
+    let top = 0
+
+    // The list on top at its full width, so the package names and every column fit whatever the terminal's width
+    ui.panel({ title: `Plugins (${plugins.length})`, size: Math.min(plugins.length, 8) + 3 }, (panel) => {
+      panel.table<PluginLine>({
+        rows: plugins,
+        selected: shown.installed ? plugins.indexOf(shown.installed) : -1,
+        followSelection: true,
+        // With more plugins than rows the table scrolls to the selection, so a click counts from the row drawn first
+        onRow: (_row, index, y) => {
+          if (y === 1)
+            top = index
+        },
+        onSelectRow: (visibleRow) => {
+          const row = plugins[top + visibleRow]
+          if (!row || view.confirmInstall)
+            return
+          view.selectedPlugin = row.package
+          ui.ctx.invalidate()
+        },
+        scrollbar: true,
+        // Zebra stripes are solid fills, which would break transparency
+        zebra: !transparent,
+        size: '1fr',
+        columns: [
+          { key: 'package', title: 'Package' },
+          { key: 'version', title: 'Version', width: 8, render: p => p.version ?? '—' },
+          { key: 'status', title: 'Status', width: 10, color: p => pluginStatus(p, theme).color, render: p => pluginStatus(p, theme).label },
+          { key: 'target', title: 'Runs on', width: 7, render: p => p.target ?? '—' },
+          { key: 'endpoints', title: 'Routes', width: 6, align: 'right', render: p => state.routesAvailable ? String(endpoints(p).length) : '—' },
+          { key: 'prefabs', title: 'Prefabs', width: 7, align: 'right', render: p => String(new Set([...p.declaredPrefabs, ...p.usedPrefabs]).size) },
+        ],
+      })
+    })
+  }
+
+  if (installer?.job)
+    installPanel(ui, theme, installer.job)
+
+  if (confirm)
+    confirmInstallPanel(ui, theme, confirm)
+  else if (shown.installed)
+    pluginDetails(ui, theme, state, shown.installed, endpoints(shown.installed), '1fr', transparent)
+  else if (shown.available)
+    availableDetails(ui, theme, shown.available, installer)
+
+  if (available)
+    availablePanel(ui, theme, available, rest, shown.available, view, shown.installed || confirm || shown.available ? Math.min(Math.max(1, rest.length), 6) + 3 : '1fr', transparent)
+}
+
+/** Lines of an install's output kept on screen */
+const INSTALL_OUTPUT_LINES = 6
+
+const INSTALL_STATUS: Record<InstallJob['status'], string> = {
+  installing: 'Installing',
+  restarting: 'Installed, restarting the dev servers for',
+  done: 'Installed',
+  failed: 'Could not install',
+}
+
+function installPanel(ui: Container, theme: Theme, job: InstallJob) {
+  const lines = stripVTControlCharacters(job.output).split(NEWLINE_RE).filter(line => line.trim() !== '')
+  const color = job.status === 'failed' ? theme.danger : job.status === 'done' ? theme.success : theme.warning
+
+  ui.panel({ title: `${INSTALL_STATUS[job.status]} ${job.packages.join(', ')}`, size: INSTALL_OUTPUT_LINES + 3 }, (panel) => {
+    if (job.status === 'failed')
+      panel.text([{ text: job.error ?? 'The install failed', fg: color }], { size: 1 })
+    else if (job.status === 'done')
+      panel.text([{ text: 'The dev servers were restarted with it', fg: color }], { size: 1 })
+    else
+      panel.spinner({ label: job.status === 'restarting' ? 'Stopping and starting the dev script' : 'Running the package manager', size: 1 })
+
+    panel.log({ entries: lines.slice(-INSTALL_OUTPUT_LINES).map(message => ({ message })), size: '1fr' })
+  })
+}
+
+/**
+ * Asked before anything is installed: a package runs its own code on this machine, when it is installed and
+ * every time the game runs, so whoever installs it should have looked at where it comes from.
+ */
+function confirmInstallPanel(ui: Container, theme: Theme, plugin: AvailablePlugin) {
+  ui.panel({ title: `Install ${plugin.package}?`, size: '1fr' }, (panel) => {
+    panel.text([{ text: 'Installing a package runs its code on this machine.', fg: theme.warning, bold: true }], { wrap: true })
+    panel.text('Its install scripts run right away, and the plugin runs inside your game and game server from then on, with everything they can reach. The list of plugins is not a review of what is on it.', { wrap: true })
+    panel.spacer(1)
+    panel.text('Check the source before you install it:', { wrap: true })
+    panel.text([{ text: `  ${plugin.homepage ?? `https://www.npmjs.com/package/${plugin.package}`}`, fg: theme.primary }], { wrap: true })
+    panel.spacer(1)
+    panel.text(`It is installed with the project's package manager, added to mavonengine.json, and the dev servers are restarted.`, { wrap: true })
+    panel.spacer(1)
+    panel.text([
+      { text: ' y ', fg: theme.background, bg: theme.warning, bold: true },
+      { text: ' I checked the source, install it    ' },
+      { text: ' n ', fg: theme.background, bg: theme.muted, bold: true },
+      { text: ' Cancel' },
+    ], { size: 1 })
+  })
+}
+
+function availableDetails(ui: Container, theme: Theme, plugin: AvailablePlugin, installer?: DashboardInstaller) {
+  ui.panel({ title: plugin.name === plugin.package ? plugin.package : `${plugin.name} (${plugin.package})`, size: '1fr' }, (panel) => {
+    if (plugin.description)
+      panel.text(plugin.description, { wrap: true })
+
+    panel.keyValues([
+      { label: 'Status', value: 'not installed', color: theme.muted },
+      { label: 'Runs on', value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—' },
+      { label: 'Engine', value: plugin.engine ? `@mavonengine/core ${plugin.engine}` : '—' },
+      { label: 'Source', value: plugin.homepage ?? `https://www.npmjs.com/package/${plugin.package}`, color: theme.primary },
+    ], { spread: true })
+
+    panel.spacer(1)
+
+    if (!installer)
+      panel.label(`Install it with: mavonengine install ${plugin.package}`)
+    else if (installer.busy)
+      panel.label('Another install is running')
+    else
+      panel.text([{ text: 'Press ' }, { text: 'i', fg: theme.primary, bold: true }, { text: ' to install it and restart the dev servers' }], { size: 1 })
+  })
+}
+
+/**
+ * The plugins of the public list that the project doesn't have yet
+ */
+function availablePanel(ui: Container, theme: Theme, available: AvailablePlugins, rows: AvailablePlugin[], selected: AvailablePlugin | undefined, view: ViewState, size: number | string, transparent: boolean) {
+  const { status, error, plugins } = available.state
+  const loaded = status === 'ready' || plugins.length > 0
+  let top = 0
+
+  ui.panel({ title: loaded ? `Available to install (${rows.length})` : 'Available to install', size }, (panel) => {
+    if (error) {
+      panel.text([{ text: `Could not read the list of plugins: ${error}`, fg: theme.danger }], { wrap: true })
+      return
+    }
+
+    if (!loaded) {
+      panel.spinner({ label: 'Reading the list of plugins from GitHub' })
+      return
+    }
+
+    if (rows.length === 0) {
+      panel.label(plugins.length ? 'The project has every plugin on the list' : 'The list of plugins is empty')
+      return
+    }
+
+    panel.table<AvailablePlugin>({
+      rows,
+      selected: selected ? rows.indexOf(selected) : -1,
+      followSelection: true,
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          top = index
+      },
+      onSelectRow: (visibleRow) => {
+        const row = rows[top + visibleRow]
+        if (!row || view.confirmInstall)
+          return
+        view.selectedPlugin = row.package
+        ui.ctx.invalidate()
+      },
+      scrollbar: true,
+      zebra: !transparent,
+      size: '1fr',
+      columns: [
+        { key: 'package', title: 'Package', color: theme.primary },
+        { key: 'target', title: 'Runs on', width: 7, render: p => p.target ?? '—' },
+        { key: 'description', title: 'What it is', color: theme.muted, render: p => p.description ?? (p.name === p.package ? '' : p.name) },
+      ],
+    })
+  })
+}
+
+function pluginDetails(ui: Container, theme: Theme, state: DashboardState, plugin: PluginLine, endpoints: RouteLine[], size: number | string, transparent: boolean) {
+  const status = pluginStatus(plugin, theme)
+  const prefabs = [...new Set([...plugin.declaredPrefabs, ...plugin.usedPrefabs])]
+
+  ui.panel({ title: plugin.package, size }, (panel) => {
+    if (plugin.description)
+      panel.text(plugin.description, { wrap: true })
+    if (plugin.problem)
+      panel.text([{ text: plugin.problem, fg: theme.danger }], { wrap: true })
+
+    panel.keyValues([
+      { label: 'Version', value: plugin.version ?? '—' },
+      { label: 'Status', value: status.label, color: status.color },
+      { label: 'Runs on', value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—' },
+      // A client plugin has nothing to run here
+      plugin.target === 'client'
+        ? { label: 'On this server', value: 'nothing to run', color: theme.muted }
+        : { label: 'On this server', value: plugin.runningOnServer ? 'running' : 'not running', color: plugin.runningOnServer ? theme.success : theme.warning },
+      { label: 'Engine', value: plugin.engine ? `@mavonengine/core ${plugin.engine}` : '—' },
+      { label: 'License', value: plugin.license ?? '—' },
+      // Used ones ship their assets in a release
+      { label: 'Prefabs', value: prefabs.length ? prefabs.map(name => plugin.usedPrefabs.includes(name) ? `${name} (used)` : name).join(', ') : 'none' },
+    ], { spread: true })
+
+    panel.spacer(1)
+
+    if (state.routesAvailable !== true) {
+      panel.label('HTTP endpoints: unknown, the server doesn\'t list its endpoints')
+      return
+    }
+    if (endpoints.length === 0) {
+      panel.label('HTTP endpoints: none')
+      return
+    }
+
+    panel.label(`HTTP endpoints (${endpoints.length})`)
+    panel.table<RouteLine>({
+      rows: endpoints,
+      scrollbar: true,
+      zebra: !transparent,
+      size: '1fr',
+      columns: [
+        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        { key: 'path', title: 'Path' },
+        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
       ],
     })
   })

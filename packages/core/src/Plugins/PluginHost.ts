@@ -62,6 +62,14 @@ export default class PluginHost<P extends { name?: string }, C> {
   }
 
   /**
+   * Like `run()`, but `around` makes each plugin's call, so it can tell what that one plugin did.
+   */
+  runAround<K extends HookName<P>>(hook: K, around: (plugin: LoadedPlugin<P>, call: () => void) => void, ...args: HookArgs<P, K>): void {
+    for (const entry of this.entries)
+      around(entry.loaded, () => void this.call(entry, hook, args))
+  }
+
+  /**
    * Call `hook` on every plugin and collect what each returns, leaving out plugins that returned nothing.
    */
   collect<K extends HookName<P>>(hook: K, ...args: HookArgs<P, K>): { plugin: LoadedPlugin<P>, result: Exclude<HookResult<P, K>, undefined> }[] {

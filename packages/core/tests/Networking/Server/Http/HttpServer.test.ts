@@ -45,6 +45,83 @@ describe('httpServer', () => {
     expect(await res.json()).toEqual(health)
   })
 
+  describe('routes', () => {
+    it('lists its own endpoints with what they do', async () => {
+      const request = await serve()
+
+      const res = await request('/api/game/routes')
+      const { routes } = await res.json() as { routes: any[] }
+
+      expect(res.status).toBe(200)
+      expect(routes.map(route => `${route.method} ${route.path}`)).toEqual([
+        'GET /api/game/health',
+        'GET /api/game/metrics',
+        'GET /api/game/logs',
+        'GET /api/game/requests',
+        'GET /api/game/routes',
+        'GET /api/game/plugins',
+      ])
+      expect(routes.every(route => route.source === 'engine' && route.summary && route.auth)).toBe(true)
+      expect(routes[2].query).toHaveProperty('after')
+      expect(routes.some(route => route.devOnly)).toBe(false)
+    })
+
+    it('lists routes added to the app afterwards as the game\'s', async () => {
+      const request = await serve()
+      http.app.post('/api/scores/:id', (_req, res) => void res.end())
+
+      const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
+
+      expect(routes.at(-1)).toEqual({ method: 'POST', path: '/api/scores/:id', source: 'game', params: { id: '' }, devOnly: false })
+    })
+
+    it('lists the dev endpoints only when they are served', async () => {
+      const inspector = { scene: () => null, entities: () => ({}), entity: () => null } as any
+      const request = await serve({ inspector })
+
+      const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
+      const dev = routes.filter(route => route.path.startsWith('/api/game/dev/'))
+
+      expect(dev.map(route => route.path)).toEqual(['/api/game/dev/scene', '/api/game/dev/entities', '/api/game/dev/entities/:id'])
+      expect(dev[2].params).toEqual({ id: 'Id of the entity' })
+      expect(dev.every(route => route.devOnly)).toBe(true)
+      expect(routes.filter(route => !route.path.startsWith('/api/game/dev/')).some(route => route.devOnly)).toBe(false)
+    })
+
+    it('is protected like the metrics', async () => {
+      const request = await serve({ metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/routes')).status).toBe(401)
+      expect((await request('/api/game/routes?token=secret')).status).toBe(200)
+    })
+  })
+
+  describe('plugins', () => {
+    const plugins = [{ package: 'forest', enabled: true, installed: true, version: '1.0.0', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true }]
+
+    it('lists the plugins it is given, asked anew every time', async () => {
+      const list = vi.fn(() => plugins)
+      const request = await serve({ plugins: list })
+
+      expect(await (await request('/api/game/plugins')).json()).toEqual({ plugins })
+      await request('/api/game/plugins')
+      expect(list).toHaveBeenCalledTimes(2)
+    })
+
+    it('is not found on a server that doesn\'t know its plugins', async () => {
+      const request = await serve()
+
+      expect((await request('/api/game/plugins')).status).toBe(404)
+    })
+
+    it('is protected like the metrics', async () => {
+      const request = await serve({ plugins: () => plugins, metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/plugins')).status).toBe(401)
+      expect((await request('/api/game/plugins?token=secret')).status).toBe(200)
+    })
+  })
+
   it('serves metrics to localhost without a token', async () => {
     const request = await serve()
 

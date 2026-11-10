@@ -1,5 +1,5 @@
-import type { LogLine, PacketDetail, PacketLine, RequestLine, ServerMetricsSnapshot, SyncInfo } from './snapshot'
-import { normalizeLogs, normalizePacketDetail, normalizePackets, normalizeRequests, normalizeSnapshot, normalizeSync } from './snapshot'
+import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncInfo } from './snapshot'
+import { normalizeLogs, normalizePacketDetail, normalizePackets, normalizePlugins, normalizeRequests, normalizeRoutes, normalizeSnapshot, normalizeSync } from './snapshot'
 
 export type ConnectionStatus = 'connecting' | 'live' | 'unreachable' | 'unauthorized' | 'forbidden' | 'disabled'
 
@@ -29,6 +29,14 @@ export interface DashboardState {
   sync: SyncInfo | null
   /** The packet opened with `inspectPacket()`, null when none is */
   packetDetail: PacketDetail | null
+  /** The server's HTTP endpoints, in the order it registered them */
+  routes: RouteLine[]
+  /** false once the server turned out not to list its endpoints, null until known */
+  routesAvailable: boolean | null
+  /** The plugins of the server's project, in the order of its mavonengine.json */
+  plugins: PluginLine[]
+  /** false once the server turned out not to list its plugins, null until known */
+  pluginsAvailable: boolean | null
 }
 
 /** Log lines kept in memory by the dashboard */
@@ -61,6 +69,8 @@ export interface MetricsSource {
   fetchSync?(): Promise<unknown>
   /** One packet with its payload */
   fetchPacket?(id: number): Promise<unknown>
+  fetchRoutes?(): Promise<unknown>
+  fetchPlugins?(): Promise<unknown>
 }
 
 export interface HttpSourceOptions {
@@ -78,6 +88,8 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
   const packetsUrl = new URL('dev/net/packets', url)
   packetsUrl.searchParams.set('limit', String(MAX_PACKET_LINES))
   const syncUrl = new URL('dev/net/sync', url)
+  const routesUrl = new URL('routes', url)
+  const pluginsUrl = new URL('plugins', url)
 
   async function request(target: string) {
     let res: Response
@@ -121,6 +133,8 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
     },
     fetchSync: () => request(syncUrl.toString()),
     fetchPacket: id => request(new URL(`dev/net/packets/${id}`, url).toString()),
+    fetchRoutes: () => request(routesUrl.toString()),
+    fetchPlugins: () => request(pluginsUrl.toString()),
   }
 }
 
@@ -178,6 +192,8 @@ export interface MetricsClientOptions {
   maxBackoffMs?: number
   /** Poll this often, without backoff, until the first snapshot arrives. For a server that is still starting */
   startupIntervalMs?: number
+  /** How often the HTTP endpoints and the plugins are fetched again. They rarely change, so less often than the metrics */
+  routesIntervalMs?: number
 }
 
 /**
@@ -202,9 +218,13 @@ export default class MetricsClient {
    * so the dashboard only turns it on while its Network tab is shown.
    */
   watchNetwork = false
+  private routesIntervalMs: number
+  /** Date.now() the endpoints and plugins were last fetched, null to fetch them with the next poll */
+  private projectFetchedAt: number | null = null
 
-  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs }: MetricsClientOptions = {}) {
+  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs, routesIntervalMs = 5000 }: MetricsClientOptions = {}) {
     this.intervalMs = intervalMs
+    this.routesIntervalMs = routesIntervalMs
     this.maxBackoffMs = maxBackoffMs
     this.startupIntervalMs = startupIntervalMs
     this.logs = new Feed(source.fetchLogs?.bind(source), normalizeLogs, MAX_LOG_LINES)
@@ -226,6 +246,10 @@ export default class MetricsClient {
       packetsAvailable: this.packets.available,
       sync: null,
       packetDetail: null,
+      routes: [],
+      routesAvailable: source.fetchRoutes ? null : false,
+      plugins: [],
+      pluginsAvailable: source.fetchPlugins ? null : false,
     }
   }
 
@@ -296,6 +320,7 @@ export default class MetricsClient {
     if (this.timer)
       clearTimeout(this.timer)
     this.timer = null
+    this.projectFetchedAt = null
 
     await this.loop()
   }
@@ -313,7 +338,7 @@ export default class MetricsClient {
       this.state.error = null
       this.state.failures = 0
 
-      await Promise.all([this.logs.poll(), this.requests.poll()])
+      await Promise.all([this.logs.poll(), this.requests.poll(), this.pollProject()])
       this.state.logs = this.logs.entries
       this.state.logsAvailable = this.logs.available
       this.state.requests = this.requests.entries
@@ -347,6 +372,51 @@ export default class MetricsClient {
         this.syncAvailable = false
         this.state.sync = null
       }
+    }
+  }
+
+  /**
+   * Fetch the server's HTTP endpoints and plugins, unless they were fetched a moment ago
+   */
+  private async pollProject(now = Date.now()) {
+    if (this.projectFetchedAt !== null && now - this.projectFetchedAt < this.routesIntervalMs)
+      return
+
+    const { source, state } = this
+    const done = await Promise.all([
+      this.fetchList(state.routesAvailable, source.fetchRoutes?.bind(source), (raw) => {
+        state.routes = normalizeRoutes(raw)
+        state.routesAvailable = true
+      }, () => state.routesAvailable = false),
+      this.fetchList(state.pluginsAvailable, source.fetchPlugins?.bind(source), (raw) => {
+        state.plugins = normalizePlugins(raw)
+        state.pluginsAvailable = true
+      }, () => state.pluginsAvailable = false),
+    ])
+
+    // Whatever failed for now is tried again with the next poll
+    if (done.every(Boolean))
+      this.projectFetchedAt = now
+  }
+
+  /**
+   * Returns false when the list could not be fetched this time but may be next time
+   */
+  private async fetchList(available: boolean | null, fetchList: (() => Promise<unknown>) | undefined, onList: (raw: unknown) => void, onUnavailable: () => void): Promise<boolean> {
+    if (!fetchList || available === false)
+      return true
+
+    try {
+      onList(await fetchList())
+      return true
+    }
+    catch (err) {
+      // Metrics work but this doesn't: an older server
+      if (err instanceof MetricsSourceError && err.status === 'disabled') {
+        onUnavailable()
+        return true
+      }
+      return false
     }
   }
 

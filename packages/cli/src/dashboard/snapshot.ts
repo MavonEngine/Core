@@ -1,10 +1,14 @@
+import type { HttpRouteInfo } from '@mavonengine/core/Networking/Server/Http/RouteInfo'
 import type { LogEntry } from '@mavonengine/core/Networking/Server/Stats/LogBuffer'
 import type { RequestLogEntry } from '@mavonengine/core/Networking/Server/Stats/RequestLog'
 import type { ServerMetricsSnapshot } from '@mavonengine/core/Networking/Server/Stats/ServerMetrics'
+import type { ServerPluginInfo } from '@mavonengine/core/Plugins/types'
 
 export type { ServerMetricsSnapshot }
 export type LogLine = LogEntry
 export type RequestLine = RequestLogEntry
+export type RouteLine = HttpRouteInfo
+export type PluginLine = ServerPluginInfo
 
 /** One packet or network event the server recorded (GET /api/game/dev/net/packets) */
 export interface PacketLine {
@@ -300,4 +304,61 @@ export function normalizePacketDetail(id: number, raw: unknown): PacketDetail {
     return { id, status: 'gone', lines: [] }
 
   return { id, status: 'empty', lines: [] }
+}
+
+function descriptions(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value))
+    return undefined
+
+  return Object.fromEntries(Object.entries(value).map(([name, description]) => [name, str(description)]))
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/routes response.
+ */
+export function normalizeRoutes(raw: unknown): RouteLine[] {
+  return arr(section(raw).routes, (r) => {
+    const source = r.source === 'engine' || r.source === 'plugin' ? r.source : 'game'
+    const plugin = strOrNull(r.plugin)
+    const query = descriptions(r.query)
+
+    return {
+      method: str(r.method, '?'),
+      path: str(r.path),
+      source,
+      ...(plugin ? { plugin } : {}),
+      params: descriptions(r.params) ?? {},
+      devOnly: r.devOnly === true,
+      ...(query ? { query } : {}),
+      ...Object.fromEntries((['summary', 'description', 'response', 'auth'] as const)
+        .filter(key => typeof r[key] === 'string')
+        .map(key => [key, r[key] as string])),
+    }
+  })
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/plugins response.
+ */
+export function normalizePlugins(raw: unknown): PluginLine[] {
+  return arr(section(raw).plugins, (p) => {
+    const target = p.target === 'client' || p.target === 'server' || p.target === 'both' ? p.target : undefined
+
+    return {
+      package: str(p.package, '?'),
+      enabled: p.enabled !== false,
+      installed: p.installed !== false,
+      runningOnServer: p.runningOnServer === true,
+      declaredPrefabs: strings(p.declaredPrefabs),
+      usedPrefabs: strings(p.usedPrefabs),
+      ...(target ? { target } : {}),
+      ...Object.fromEntries((['problem', 'version', 'description', 'license', 'homepage', 'engine'] as const)
+        .filter(key => typeof p[key] === 'string')
+        .map(key => [key, p[key] as string])),
+    }
+  })
 }

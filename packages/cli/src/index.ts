@@ -6,6 +6,7 @@ import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
+import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
 
 const HELP = `Usage: mavonengine <command> [options]
 
@@ -14,6 +15,7 @@ Commands:
   dashboard    Live terminal dashboard for a running game server
   dev          Run the project's dev servers (game server and client)
   install      Install packages and register engine plugins in mavonengine.json
+  plugins      List the plugins that are available to install
   build        Build the project for release, with the plugin assets it uses
   mcp          MCP server so AI assistants (any MCP client) can inspect a running game server
 
@@ -85,6 +87,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runInstallCommand(options)
+  }
+
+  if (command === 'plugins') {
+    const options = parsePluginsArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(PLUGINS_HELP)
+      return 0
+    }
+
+    return runPluginsCommand(options)
   }
 
   if (command === 'mcp') {

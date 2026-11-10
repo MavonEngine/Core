@@ -54,6 +54,36 @@ The project root is the nearest `package.json`, from the current directory upwar
 | `--transparent` | | Let a transparent terminal background show through |
 | `--no-open` | | Don't open the game in the browser once the server is up |
 
+
+### Installing plugins while it runs
+
+`mavonengine dev` can install packages into the project and restart the dev servers afterwards, so a new plugin is loaded without stopping anything yourself:
+
+- from the dashboard's Plugins tab, with `i` on a plugin that is available to install;
+- from the editor's Plugins view, with the Install button of an available plugin, or by typing any package (a name, `name@version`, a `file:` path or a URL) into "Another package".
+
+Both ask first and point at the package's source: installing a package runs its code on your machine, and nothing reviews what you install. The install is the same as [`mavonengine install --yes`](#mavonengine-install), followed by a restart of the dev script.
+
+The editor reaches `mavonengine dev` through the dev server it started (`POST /__mavonengine/plugin-install`), which only takes requests from localhost and from the game's own page, so another site open in the browser can't install anything. Version ranges such as `^1.0.0` and anything with spaces are refused there; use the terminal for those.
+
+## `mavonengine plugins`
+
+Lists the plugins that are available to install.
+
+```sh
+npx @mavonengine/cli plugins
+```
+
+The list is [`plugins.json`](https://github.com/MavonEngine/Core/blob/main/plugins.json) at the root of the MavonEngine repository, read from the `main` branch on GitHub every time the command runs:
+
+```
+https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json
+```
+
+So a plugin shows up as soon as it is added to that file on `main` (GitHub may serve the file a few minutes old). Inside a project the command also says which of the plugins are already in its `mavonengine.json`. `--json` prints the list as JSON, and `--url <url>` or `MAVONENGINE_PLUGINS_URL` reads it from somewhere else, such as a fork or a branch.
+
+To list a plugin, add an entry to `plugins.json`: `package` (the npm name) is required; `name`, `description`, `target` (`client`, `server` or `both`), `engine` (the supported `@mavonengine/core` range), `homepage` and `readme` (the URL of its README as Markdown, such as the raw file on GitHub, which the editor shows) are optional.
+
 ## `mavonengine install`
 
 Installs packages into the project you are in, with its package manager. For each one that is a MavonEngine [plugin](#writing-a-plugin), it shows where the plugin runs (client, server or both) and which prefabs it brings, and asks whether to add it to the `plugins` in `mavonengine.json`. Registered plugins load on the client and/or the game server and are built into the release.
@@ -127,11 +157,19 @@ npx @mavonengine/cli dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`5` switch between the Overview, Players, Logs, HTTP and Network tabs. The mouse wheel scrolls the players table, the logs, the requests and the packets; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
+Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`7` switch between the Overview, Players, Logs, HTTP, Network, Routes and Plugins tabs. The mouse wheel scrolls the players table, the logs, the requests, the packets and the routes; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
 
 The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
 
 The Network tab shows the game socket while developing. State sync lists each player with the entities in its last state update, its last acknowledged input and the size and tick of that update (red when it fell behind the others), and counts the synced entities no player is in range of. By message breaks the traffic of the last 5 seconds down by message name and direction: packets per second, average size and bytes per second, the largest share first. Below, every packet and network event, newest first, with its client, size, tick, input sequence id and a few facts about its payload; `p` shows the pings, `e` only the events (`connect`, `disconnect`, `dropped`, `sync_enter`, `sync_leave`). Click a packet, or move through the list with the arrow keys (or `j` / `k`), to see its content next to the list: the payload as it went over the wire, scrolled with the mouse wheel. `esc`, or a second click on it, closes it. The server drops the payloads of old packets to bound its memory, so only recent ones can be opened. The packets are only fetched while the tab shows, and only a server that is not running in production records them, see the [network tools](#mavonengine-mcp).
+
+The Routes tab lists every HTTP endpoint the server has: the engine's own, the ones your server registered in `onHttp` and those of plugins, each with its method, path, whether it only exists in development or is served in production too, where it comes from and what it does. The list is read from the running server, so a new route shows up without being declared anywhere; say what it does with `describeRoute()` from `@mavonengine/core/Networking/Server/Http/RouteCatalog`, and pass it `devOnly: true` for a route you only register in development, since a route that doesn't say is listed as `prod + dev`. It needs a server on a `@mavonengine/core` release with `GET /api/game/routes`.
+
+The Plugins tab lists the plugins in the project's `mavonengine.json` with their version, whether they are enabled, where they run and how many endpoints and prefabs they have. `↑`/`↓` (or `j`/`k`, or a click) pick one to see its description, supported engine versions, license, prefabs and the HTTP endpoints it registered. A server plugin that is enabled but not running in this server shows as `not loaded`. It needs a server on a `@mavonengine/core` release with `GET /api/game/plugins`.
+
+Below it, "Available to install" lists the plugins from [`mavonengine plugins`](#mavonengine-plugins) that the project doesn't have yet. The dashboard reads that list from GitHub itself, the first time the tab is shown and again on `r`; a dashboard that never opens the tab never asks for it.
+
+Under [`mavonengine dev`](#mavonengine-dev) a plugin from that list can be installed right there: select it with `↓` and press `i`. The dashboard first asks whether you checked its source, because installing a package runs its code on your machine; `y` installs it with the project's package manager, adds it to `mavonengine.json` and restarts the dev servers, `n` cancels. A dashboard started on its own with `mavonengine dashboard` only shows the command, since it can't restart servers it didn't start.
 
 ### Server access
 

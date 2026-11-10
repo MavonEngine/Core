@@ -148,8 +148,15 @@ async function main() {
     const { tools } = await mcp.listTools()
     check(tools.length === 24 && tools.every(tool => tool.annotations?.readOnlyHint), 'it lists 24 read-only tools')
 
-    const serverPlayers = await data('list_players')
-    check(serverPlayers.length === 1 && serverPlayers[0].displayName === 'Alice', 'list_players shows Alice on the server')
+    // The name follows the connection in a message of its own, so the server may know the player before its name
+    let serverPlayers
+    for (let tries = 0; tries < 40; tries++) {
+      serverPlayers = await data('list_players')
+      if (serverPlayers.length === 1 && serverPlayers[0].displayName === 'Alice')
+        break
+      await delay(250)
+    }
+    check(serverPlayers.length === 1 && serverPlayers[0].displayName === 'Alice', `list_players shows Alice on the server (got ${JSON.stringify(serverPlayers.map(player => player.displayName))})`)
     const playerId = serverPlayers[0].id
 
     const { clients } = await data('list_clients')
