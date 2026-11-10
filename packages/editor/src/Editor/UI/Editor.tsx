@@ -7,6 +7,7 @@ import styles from './Editor.module.css'
 import PropertiesPanel from './PropertiesPanel'
 import SceneExplorer from './SceneExplorer'
 import ScenePanel from './ScenePanel'
+import ServerPanel from './Server/ServerPanel'
 import StatusBar from './StatusBar'
 import './global.css'
 
@@ -35,7 +36,13 @@ function Editor() {
               <Group orientation="vertical" className={styles.middleGroup}>
                 <CanvasPanel />
                 <Panel id="horizontal" className={styles.panel}>
-                  <DockArea location="bottom" builtins={[{ id: 'assets', title: 'Assets', element: <Assets />, padded: false }]} />
+                  <DockArea
+                    location="bottom"
+                    builtins={[
+                      { id: 'assets', title: 'Assets', element: <Assets />, padded: false },
+                      { id: 'server', title: 'Server', element: <ServerPanel /> },
+                    ]}
+                  />
                 </Panel>
               </Group>
             </div>

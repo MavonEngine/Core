@@ -668,7 +668,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
-    this.plugins.run('setup')
+    // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
+    const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
+      this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
+
+    this.plugins.runAround('setup', asPlugin)
 
     this.http.start()
     this.startMetrics()
@@ -680,7 +684,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.onHttpCallback(this.httpServer)
     }
 
-    this.plugins.run('http', this.httpServer)
+    this.plugins.runAround('http', asPlugin, this.httpServer)
 
     // Last, because the client answers every page request the routes above leave
     const servesClient = this.http.serveClient() && !!this.http.server

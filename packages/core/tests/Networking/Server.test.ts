@@ -358,6 +358,36 @@ describe('server', () => {
       expect(order).toEqual(['setup:routes:true', 'onHttp', 'http:true', 'client'])
     })
 
+    it('tells the routes of each plugin apart from the game\'s and the engine\'s', async () => {
+      const handler = (_req: unknown, res: { end(): void }) => res.end()
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [
+          { package: '@acme/chat', options: {}, plugin: { http: app => void app.get('/chat', handler) } },
+          {
+            package: 'shop',
+            options: {},
+            plugin: {
+              setup: ctx => void ctx.server.httpServer.get('/shop/early', handler),
+              http: app => void app.post('/shop', handler),
+            },
+          },
+        ],
+      }))
+      server.onHttp(app => void app.get('/api/scores', handler))
+
+      await server.start()
+      server.stop()
+
+      const routes = server.http.routes.list().map(({ method, path, source, plugin }) => ({ method, path, source, plugin }))
+      expect(routes.filter(route => route.source !== 'engine')).toEqual([
+        { method: 'GET', path: '/shop/early', source: 'plugin', plugin: 'shop' },
+        { method: 'GET', path: '/api/scores', source: 'game', plugin: undefined },
+        { method: 'GET', path: '/chat', source: 'plugin', plugin: '@acme/chat' },
+        { method: 'POST', path: '/shop', source: 'plugin', plugin: 'shop' },
+      ])
+      expect(routes.some(route => route.source === 'engine' && route.path === '/api/game/routes')).toBe(true)
+    })
+
     it('passes the options of loaded plugins to their context', async () => {
       const setup = vi.fn()
       const server = startable(new TestServer(logger, undefined, {

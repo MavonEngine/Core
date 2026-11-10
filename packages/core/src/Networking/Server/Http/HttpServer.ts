@@ -16,12 +16,13 @@ import { parseEntityQuery } from '../../../Dev/inspect'
 import { parseNetRecordQuery } from '../../Debug/NetRecorder'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
+import RouteCatalog, { describeRoute } from './RouteCatalog'
 
 export { parseEntityQuery }
 
 export interface MetricsEndpointOptions {
   /**
-   * Expose GET /api/game/metrics, GET /api/game/logs and GET /api/game/requests.
+   * Expose GET /api/game/metrics, GET /api/game/logs, GET /api/game/requests and GET /api/game/routes.
    * Defaults to true, but in production it stays off unless a token is set.
    */
   enabled?: boolean
@@ -63,8 +64,14 @@ const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
  */
 export const METRICS_CLIENT_TIMEOUT_MS = 15000
 
+/** Shown as the `auth` of the engine's protected routes in GET /api/game/routes */
+const METRICS_AUTH = 'The metrics token as `Authorization: Bearer <token>` or `?token=`. Without a configured token: requests from localhost only, and off in production'
+
 export default class HttpServer {
   readonly app: Express
+
+  /** Lists every route of `app`, see GET /api/game/routes */
+  readonly routes: RouteCatalog
 
   private port: number
   private metricsOptions: MetricsEndpointOptions
@@ -90,16 +97,20 @@ export default class HttpServer {
     this.clientOptions = options.client
     this.inspector = options.inspector
     this.net = options.net
+    this.routes = new RouteCatalog(app)
 
-    this.registerHealthEndpoint()
-    this.registerMetricsEndpoint()
-    this.registerLogsEndpoint()
-    this.registerRequestsEndpoint()
+    this.routes.registerAs({ source: 'engine' }, () => {
+      this.registerHealthEndpoint()
+      this.registerMetricsEndpoint()
+      this.registerLogsEndpoint()
+      this.registerRequestsEndpoint()
+      this.registerRoutesEndpoint()
 
-    if (this.devEndpointsEnabled)
-      this.registerDevEndpoints()
-    if (this.net && devEndpointsEnabled())
-      this.registerNetEndpoints(this.net)
+      if (this.devEndpointsEnabled)
+        this.registerDevEndpoints()
+      if (this.net && devEndpointsEnabled())
+        this.registerNetEndpoints(this.net)
+    })
   }
 
   /**
@@ -161,13 +172,22 @@ export default class HttpServer {
   }
 
   private registerHealthEndpoint() {
-    this.app.get('/api/game/health', (_req, res) => {
+    this.app.get('/api/game/health', describeRoute({
+      summary: 'Whether the server is up',
+      response: 'Server time, uptime in seconds and how many players, entities, physics bodies and colliders there are',
+      auth: 'None',
+    }), (_req, res) => {
       res.json(this.metrics.health())
     })
   }
 
   private registerMetricsEndpoint() {
-    this.app.get('/api/game/metrics', (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
+    this.app.get('/api/game/metrics', describeRoute({
+      summary: 'Server statistics',
+      description: 'What `mavonengine dashboard` shows: players, CPU, bandwidth, tick times and memory, each with its recent history.',
+      response: 'A `ServerMetricsSnapshot`',
+      auth: METRICS_AUTH,
+    }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
       this.lastMetricsRequestAt = Date.now()
       res.json(this.metrics.snapshot())
     })
@@ -184,7 +204,12 @@ export default class HttpServer {
    * GET /api/game/logs?after=<id> returns the entries newer than `after`.
    */
   private registerLogsEndpoint() {
-    this.app.get('/api/game/logs', (req, res, next) => this.authorizeMetrics(req, res, next), (req, res) => {
+    this.app.get('/api/game/logs', describeRoute({
+      summary: 'Recent server log entries',
+      query: { after: 'Only entries with an id above this one. Default 0, which returns everything still kept' },
+      response: '`{ entries, latestId }`, or 404 when the server keeps no logs',
+      auth: METRICS_AUTH,
+    }), (req, res, next) => this.authorizeMetrics(req, res, next), (req, res) => {
       if (!this.logs) {
         res.status(404).end()
         return
@@ -199,7 +224,12 @@ export default class HttpServer {
    * GET /api/game/requests?after=<id> returns the HTTP requests recorded after `after`.
    */
   private registerRequestsEndpoint() {
-    this.app.get('/api/game/requests', (req, res, next) => this.authorizeMetrics(req, res, next), (req, res) => {
+    this.app.get('/api/game/requests', describeRoute({
+      summary: 'Recent HTTP requests to this server',
+      query: { after: 'Only requests with an id above this one. Default 0, which returns everything still kept' },
+      response: '`{ entries, latestId }`, or 404 when the server records no requests',
+      auth: METRICS_AUTH,
+    }), (req, res, next) => this.authorizeMetrics(req, res, next), (req, res) => {
       if (!this.requests) {
         res.status(404).end()
         return
@@ -207,6 +237,21 @@ export default class HttpServer {
 
       const after = Number(req.query.after ?? 0)
       res.json(this.requests.since(Number.isFinite(after) ? after : 0))
+    })
+  }
+
+  /**
+   * GET /api/game/routes lists every HTTP endpoint of this server: the engine's, the game's and those of plugins.
+   * Read from the app when asked, so it is always what the server answers right now.
+   */
+  private registerRoutesEndpoint() {
+    this.app.get('/api/game/routes', describeRoute({
+      summary: 'Every HTTP endpoint of this server',
+      description: 'The engine\'s own endpoints, the ones the game registered and those of plugins, read from the running server. Routes say what they do with `describeRoute()`.',
+      response: '`{ routes }`, each with its method, path, source and whatever it was described with',
+      auth: METRICS_AUTH,
+    }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
+      res.json({ routes: this.routes.list() })
     })
   }
 
@@ -221,11 +266,30 @@ export default class HttpServer {
     const inspector = this.inspector!
     const authorize = (req: Request, res: Response, next: NextFunction) => this.authorizeMetrics(req, res, next)
 
-    this.app.get('/api/game/dev/scene', authorize, (_req, res) => {
+    const auth = `${METRICS_AUTH}. Never served in production`
+
+    this.app.get('/api/game/dev/scene', describeRoute({
+      summary: 'The active scene',
+      response: '`{ scene }`, null without one',
+      auth,
+      devOnly: true,
+    }), authorize, (_req, res) => {
       res.json({ scene: inspector.scene() })
     })
 
-    this.app.get('/api/game/dev/entities', authorize, (req, res) => {
+    this.app.get('/api/game/dev/entities', describeRoute({
+      summary: 'The entities in the world',
+      query: {
+        type: 'Only entities of this type',
+        near: 'Only entities around this point, as `x,y,z`',
+        radius: 'How far from `near`',
+        limit: 'How many to return',
+        offset: 'How many to skip',
+      },
+      response: 'The matching entities, or 400 with `{ error }` for a query it can\'t read',
+      auth,
+      devOnly: true,
+    }), authorize, (req, res) => {
       const query = parseEntityQuery(req.query as Record<string, unknown>)
       if (typeof query === 'string') {
         res.status(400).json({ error: query })
@@ -235,7 +299,13 @@ export default class HttpServer {
       res.json(inspector.entities(query))
     })
 
-    this.app.get('/api/game/dev/entities/:id', authorize, (req, res) => {
+    this.app.get('/api/game/dev/entities/:id', describeRoute({
+      summary: 'One entity with its serialized state',
+      params: { id: 'Id of the entity' },
+      response: '`{ entity }`, null when there is none',
+      auth,
+      devOnly: true,
+    }), authorize, (req, res) => {
       res.json({ entity: inspector.entity(req.params.id as string) })
     })
   }
@@ -250,7 +320,22 @@ export default class HttpServer {
   private registerNetEndpoints(source: NetDebugSource) {
     const authorize = (req: Request, res: Response, next: NextFunction) => this.authorizeMetrics(req, res, next)
 
-    this.app.get('/api/game/dev/net/packets', authorize, (req, res) => {
+    const auth = `${METRICS_AUTH}. Never served in production`
+
+    this.app.get('/api/game/dev/net/packets', describeRoute({
+      summary: 'Recent packets and network events of the game socket',
+      query: {
+        after: 'Only records with an id above this one',
+        kind: '`packet` or `event`',
+        direction: '`in` or `out`',
+        type: 'Only these message or event names, separated by commas',
+        peer: 'Only records of this client',
+        limit: 'How many to return, the newest ones',
+      },
+      response: 'The matching records without their payloads, or 400 with `{ error }` for a query it can\'t read',
+      auth,
+      devOnly: true,
+    }), authorize, (req, res) => {
       const query = parseNetRecordQuery(req.query as Record<string, unknown>)
       if (typeof query === 'string') {
         res.status(400).json({ error: query })
@@ -260,11 +345,22 @@ export default class HttpServer {
       res.json(source.net.list(query))
     })
 
-    this.app.get('/api/game/dev/net/packets/:id', authorize, (req, res) => {
+    this.app.get('/api/game/dev/net/packets/:id', describeRoute({
+      summary: 'One packet with its payload',
+      params: { id: 'Id of the record' },
+      response: '`{ record }`, null when the server no longer keeps it',
+      auth,
+      devOnly: true,
+    }), authorize, (req, res) => {
       res.json({ record: source.net.get(Number(req.params.id)) ?? null })
     })
 
-    this.app.get('/api/game/dev/net/sync', authorize, (_req, res) => {
+    this.app.get('/api/game/dev/net/sync', describeRoute({
+      summary: 'Who is sent what by the state sync',
+      response: 'A `SyncSnapshot`: every synced entity and each player\'s last state update',
+      auth,
+      devOnly: true,
+    }), authorize, (_req, res) => {
       res.json(source.syncSnapshot())
     })
   }

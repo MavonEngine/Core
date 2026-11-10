@@ -1,6 +1,6 @@
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { LogLine, PacketDetail, PacketLine, RequestLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
+import type { LogLine, PacketDetail, PacketLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
 import { DEFAULT_COLOR, hex } from '@profullstack/hqtui'
@@ -35,6 +35,8 @@ export interface ViewState {
   followSelectedPacket: boolean
   /** First line of the payload shown in the details panel */
   payloadOffset: number
+  /** Rows the Routes table is scrolled down by */
+  routeOffset?: number
 }
 
 export function initialViewState(): ViewState {
@@ -66,7 +68,7 @@ export interface StartupInfo {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network'] as const
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes'] as const
 
 /** Whether the tab showing needs the packets and the state sync, which are only fetched for it */
 export function showsNetwork(view: ViewState): boolean {
@@ -285,6 +287,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       }
       else if (tab === 'Network') {
         networkTab(root, theme, state, view, transparent)
+      }
+      else if (tab === 'Routes') {
+        routesPanel(root, theme, state, view, transparent)
       }
       else {
         root.responsive({
@@ -1011,6 +1016,80 @@ function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: 
         { key: 'peer', title: 'Client', width: narrow ? 8 : 26, color: theme.muted, render: p => p.peer ?? '—' },
         { key: 'bytes', title: 'Size', width: narrow ? 9 : 10, align: 'right', render: p => p.kind === 'packet' ? formatBytes(p.bytes) : '' },
         { key: 'info', title: 'Details', render: describePacket },
+      ],
+    })
+  })
+}
+
+function methodColor(method: string, theme: Theme): Color | undefined {
+  if (method === 'GET')
+    return theme.success
+  if (method === 'DELETE')
+    return theme.danger
+  if (method === 'ALL')
+    return theme.muted
+  return theme.warning
+}
+
+/** Who registered a route: the engine, the game's own server, or the plugin's package */
+export function routeSource(route: RouteLine): string {
+  return route.source === 'plugin' ? route.plugin ?? 'plugin' : route.source
+}
+
+/** Whether a route only exists in development or is served in production too */
+export function routeEnvironment(route: RouteLine): string {
+  return route.devOnly ? 'dev only' : 'prod + dev'
+}
+
+function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
+  const rows = state.routes
+  const maxOffset = Math.max(0, rows.length - 1)
+  const offset = Math.min(view.routeOffset ?? 0, maxOffset)
+  view.routeOffset = offset
+
+  const fromPlugins = rows.filter(r => r.source === 'plugin')
+  const plugins = new Set(fromPlugins.map(routeSource)).size
+  const devOnly = rows.filter(r => r.devOnly).length
+  const counts = [
+    `${rows.filter(r => r.source === 'engine').length} engine`,
+    `${rows.filter(r => r.source === 'game').length} game`,
+    `${fromPlugins.length} from ${plugins} plugin${plugins === 1 ? '' : 's'}`,
+    `${devOnly} dev only`,
+  ]
+
+  ui.panel({ title: `HTTP endpoints (${rows.length}: ${counts.join(', ')})`, size: '1fr' }, (panel) => {
+    if (state.routesAvailable === false) {
+      panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/routes')
+      return
+    }
+
+    if (rows.length === 0) {
+      panel.label(state.routesAvailable === null ? 'Asking the server for its endpoints…' : 'The server has no endpoints')
+      return
+    }
+
+    panel.table<RouteLine>({
+      rows,
+      offset,
+      scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
+      size: '1fr',
+      // The table won't scroll past the last full page, so keep our offset on the row it actually drew
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          view.routeOffset = index
+      },
+      onScroll: (delta) => {
+        view.routeOffset = Math.max(0, Math.min(maxOffset, offset + delta))
+        ui.ctx.invalidate()
+      },
+      columns: [
+        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        { key: 'path', title: 'Path' },
+        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
+        { key: 'source', title: 'From', width: 30, color: r => r.source === 'engine' ? theme.muted : r.source === 'plugin' ? theme.primary : undefined, render: routeSource },
+        { key: 'summary', title: 'What it does', color: theme.muted, render: r => r.summary ?? '' },
       ],
     })
   })

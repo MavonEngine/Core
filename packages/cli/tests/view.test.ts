@@ -35,6 +35,12 @@ async function liveState(samples = 30): Promise<DashboardState> {
     packetsAvailable: true,
     sync: normalizeSync(await source.fetchSync!()),
     packetDetail: null,
+    routes: [
+      { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false, summary: 'Whether the server is up' },
+      { method: 'POST', path: '/api/scores/:player', source: 'game', params: { player: '' }, devOnly: false },
+      { method: 'GET', path: '/monitoring/api/metrics', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
+    ],
+    routesAvailable: true,
   }
 }
 
@@ -47,7 +53,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null }
 }
 
 describe('dashboard view', () => {
@@ -183,7 +189,8 @@ describe('dashboard view', () => {
     expect(tabForKey('1')).toBe(0)
     expect(tabForKey('4')).toBe(3)
     expect(tabForKey('5')).toBe(4)
-    expect(tabForKey('6')).toBeNull()
+    expect(tabForKey('6')).toBe(5)
+    expect(tabForKey('7')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -211,6 +218,8 @@ describe('dashboard view', () => {
       packetsAvailable: null,
       sync: null,
       packetDetail: null,
+      routes: [],
+      routesAvailable: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
@@ -562,5 +571,49 @@ describe('toLogRows', () => {
     expect(rows[0]).toMatchObject({ level: 'info', message: '┌──┐' })
     expect(rows[1]).not.toHaveProperty('level')
     expect(rows[2].message.trim()).toBe('└──┘')
+  })
+
+  describe('routes tab', () => {
+    it('lists the endpoints with where they come from', async () => {
+      const screen = render(await liveState(), 150, 40, false, 5)
+
+      expect(screen.contains('HTTP endpoints (3: 1 engine, 1 game, 1 from 1 plugin, 0 dev only)')).toBe(true)
+      for (const text of ['/api/game/health', 'Whether the server is up', 'POST', '/api/scores/:player', 'game', '/monitoring/api/metrics', '@mavonengine/http-monitoring'])
+        expect(screen.contains(text), text).toBe(true)
+      expect(screen.contains('CPU')).toBe(false)
+    })
+
+    it('says which endpoints only exist in development', async () => {
+      const state = await liveState()
+      state.routes = [
+        { method: 'GET', path: '/api/game/dev/scene', source: 'engine', params: {}, devOnly: true },
+        { method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false },
+      ]
+      const screen = render(state, 150, 40, false, 5)
+
+      expect(screen.contains('1 dev only)')).toBe(true)
+      expect(screen.line(screen.find('/api/game/dev/scene')!.y)).toContain('dev only')
+      expect(screen.line(screen.find('/api/scores')!.y)).toContain('prod + dev')
+    })
+
+    it('is reached with the 6 key', () => {
+      expect(tabForKey('6')).toBe(5)
+      expect(tabForKey('7')).toBeNull()
+    })
+
+    it('says so when the server doesn\'t list its endpoints', async () => {
+      const screen = render({ ...await liveState(), routes: [], routesAvailable: false }, 150, 40, false, 5)
+
+      expect(screen.contains('without GET /api/game/routes')).toBe(true)
+    })
+
+    it('keeps a scrolled table inside the list', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 5, routeOffset: 50 })
+
+      render(state, 150, 40, false, 5, view)
+
+      expect(view.routeOffset).toBeLessThan(state.routes.length)
+    })
   })
 })

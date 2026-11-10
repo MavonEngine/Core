@@ -28,7 +28,7 @@ export interface RequestLogResponse {
 }
 
 /** Requests the dashboard makes every poll, which would bury everything else */
-export const UNLOGGED_PATHS = new Set(['/api/game/metrics', '/api/game/logs', '/api/game/requests'])
+export const UNLOGGED_PATHS = new Set(['/api/game/metrics', '/api/game/logs', '/api/game/requests', '/api/game/routes'])
 
 /** The network debug endpoints, polled by the dashboard's Network tab and the editor's Network panel */
 export const UNLOGGED_PREFIX = '/api/game/dev/net/'
