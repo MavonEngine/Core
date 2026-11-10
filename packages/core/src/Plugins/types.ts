@@ -122,5 +122,41 @@ export function pluginAssetBase(pkg: string): string {
 /** Dev only: the editor posts `{ plugin, prefab }` here when it places a plugin prefab, see `mavonEnginePlugins()` */
 export const PREFAB_USED_PATH = '/__mavonengine/prefab-used'
 
+/** Dev only: GET lists the plugins in mavonengine.json with their version and readme, for the editor's Plugins view */
+export const PLUGINS_INFO_PATH = '/__mavonengine/plugins'
+
+/**
+ * A plugin listed in the project's mavonengine.json, as the dev server describes it on `PLUGINS_INFO_PATH`
+ */
+export interface PluginInfo {
+  /** npm package name */
+  package: string
+  /** Not turned off with `enabled: false` in mavonengine.json */
+  enabled: boolean
+  /** Found in node_modules with a valid `mavonengine` field in its package.json */
+  installed: boolean
+  /** Why it can't be used, when it isn't installed or its manifest is invalid */
+  problem?: string
+  version?: string
+  description?: string
+  license?: string
+  homepage?: string
+  target?: PluginTarget
+  /** Supported @mavonengine/core versions, a semver range */
+  engine?: string
+  /** Its README as Markdown, cut off when it is very long */
+  readme?: string
+  /** Prefabs its manifest ships assets for */
+  declaredPrefabs: string[]
+  /** Prefabs the project uses, from `prefabs` in mavonengine.json: their assets ship in a release */
+  usedPrefabs: string[]
+}
+
+export interface PluginInfoList {
+  /** Directory with mavonengine.json, null when the project has none */
+  root: string | null
+  plugins: PluginInfo[]
+}
+
 /** Dev server endpoint the editor saves scenes to: POST { name, scene } */
 export const SCENE_SAVE_PATH = '/__mavonengine/scene-save'

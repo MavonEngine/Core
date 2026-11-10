@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { build, createServer } from 'vite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
-import { PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
+import { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
 import { generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
@@ -135,6 +135,31 @@ describe('dev server', () => {
     const res = await fetch(`${base}/plugins/forest/%2e%2e/package.json`)
 
     expect(await res.text()).not.toContain('"mavonengine"')
+  })
+
+  it('lists the project\'s plugins with what their package says, read anew on every request', async () => {
+    writeFile(join(root, 'node_modules', 'forest', 'README.md'), '# Forest\n\nTrees and rocks.')
+
+    const res = await fetch(`${base}${PLUGINS_INFO_PATH}`)
+    const { root: listedRoot, plugins } = await res.json() as { root: string, plugins: any[] }
+
+    expect(res.status).toBe(200)
+    expect(listedRoot).toBe(root)
+    expect(plugins).toEqual([{
+      package: 'forest',
+      enabled: true,
+      installed: true,
+      version: '1.0.0',
+      target: 'both',
+      readme: '# Forest\n\nTrees and rocks.',
+      declaredPrefabs: ['Tree', 'Rock'],
+      usedPrefabs: ['Tree'],
+    }])
+
+    // A plugin added to mavonengine.json shows up without restarting the dev server
+    writeConfig(root, { plugins: { forest: {}, missing: { enabled: false } } })
+    const again = await (await fetch(`${base}${PLUGINS_INFO_PATH}`)).json() as { plugins: any[] }
+    expect(again.plugins.map(plugin => [plugin.package, plugin.enabled, plugin.installed])).toEqual([['forest', true, true], ['missing', false, false]])
   })
 
   it('records the prefabs the editor places in mavonengine.json', async () => {

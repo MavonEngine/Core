@@ -7,6 +7,7 @@ import CanvasPanel from './CanvasPanel'
 import DockArea from './DockArea'
 import styles from './Editor.module.css'
 import PanelHeader from './PanelHeader'
+import PluginsPanel from './Plugins/PluginsPanel'
 import PropertiesPanel from './PropertiesPanel'
 import SceneExplorer from './SceneExplorer'
 import ScenePanel from './ScenePanel'
@@ -27,12 +28,12 @@ function Editor() {
         <ActivityBar active={activity} onSelect={setActivity} />
         <div className={styles.workspace}>
           {/* Covers the editor rather than replacing it, so the viewport and the docks keep their state underneath */}
-          {activity === 'server' && (
+          {activity !== 'scene' && (
             <div className={`${styles.panel} ${styles.fullView}`}>
               <div className={styles.panelContent}>
-                <PanelHeader title="Server" />
+                <PanelHeader title={activity === 'server' ? 'Server' : 'Plugins'} />
                 <div className={styles.panelBody}>
-                  <ServerPanel />
+                  {activity === 'server' ? <ServerPanel /> : <PluginsPanel />}
                 </div>
               </div>
             </div>

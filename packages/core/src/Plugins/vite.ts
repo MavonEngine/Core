@@ -6,10 +6,10 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
-import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
-import { pluginAssetBase, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
+import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
+import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
-export { PREFAB_USED_PATH, SCENE_SAVE_PATH }
+export { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
@@ -69,6 +69,7 @@ export interface MavonEnginePluginsOptions {
  * Vite plugin for MavonEngine engine plugins:
  * - `virtual:mavonengine/plugins` exports the client entries of the plugins enabled in mavonengine.json
  * - in dev, serves plugin assets under `/plugins/<package>/` and records the prefabs the editor places
+ * - in dev, lists the project's plugins with their version and readme for the editor's Plugins view
  * - on build, copies only the plugin assets the release needs into `plugins/<package>/`
  * - in dev, the dev bridge: tools can inspect the open game tabs (renderer, world, logs, screenshots)
  */
@@ -164,6 +165,11 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
         if (req.method === 'POST' && url === PREFAB_USED_PATH) {
           handlePrefabUsed(req, res)
+          return
+        }
+
+        if (req.method === 'GET' && url === PLUGINS_INFO_PATH) {
+          handlePluginsInfo(req, res)
           return
         }
 
@@ -363,6 +369,34 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         reply(400, { error: (err as Error).message })
       }
     }, (err: Error) => reply(413, { error: err.message }))
+  }
+
+  /** Read from disk on every request, so a plugin that was just installed or updated shows without a restart */
+  function handlePluginsInfo(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(JSON.stringify(body))
+    }
+
+    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    const root = projectRoot()
+    if (!root) {
+      reply(200, { root: null, plugins: [] })
+      return
+    }
+
+    try {
+      reply(200, { root, plugins: pluginInfos(root) })
+    }
+    catch (err) {
+      reply(500, { error: (err as Error).message })
+    }
   }
 
   function handlePrefabUsed(req: IncomingMessage, res: ServerResponse) {
