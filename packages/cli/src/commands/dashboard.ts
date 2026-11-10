@@ -1,12 +1,15 @@
 import type { MetricsSource } from '../dashboard/MetricsClient'
 import type { StartupInfo, ViewState } from '../dashboard/view'
+import type PluginInstaller from '../dev/installer'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
+import { notInProject } from '@mavonengine/core/Plugins/registry'
 import { openBrowser, servesPage } from '../browser'
+import AvailablePlugins from '../dashboard/available'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
-import { handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
+import { handleInstallKey, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
 
 export const DASHBOARD_HELP = `Usage: mavonengine dashboard [options]
 
@@ -36,6 +39,8 @@ export interface DashboardOptions {
   openBrowser?: boolean
   /** Show the startup screen until the server first answers (`mavonengine dev`), read every frame */
   startup?(): StartupInfo
+  /** Lets the Plugins tab install plugins and restart the dev script (`mavonengine dev`) */
+  installer?: PluginInstaller
 }
 
 /** Poll interval while waiting for a server that is still starting, so the dashboard appears as soon as it is up */
@@ -111,8 +116,23 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
 
   const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
 
+  // Read from GitHub by the dashboard itself, the first time the Plugins tab is shown
+  const available = new AvailablePlugins()
+  available.onChange(() => app.invalidate())
+
+  const { installer } = options
+  installer?.onChange((job) => {
+    app.invalidate()
+    // The dev servers were just restarted: don't wait out a backoff to notice they are back
+    if (job.status === 'done')
+      void client.refresh()
+  })
+  const installable = () => notInProject(available.state.plugins, client.state.plugins.map(plugin => plugin.package))
+
   app.render(({ ui, theme }) => {
     renderDashboard(ui, theme, client.state, view, {
+      available,
+      installer,
       transparent: options.transparent,
       startup: options.startup?.(),
       openKey: !!options.clientUrl,
@@ -146,8 +166,21 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
   }
 
   app.on('key', (event) => {
-    if (event.key === 'r')
+    // First, so y and n answer the question instead of doing what they otherwise do
+    const install = handleInstallKey(view, client.state.plugins, event.key, installable(), installer)
+    if (install) {
+      if (typeof install === 'string')
+        installer!.start([install])
+      app.invalidate()
+      return
+    }
+
+    if (event.key === 'r') {
       void client.refresh()
+      // Only once it was shown: a dashboard that never opens the Plugins tab never calls GitHub
+      if (available.state.status !== 'idle')
+        void available.load(true)
+    }
 
     if (event.key === 'o' && options.clientUrl)
       openBrowser(options.clientUrl)
@@ -158,7 +191,7 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
       app.invalidate()
     }
 
-    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets) || handlePluginsKey(view, client.state.plugins, event.key))
+    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets) || handlePluginsKey(view, client.state.plugins, event.key, installable()))
       app.invalidate()
   })
 

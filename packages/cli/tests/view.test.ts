@@ -2,10 +2,11 @@ import type { DashboardState } from '../src/dashboard/MetricsClient'
 import type { PacketDetail, PacketLine } from '../src/dashboard/snapshot'
 import type { StartupInfo, ViewState } from '../src/dashboard/view'
 import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import AvailablePlugins from '../src/dashboard/available'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizePackets, normalizeSnapshot, normalizeSync } from '../src/dashboard/snapshot'
-import { describePacket, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, messageStats, renderDashboard, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
+import { describePacket, handleInstallKey, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, messageStats, renderDashboard, selectedPlugin, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -686,6 +687,201 @@ describe('toLogRows', () => {
 
       expect(screen.contains('Plugins (3)')).toBe(true)
       expect(screen.contains('HTTP endpoints (1)')).toBe(true)
+    })
+
+    describe('available to install', () => {
+      const LIST = [
+        { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server' as const },
+        { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const },
+        { package: 'plain', name: 'plain' },
+      ]
+
+      function draw(state: DashboardState, available: AvailablePlugins, tab = 6) {
+        return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, viewState({ tab }), { available }), { width: 150, height: 40 })
+      }
+
+      it('reads the list the first time the tab is drawn, and not before', async () => {
+        const fetchRegistry = vi.fn(async () => ({ plugins: LIST }))
+        const available = new AvailablePlugins('https://example.com/list.json', fetchRegistry)
+        const state = await liveState()
+
+        draw(state, available, 0)
+        expect(fetchRegistry).not.toHaveBeenCalled()
+
+        const loading = draw(state, available)
+        expect(fetchRegistry).toHaveBeenCalledTimes(1)
+        expect(loading.contains('Reading the list of plugins from GitHub')).toBe(true)
+
+        await available.load()
+        draw(state, available)
+        expect(fetchRegistry).toHaveBeenCalledTimes(1)
+      })
+
+      it('lists the plugins the project doesn\'t have yet', async () => {
+        const available = new AvailablePlugins('x', async () => ({ plugins: LIST }))
+        await available.load()
+
+        const screen = draw(await liveState(), available)
+
+        expect(screen.contains('Available to install (2)')).toBe(true)
+        expect(screen.line(screen.find('@acme/weather')!.y)).toMatch(/@acme\/weather\s+both\s+Rain and fog/)
+        expect(screen.contains('plain')).toBe(true)
+        // Already in the project, so only in the list above
+        expect(screen.contains('The dashboard in the browser')).toBe(true)
+        expect(screen.text().split('Available to install')[1]).not.toContain('http-monitoring')
+        // The installed plugins and the details are still there
+        expect(screen.contains('Plugins (3)')).toBe(true)
+        expect(screen.contains('HTTP endpoints (1)')).toBe(true)
+      })
+
+      it('shows the whole list for a project without plugins', async () => {
+        const available = new AvailablePlugins('x', async () => ({ plugins: LIST }))
+        await available.load()
+
+        const screen = draw({ ...await liveState(), plugins: [] }, available)
+
+        expect(screen.contains('The project has no plugins')).toBe(true)
+        expect(screen.contains('Available to install (3)')).toBe(true)
+        expect(screen.contains('@mavonengine/http-monitoring')).toBe(true)
+      })
+
+      it('says so when nothing is left to install, or the list can\'t be read', async () => {
+        const state = await liveState()
+        const all = new AvailablePlugins('x', async () => ({ plugins: [LIST[0]] }))
+        await all.load()
+        expect(draw(state, all).contains('The project has every plugin on the list')).toBe(true)
+
+        const broken = new AvailablePlugins('x', async () => {
+          throw new Error('https://example.com/list.json was not found')
+        })
+        await broken.load()
+        const screen = draw(state, broken)
+        expect(screen.contains('Could not read the list of plugins: https://example.com/list.json was not found')).toBe(true)
+        expect(screen.contains('Plugins (3)')).toBe(true)
+      })
+    })
+
+    describe('installing', () => {
+      const weather = { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const, homepage: 'https://example.com/weather' }
+      const plain = { package: 'plain', name: 'plain' }
+      const idle = { job: null, busy: false }
+
+      async function loaded() {
+        const available = new AvailablePlugins('x', async () => ({ plugins: [weather, plain] }))
+        await available.load()
+        return available
+      }
+
+      function draw(state: DashboardState, view: ViewState, available: AvailablePlugins, installer?: { job: any, busy: boolean }) {
+        return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, view, { available, installer }), { width: 150, height: 46 })
+      }
+
+      it('moves the selection on from the project\'s plugins into the ones to install', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6 })
+        const rest = [weather, plain]
+
+        for (let i = 0; i < 3; i++)
+          handlePluginsKey(view, state.plugins, 'down', rest)
+        expect(view.selectedPlugin).toBe('@acme/weather')
+        expect(selectedPlugin(view, state.plugins, rest)).toEqual({ available: weather })
+
+        handlePluginsKey(view, state.plugins, 'down', rest)
+        handlePluginsKey(view, state.plugins, 'down', rest)
+        expect(view.selectedPlugin).toBe('plain')
+
+        handlePluginsKey(view, state.plugins, 'up', rest)
+        handlePluginsKey(view, state.plugins, 'up', rest)
+        expect(selectedPlugin(view, state.plugins, rest)).toEqual({ installed: state.plugins[2] })
+      })
+
+      it('shows a plugin that can be installed, and offers to install it under mavonengine dev', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        const available = await loaded()
+
+        const withInstaller = draw(state, view, available, idle)
+        for (const text of ['Weather (@acme/weather)', 'Rain and fog', 'not installed', 'https://example.com/weather', 'Press i to install it and restart the dev servers', 'i Install'])
+          expect(withInstaller.contains(text), text).toBe(true)
+
+        // A dashboard that didn't start the dev servers can't restart them
+        const without = draw(state, view, available)
+        expect(without.contains('Install it with: mavonengine install @acme/weather')).toBe(true)
+        expect(without.contains('i Install')).toBe(false)
+      })
+
+      it('asks before installing, pointing out the risk and where the source is', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        const rest = [weather, plain]
+
+        expect(handleInstallKey(view, state.plugins, 'i', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBe('@acme/weather')
+
+        const screen = draw(state, view, await loaded(), idle)
+        for (const text of ['Install @acme/weather?', 'Installing a package runs its code on this machine.', 'Check the source before you install it:', 'https://example.com/weather', 'I checked the source, install it', 'y Install', 'n Cancel'])
+          expect(screen.contains(text), text).toBe(true)
+
+        // The selection stays where it is while the question is open
+        expect(handlePluginsKey(view, state.plugins, 'down', rest)).toBe(false)
+
+        expect(handleInstallKey(view, state.plugins, 'n', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBeNull()
+
+        handleInstallKey(view, state.plugins, 'i', rest, idle)
+        expect(handleInstallKey(view, state.plugins, 'escape', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBeNull()
+      })
+
+      it('installs only after y', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: 'plain' })
+        const rest = [weather, plain]
+
+        // y without having been asked does nothing
+        expect(handleInstallKey(view, state.plugins, 'y', rest, idle)).toBe(false)
+
+        handleInstallKey(view, state.plugins, 'i', rest, idle)
+        expect(handleInstallKey(view, state.plugins, 'x', rest, idle)).toBe(false)
+        expect(handleInstallKey(view, state.plugins, 'y', rest, idle)).toBe('plain')
+        expect(view.confirmInstall).toBeNull()
+
+        // Without a homepage the question points at npm
+        view.confirmInstall = 'plain'
+        expect(draw(state, view, await loaded(), idle).contains('https://www.npmjs.com/package/plain')).toBe(true)
+      })
+
+      it('offers no install for a plugin the project has, without mavonengine dev, or while one runs', async () => {
+        const state = await liveState()
+        const rest = [weather, plain]
+
+        const installed = viewState({ tab: 6 })
+        expect(handleInstallKey(installed, state.plugins, 'i', rest, idle)).toBe(false)
+
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        expect(handleInstallKey(view, state.plugins, 'i', rest, undefined)).toBe(false)
+        expect(handleInstallKey(view, state.plugins, 'i', rest, { job: null, busy: true })).toBe(false)
+        expect(handleInstallKey(viewState({ tab: 0, selectedPlugin: '@acme/weather' }), state.plugins, 'i', rest, idle)).toBe(false)
+        expect(view.confirmInstall).toBeUndefined()
+      })
+
+      it('shows how an install goes', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6 })
+        const available = await loaded()
+        const job = { id: 1, packages: ['@acme/weather'], status: 'installing', output: 'mavonengine: running npm install\nadded 3 packages in 2s\n' }
+
+        const installing = draw(state, view, available, { job, busy: true })
+        expect(installing.contains('Installing @acme/weather')).toBe(true)
+        expect(installing.contains('added 3 packages in 2s')).toBe(true)
+
+        expect(draw(state, view, available, { job: { ...job, status: 'restarting' }, busy: true }).contains('Installed, restarting the dev servers for @acme/weather')).toBe(true)
+        expect(draw(state, view, available, { job: { ...job, status: 'done' }, busy: false }).contains('The dev servers were restarted with it')).toBe(true)
+
+        const failed = draw(state, view, available, { job: { ...job, status: 'failed', error: '\'npm install @acme/weather\' exited with code 1' }, busy: false })
+        expect(failed.contains('Could not install @acme/weather')).toBe(true)
+        expect(failed.contains('exited with code 1')).toBe(true)
+      })
     })
 
     it('says so when there are no plugins, or the server doesn\'t list them', async () => {

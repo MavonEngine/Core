@@ -10,6 +10,9 @@ import PluginsPanel from '../../../src/Editor/UI/Plugins/PluginsPanel'
 vi.mock('../../../src/Editor/UI/Plugins/PluginsPanel.module.css', () => ({
   default: new Proxy({}, { get: (_, key) => String(key) }),
 }))
+vi.mock('../../../src/Editor/UI/Plugins/InstallDialog.module.css', () => ({
+  default: new Proxy({}, { get: (_, key) => String(key) }),
+}))
 vi.mock('../../../src/Editor/UI/Plugins/Markdown.module.css', () => ({
   default: new Proxy({}, { get: (_, key) => String(key) }),
 }))
@@ -46,11 +49,26 @@ function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
-/** The dev server lists the plugins, the game server its routes */
-function servers({ plugins = PLUGINS, routes = ROUTES as HttpRouteInfo[] | null } = {}) {
-  return vi.fn(async (url: RequestInfo | URL) => {
+const AVAILABLE = [
+  { package: '@acme/forest', name: 'Forest', description: 'Trees and rocks', target: 'both' },
+  { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both', engine: '>=0.1.0', homepage: 'https://example.com/weather', readme: 'https://raw.githubusercontent.com/acme/weather/main/README.md' },
+  { package: 'plain' },
+]
+
+/** The dev server lists the plugins, the game server its routes, GitHub the plugins that can be installed */
+function servers({ plugins = PLUGINS, routes = ROUTES as HttpRouteInfo[] | null, available = AVAILABLE as object[] | null, readme = '# Weather\n\nMakes it **rain**.' as string | null, install = undefined as object | undefined } = {}) {
+  return vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).endsWith('/__mavonengine/plugin-install')) {
+      if (init?.method === 'POST')
+        return new Response(JSON.stringify({ job: { id: 1, packages: JSON.parse(String(init.body)).packages, status: 'installing', output: '' } }), { status: 202, headers: { 'content-type': 'application/json' } })
+      return install ? json(install) : new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })
+    }
     if (String(url).endsWith('/__mavonengine/plugins'))
       return json({ root: '/project', plugins })
+    if (String(url).endsWith('/README.md'))
+      return readme === null ? new Response('Not Found', { status: 404 }) : new Response(readme)
+    if (String(url).startsWith('https://raw.githubusercontent.com/'))
+      return available ? json({ version: 1, plugins: available }) : new Response('Not Found', { status: 404 })
     if (routes)
       return json({ routes })
     return new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })
@@ -67,6 +85,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  localStorage.clear()
   unregisterPrefab('@acme/forest:Tree')
 })
 
@@ -139,11 +158,165 @@ describe('pluginsPanel', () => {
     expect(screen.getAllByRole('table')).toHaveLength(1)
   })
 
-  it('says so when the project has no plugins', async () => {
+  it('says so when the project has no plugins, and shows the first one it could install', async () => {
     render(<PluginsPanel fetchFn={servers({ plugins: [] })} />)
 
     await screen.findByText('Plugins (0)')
     screen.getByText(/This project has no plugins/)
+    await screen.findByText('Available to install (3)')
+    screen.getByRole('heading', { name: 'Forest' })
+    screen.getByText('npx @mavonengine/cli install @acme/forest')
+  })
+
+  describe('available to install', () => {
+    it('lists the plugins from GitHub that the project doesn\'t have yet', async () => {
+      const fetchFn = servers()
+      render(<PluginsPanel fetchFn={fetchFn} />)
+
+      await screen.findByText('Available to install (2)')
+      const items = within(screen.getByRole('list', { name: 'Available plugins' })).getAllByRole('button')
+      expect(items.map(item => item.textContent)).toEqual(['@acme/weatherRain and fog', 'plainplain'])
+      expect(fetchFn).toHaveBeenCalledWith('https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json', expect.objectContaining({ cache: 'no-store' }))
+
+      // The project's first plugin is still the one shown
+      screen.getByRole('heading', { name: '@acme/forest' })
+    })
+
+    it('shows what a plugin is and how to install it when it is picked', async () => {
+      render(<PluginsPanel fetchFn={servers()} />)
+
+      fireEvent.click(await screen.findByText('@acme/weather'))
+
+      screen.getByRole('heading', { name: 'Weather' })
+      screen.getByText('Not installed')
+      screen.getByText('Client + server')
+      screen.getByText('@mavonengine/core >=0.1.0')
+      expect(screen.getByText('https://example.com/weather').getAttribute('href')).toBe('https://example.com/weather')
+      screen.getByText('npx @mavonengine/cli install @acme/weather')
+      // Nothing about endpoints or prefabs of something that isn't there
+      expect(screen.queryByRole('table')).toBeNull()
+
+      fireEvent.click(screen.getByText('chat'))
+      screen.getByRole('heading', { name: 'chat' })
+    })
+
+    it('shows the readme the list points to, read when the plugin is looked at', async () => {
+      const fetchFn = servers()
+      render(<PluginsPanel fetchFn={fetchFn} />)
+      await screen.findByText('Available to install (2)')
+      expect(fetchFn).not.toHaveBeenCalledWith('https://raw.githubusercontent.com/acme/weather/main/README.md', expect.anything())
+
+      fireEvent.click(screen.getByText('@acme/weather'))
+
+      expect((await screen.findByText('rain')).tagName).toBe('STRONG')
+      expect(fetchFn).toHaveBeenCalledWith('https://raw.githubusercontent.com/acme/weather/main/README.md', expect.objectContaining({ cache: 'no-store' }))
+
+      // A plugin the list gives no readme for
+      fireEvent.click(screen.getByText('plain', { selector: '.itemName' }))
+      screen.getByText('The list of plugins has no readme for it.')
+      expect(screen.queryByText('rain')).toBeNull()
+    })
+
+    it('says so when the readme can\'t be read', async () => {
+      render(<PluginsPanel fetchFn={servers({ readme: null })} />)
+
+      fireEvent.click(await screen.findByText('@acme/weather'))
+
+      expect((await screen.findByText(/^Could not read its readme: /)).textContent).toContain('was not found')
+      // The rest is still there
+      screen.getByText('npx @mavonengine/cli install @acme/weather')
+    })
+
+    describe('installing', () => {
+      const canInstall = { available: true, job: null }
+
+      it('offers to install a plugin under mavonengine dev, and asks first', async () => {
+        const fetchFn = servers({ install: canInstall })
+        render(<PluginsPanel fetchFn={fetchFn} />)
+        fireEvent.click(await screen.findByText('@acme/weather'))
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Install @acme/weather…' }))
+
+        // Nothing is installed by the click: the dialog has to be answered
+        screen.getByRole('dialog', { name: 'Install @acme/weather?' })
+        expect(screen.getByText('https://example.com/weather', { selector: '.sources a' })).toBeTruthy()
+        expect(fetchFn).not.toHaveBeenCalledWith('/__mavonengine/plugin-install', expect.objectContaining({ method: 'POST' }))
+
+        fireEvent.click(screen.getByLabelText('I have checked the source and trust it'))
+        fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+        await screen.findByRole('dialog', { name: 'Installing @acme/weather' })
+        expect(fetchFn).toHaveBeenCalledWith('/__mavonengine/plugin-install', expect.objectContaining({ method: 'POST', body: JSON.stringify({ packages: ['@acme/weather'] }) }))
+      })
+
+      it('closes the dialog without installing on cancel', async () => {
+        const fetchFn = servers({ install: canInstall })
+        render(<PluginsPanel fetchFn={fetchFn} />)
+        fireEvent.click(await screen.findByText('@acme/weather'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Install @acme/weather…' }))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+        expect(screen.queryByRole('dialog')).toBeNull()
+        expect(fetchFn).not.toHaveBeenCalledWith('/__mavonengine/plugin-install', expect.objectContaining({ method: 'POST' }))
+      })
+
+      it('installs any other package through the same dialog', async () => {
+        render(<PluginsPanel fetchFn={servers({ install: canInstall })} />)
+        const input = await screen.findByLabelText('Another package')
+        const submit = screen.getByRole('button', { name: 'Install…' }) as HTMLButtonElement
+        expect(submit.disabled).toBe(true)
+
+        fireEvent.change(input, { target: { value: 'some-plugin@1.2.0  file:../mine' } })
+        fireEvent.click(submit)
+
+        screen.getByRole('dialog', { name: 'Install some-plugin@1.2.0, file:../mine?' })
+        screen.getByText('https://www.npmjs.com/package/some-plugin')
+      })
+
+      it('refuses what is no package before asking anything', async () => {
+        render(<PluginsPanel fetchFn={servers({ install: canInstall })} />)
+
+        fireEvent.change(await screen.findByLabelText('Another package'), { target: { value: 'forest; rm -rf ~' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Install…' }))
+
+        expect(screen.getByRole('alert').textContent).toContain('not something that can be installed')
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+
+      it('only shows the command when the project doesn\'t run under mavonengine dev', async () => {
+        render(<PluginsPanel fetchFn={servers({ install: { available: false, reason: 'Start the project with `mavonengine dev` to install packages from here', job: null } })} />)
+        fireEvent.click(await screen.findByText('@acme/weather'))
+
+        await screen.findByText(/Start the project with `mavonengine dev` to install packages from here\./)
+        screen.getByText('npx @mavonengine/cli install @acme/weather')
+        expect(screen.queryByRole('button', { name: 'Install @acme/weather…' })).toBeNull()
+        expect(screen.queryByLabelText('Another package')).toBeNull()
+      })
+    })
+
+    it('says so when nothing is left to install', async () => {
+      render(<PluginsPanel fetchFn={servers({ available: [AVAILABLE[0]] })} />)
+
+      await screen.findByText('The project has every plugin on the list.')
+    })
+
+    it('keeps showing the project\'s plugins when the list can\'t be read', async () => {
+      render(<PluginsPanel fetchFn={servers({ available: null })} />)
+
+      expect((await screen.findByRole('status')).textContent).toContain('was not found')
+      screen.getByText('Plugins (3)')
+      screen.getByRole('heading', { name: '@acme/forest' })
+    })
+
+    it('reads the list from the url in localStorage when there is one', async () => {
+      localStorage.setItem('mavonengine:plugins-url', 'https://raw.githubusercontent.com/me/fork/dev/plugins.json')
+      const fetchFn = servers()
+      render(<PluginsPanel fetchFn={fetchFn} />)
+
+      await screen.findByText('Available to install (2)')
+      expect(fetchFn).toHaveBeenCalledWith('https://raw.githubusercontent.com/me/fork/dev/plugins.json', expect.anything())
+    })
   })
 
   it('shows why there is no list, and recovers on refresh', async () => {

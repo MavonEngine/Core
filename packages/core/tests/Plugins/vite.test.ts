@@ -4,7 +4,8 @@ import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
 import { join } from 'node:path'
 import { build, createServer } from 'vite'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEV_CONTROL_TOKEN_HEADER, PLUGIN_INSTALL_PATH } from '../../src/Plugins/install'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
 import { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
 import { generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
@@ -160,6 +161,96 @@ describe('dev server', () => {
     writeConfig(root, { plugins: { forest: {}, missing: { enabled: false } } })
     const again = await (await fetch(`${base}${PLUGINS_INFO_PATH}`)).json() as { plugins: any[] }
     expect(again.plugins.map(plugin => [plugin.package, plugin.enabled, plugin.installed])).toEqual([['forest', true, true], ['missing', false, false]])
+  })
+
+  describe('installing packages', () => {
+    let control: ReturnType<typeof createHttpServer>
+    let received: { url?: string, token?: string | string[], body?: string }[]
+
+    const install = (packages: unknown, headers: Record<string, string> = {}) => fetch(`${base}${PLUGIN_INSTALL_PATH}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ packages }),
+    })
+
+    /** Stands in for the `mavonengine dev` process that started the dev server */
+    beforeEach(async () => {
+      received = []
+      control = createHttpServer((req, res) => {
+        let body = ''
+        req.on('data', chunk => body += chunk)
+        req.on('end', () => {
+          received.push({ url: req.url, token: req.headers[DEV_CONTROL_TOKEN_HEADER], body })
+          res.setHeader('Content-Type', 'application/json')
+          if (req.url === '/status') {
+            res.end(JSON.stringify({ job: { id: 1, packages: ['forest'], status: 'installing', output: 'added 1 package' } }))
+          }
+          else {
+            res.statusCode = 202
+            res.end(JSON.stringify({ job: { id: 2, packages: JSON.parse(body).packages, status: 'installing', output: '' } }))
+          }
+        })
+      })
+      await new Promise<void>(resolve => control.listen(0, '127.0.0.1', resolve))
+      vi.stubEnv('MAVONENGINE_DEV_CONTROL_URL', `http://127.0.0.1:${(control.address() as AddressInfo).port}`)
+      vi.stubEnv('MAVONENGINE_DEV_CONTROL_TOKEN', 'secret')
+    })
+
+    afterEach(async () => {
+      vi.unstubAllEnvs()
+      await new Promise(resolve => control.close(resolve))
+    })
+
+    it('hands an install to the mavonengine dev process that started it', async () => {
+      const res = await install(['@acme/weather', 'forest@1.2.0'])
+
+      expect(res.status).toBe(202)
+      expect(await res.json()).toEqual({ job: { id: 2, packages: ['@acme/weather', 'forest@1.2.0'], status: 'installing', output: '' } })
+      expect(received).toEqual([{ url: '/install', token: 'secret', body: JSON.stringify({ packages: ['@acme/weather', 'forest@1.2.0'] }) }])
+    })
+
+    it('says whether packages can be installed and how the last install goes', async () => {
+      const status = await (await fetch(`${base}${PLUGIN_INSTALL_PATH}`)).json()
+
+      expect(status).toEqual({ available: true, job: { id: 1, packages: ['forest'], status: 'installing', output: 'added 1 package' } })
+      expect(received).toEqual([{ url: '/status', token: 'secret', body: '' }])
+    })
+
+    it('can\'t install without mavonengine dev', async () => {
+      vi.stubEnv('MAVONENGINE_DEV_CONTROL_URL', '')
+
+      const status = await (await fetch(`${base}${PLUGIN_INSTALL_PATH}`)).json() as { available: boolean, reason: string }
+      const res = await install(['forest'])
+
+      expect(status.available).toBe(false)
+      expect(status.reason).toContain('mavonengine dev')
+      expect(res.status).toBe(409)
+      expect(received).toEqual([])
+    })
+
+    it('refuses what a shell or the package manager could read as more than a package', async () => {
+      for (const packages of [['forest; rm -rf ~'], ['--global'], ['a b'], ['forest@^1.0.0'], ['$(whoami)'], [], 'forest', [7]]) {
+        const res = await install(packages)
+        expect(res.status, JSON.stringify(packages)).toBe(400)
+      }
+
+      expect(received).toEqual([])
+    })
+
+    it('refuses requests another site makes from the browser', async () => {
+      const crossSite = await install(['forest'], { 'Sec-Fetch-Site': 'cross-site' })
+      const otherOrigin = await install(['forest'], { Origin: 'https://evil.example' })
+      // What a form or a no-cors request can send without the browser asking first
+      const plainText = await fetch(`${base}${PLUGIN_INSTALL_PATH}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ packages: ['forest'] }) })
+
+      expect(crossSite.status).toBe(403)
+      expect(otherOrigin.status).toBe(403)
+      expect(plainText.status).toBe(415)
+      expect(received).toEqual([])
+
+      // The page itself may
+      expect((await install(['forest'], { 'Sec-Fetch-Site': 'same-origin', 'Origin': base })).status).toBe(202)
+    })
   })
 
   it('records the prefabs the editor places in mavonengine.json', async () => {

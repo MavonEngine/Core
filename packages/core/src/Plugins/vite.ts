@@ -3,13 +3,15 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite'
 import type { EnabledPlugin } from './ProjectConfig.js'
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
+import process from 'node:process'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
+import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
-export { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
+export { PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
@@ -70,6 +72,7 @@ export interface MavonEnginePluginsOptions {
  * - `virtual:mavonengine/plugins` exports the client entries of the plugins enabled in mavonengine.json
  * - in dev, serves plugin assets under `/plugins/<package>/` and records the prefabs the editor places
  * - in dev, lists the project's plugins with their version and readme for the editor's Plugins view
+ * - in dev, under `mavonengine dev`, lets the editor install packages: the request is handed to that process
  * - on build, copies only the plugin assets the release needs into `plugins/<package>/`
  * - in dev, the dev bridge: tools can inspect the open game tabs (renderer, world, logs, screenshots)
  */
@@ -165,6 +168,11 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
         if (req.method === 'POST' && url === PREFAB_USED_PATH) {
           handlePrefabUsed(req, res)
+          return
+        }
+
+        if ((req.method === 'GET' || req.method === 'POST') && url === PLUGIN_INSTALL_PATH) {
+          void handlePluginInstall(req, res)
           return
         }
 
@@ -371,6 +379,92 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     }, (err: Error) => reply(413, { error: err.message }))
   }
 
+  /**
+   * GET: whether packages can be installed from the editor, and the running or last install.
+   * POST { packages }: start installing them. The work is done by the `mavonengine dev` process that started this
+   * dev server, which also restarts it afterwards, so the answer only says that the install started.
+   *
+   * Installing a package runs its code, so this takes requests from localhost and from this page only:
+   * another site open in the browser can't use it.
+   */
+  async function handlePluginInstall(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(JSON.stringify(body))
+    }
+
+    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    const controlUrl = process.env[DEV_CONTROL_URL_ENV]
+    const headers = { [DEV_CONTROL_TOKEN_HEADER]: process.env[DEV_CONTROL_TOKEN_ENV] ?? '' }
+    const unavailable = 'Start the project with `mavonengine dev` to install packages from here'
+
+    if (req.method === 'GET') {
+      if (!controlUrl) {
+        reply(200, { available: false, reason: unavailable, job: null })
+        return
+      }
+
+      try {
+        const status = await fetch(`${controlUrl}/status`, { headers })
+        if (!status.ok)
+          throw new Error(`it answered ${status.status}`)
+        reply(200, { available: true, ...await status.json() as object })
+      }
+      catch (err) {
+        reply(200, { available: false, reason: `mavonengine dev can't be reached: ${(err as Error).message}`, job: null })
+      }
+      return
+    }
+
+    if (!fromThisPage(req)) {
+      reply(403, { error: 'Only the page this dev server serves may install packages' })
+      return
+    }
+    // A JSON body can't be sent across origins without the browser asking first
+    if (!req.headers['content-type']?.includes('application/json')) {
+      reply(415, { error: 'Expected a JSON body' })
+      return
+    }
+
+    let packages: unknown
+    try {
+      ({ packages } = JSON.parse(await readBody(req, MAX_BODY_BYTES)))
+    }
+    catch {
+      reply(400, { error: 'Expected a JSON body' })
+      return
+    }
+
+    const invalid = invalidPackages(packages)
+    if (invalid) {
+      reply(400, { error: invalid })
+      return
+    }
+
+    if (!controlUrl) {
+      reply(409, { error: unavailable })
+      return
+    }
+
+    try {
+      const started = await fetch(`${controlUrl}/install`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packages }),
+      })
+      reply(started.status, await started.json() as object)
+    }
+    catch (err) {
+      reply(502, { error: `mavonengine dev can't be reached: ${(err as Error).message}` })
+    }
+  }
+
   /** Read from disk on every request, so a plugin that was just installed or updated shows without a restart */
   function handlePluginsInfo(req: IncomingMessage, res: ServerResponse) {
     const reply = (status: number, body: object) => {
@@ -461,6 +555,27 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         reply(500, { error: (err as Error).message })
       }
     })
+  }
+}
+
+/**
+ * Whether a request comes from a page of this dev server, or from no page at all (a tool on this machine).
+ * A request another site makes from the browser says so in these headers.
+ */
+function fromThisPage(req: IncomingMessage): boolean {
+  const site = req.headers['sec-fetch-site']
+  if (typeof site === 'string')
+    return site === 'same-origin'
+
+  const { origin } = req.headers
+  if (typeof origin !== 'string')
+    return true
+
+  try {
+    return new URL(origin).host === req.headers.host
+  }
+  catch {
+    return false
   }
 }
 
