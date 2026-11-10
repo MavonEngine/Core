@@ -20,7 +20,10 @@ export default abstract class Actor extends GameObject {
     }
   }
 
+  /**
+   * Everything `serialize()` returns as one string, to tell whether the actor changed since it was last looked at
+   */
   get stateHash() {
-    return btoa(JSON.stringify(this.serialize()))
+    return JSON.stringify(this.serialize())
   }
 }

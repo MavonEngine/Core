@@ -1,6 +1,7 @@
 import type { Express, NextFunction, Request, Response } from 'express'
 import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
+import type { NetDebugSource } from '../../Debug/sync'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
 import type ServerMetrics from '../Stats/ServerMetrics'
@@ -12,6 +13,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import express from 'express'
 import { parseEntityQuery } from '../../../Dev/inspect'
+import { parseNetRecordQuery } from '../../Debug/NetRecorder'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
 
@@ -46,6 +48,11 @@ export interface HttpServerOptions {
    * and are protected like the metrics endpoint.
    */
   inspector?: WorldInspector
+  /**
+   * Serves the recorded packets, network events and the state sync on GET /api/game/dev/net/* when given.
+   * Same rules as `inspector`: never in production.
+   */
+  net?: NetDebugSource
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -65,6 +72,7 @@ export default class HttpServer {
   private requests?: RequestLog
   private clientOptions?: ClientOptions
   private inspector?: WorldInspector
+  private net?: NetDebugSource
   private lastMetricsRequestAt?: number
   private listener?: NodeServer
 
@@ -81,6 +89,7 @@ export default class HttpServer {
     this.requests = options.requests
     this.clientOptions = options.client
     this.inspector = options.inspector
+    this.net = options.net
 
     this.registerHealthEndpoint()
     this.registerMetricsEndpoint()
@@ -89,6 +98,8 @@ export default class HttpServer {
 
     if (this.devEndpointsEnabled)
       this.registerDevEndpoints()
+    if (this.net && devEndpointsEnabled())
+      this.registerNetEndpoints(this.net)
   }
 
   /**
@@ -226,6 +237,35 @@ export default class HttpServer {
 
     this.app.get('/api/game/dev/entities/:id', authorize, (req, res) => {
       res.json({ entity: inspector.entity(req.params.id as string) })
+    })
+  }
+
+  /**
+   * GET /api/game/dev/net/packets?after=&kind=&direction=&type=&peer=&limit=   recorded packets and events, oldest first
+   * GET /api/game/dev/net/packets/:id                                          one record with its payload
+   * GET /api/game/dev/net/sync                                                 who is sent which entities
+   *
+   * Never registered in production.
+   */
+  private registerNetEndpoints(source: NetDebugSource) {
+    const authorize = (req: Request, res: Response, next: NextFunction) => this.authorizeMetrics(req, res, next)
+
+    this.app.get('/api/game/dev/net/packets', authorize, (req, res) => {
+      const query = parseNetRecordQuery(req.query as Record<string, unknown>)
+      if (typeof query === 'string') {
+        res.status(400).json({ error: query })
+        return
+      }
+
+      res.json(source.net.list(query))
+    })
+
+    this.app.get('/api/game/dev/net/packets/:id', authorize, (req, res) => {
+      res.json({ record: source.net.get(Number(req.params.id)) ?? null })
+    })
+
+    this.app.get('/api/game/dev/net/sync', authorize, (_req, res) => {
+      res.json(source.syncSnapshot())
     })
   }
 

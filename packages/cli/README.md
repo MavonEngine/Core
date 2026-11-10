@@ -127,9 +127,11 @@ npx @mavonengine/cli dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`4` switch between the Overview, Players, Logs and HTTP tabs. The mouse wheel scrolls the players table, the logs and the requests; scroll the logs back to the bottom, or the requests back to the top, to follow new ones again.
+Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`5` switch between the Overview, Players, Logs, HTTP and Network tabs. The mouse wheel scrolls the players table, the logs, the requests and the packets; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
 
 The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
+
+The Network tab shows the game socket while developing. State sync lists each player with the entities in its last state update, its last acknowledged input and the size and tick of that update (red when it fell behind the others), and counts the synced entities no player is in range of. By message breaks the traffic of the last 5 seconds down by message name and direction: packets per second, average size and bytes per second, the largest share first. Below, every packet and network event, newest first, with its client, size, tick, input sequence id and a few facts about its payload; `p` shows the pings, `e` only the events (`connect`, `disconnect`, `dropped`, `sync_enter`, `sync_leave`). Click a packet, or move through the list with the arrow keys (or `j` / `k`), to see its content next to the list: the payload as it went over the wire, scrolled with the mouse wheel. `esc`, or a second click on it, closes it. The server drops the payloads of old packets to bound its memory, so only recent ones can be opened. The packets are only fetched while the tab shows, and only a server that is not running in production records them, see the [network tools](#mavonengine-mcp).
 
 ### Server access
 
@@ -179,6 +181,8 @@ Game server tools:
 | `get_entity` | One entity with the state it sends to clients (dev only) |
 | `recent_logs` | Server log lines, filtered by level and text |
 | `recent_requests` | HTTP requests the server answered, filtered by path and status |
+| `network_packets` / `network_packet` | Packets the server sent and received and its network events, per client: size, tick, input sequence id; and one packet with its payload (dev only) |
+| `network_sync` | Who is sent what: each player's tracked entities and last state update, and by how many players each entity is tracked (dev only) |
 
 Client tools, for the game tabs open while Vite serves the client in dev:
 
@@ -188,7 +192,9 @@ Client tools, for the game tabs open while Vite serves the client in dev:
 | `client_status` | Draw calls and triangles of one frame, GPU geometries / textures / programs, JS heap, canvas, camera |
 | `client_entities` / `client_entity` | The tab's world, in the same shape as the server's, with its local player marked |
 | `client_scene` | The scene loaded in the tab, and which objects the client built |
-| `client_network` | Connection, ping, and inputs sent but not yet acknowledged by the server |
+| `client_network` | Connection, ping, inputs sent but not yet acknowledged by the server, and the last state update: its server tick, ack and age |
+| `client_packets` / `client_packet` | Packets the tab sent and received and its network events, and one packet with its payload |
+| `network_timeline` | The server's records for one tab and the tab's own, merged by time |
 | `client_logs` | Console output, uncaught errors and unhandled rejections, filtered by level and text |
 | `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
 | `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, composer passes, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
@@ -212,6 +218,8 @@ The server scene and entity tools read `GET /api/game/dev/*` on the game server.
 The client tools go through the dev bridge of the Vite plugin in `@mavonengine/core/vite.config` (Vite 8). In dev it adds a small module to the page that answers over Vite's hot-reload WebSocket, and serves `GET /__mavonengine/clients` to localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set for the dev server. Builds never include it. Turn it off with `mavonEnginePlugins({ devBridge: false })`.
 
 `client_trace` patches the tab only while it records and puts everything back afterwards. It times every frame and composer pass, counts the WebGL calls on the context, keeps slow single calls (shader compiles, texture uploads, `readPixels` / `getError` stalls), long animation frames with the scripts that ran, and your own `performance.measure()` spans. GPU time per frame needs `EXT_disjoint_timer_query_webgl2` (Chrome and Edge on most GPUs; the three-perf panel pauses while tracing since it uses the same queries). JS call stacks come from the [JS Self-Profiling API](https://wicg.github.io/js-self-profiling/) in Chromium browsers: the Vite plugin serves dev pages with `Document-Policy: js-profiling` for it, so reload tabs opened before you updated. The trace file is [Chrome Trace Event](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) JSON with tracks for frames, passes, GPU time, ticks, JS samples and slow WebGL calls: open it in [Perfetto](https://ui.perfetto.dev), `chrome://tracing` or [speedscope](https://www.speedscope.app). Keep the tab in the foreground while it records, browsers throttle hidden tabs.
+
+The network tools read what both sides record while developing: every message through the game socket, the engine's and your own, with its size, and events such as `connect`, `disconnect`, `dropped` (the transport dropped a message), `sync_enter` / `sync_leave` (entities coming into or leaving a player's sync distance) and, on a client, `state_gap` (state updates that never arrived) and `state_out_of_order`. Each side keeps its last 2000 records, and 8 MB of their payloads. The server records when `NODE_ENV` is not `production` and serves them on `GET /api/game/dev/net/packets`, `/packets/:id` and `/sync`; a tab records while the dev bridge or the editor runs. Nothing is recorded, and the socket is left untouched, in a production build. `network_timeline` orders the two sides by their own clocks, which line up on one machine.
 
 To let `compare_entity` match your own player with the server's, set `game.localPlayer` to the entity the tab controls, or give it `isLocalPlayer = true`: the server keys players by socket id, which the client often doesn't.
 

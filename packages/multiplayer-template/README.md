@@ -122,7 +122,7 @@ Press `.` in the game to open the editor on the running game: the connection to 
 
 | Command | Payload |
 |---|---|
-| `SV_STATE` | `{ entities: [{ id, position, rotation, state, health, name }] }` |
+| `SV_STATE` | `{ tick, serverTime, ack, entities: [{ id, position, rotation, state, health, name }] }`: `tick` counts server ticks, `ack` is the sequence id of the receiver's last processed input |
 | `SV_REMOVE_ENTITY` | `{ id: string }` |
 | `SV_CHAT` | `{ playerId, playerName, message }` |
 | `SV_TREES` | `{ positions, rotations, scales }` (flat typed arrays) |

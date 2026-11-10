@@ -30,6 +30,9 @@ export interface RequestLogResponse {
 /** Requests the dashboard makes every poll, which would bury everything else */
 export const UNLOGGED_PATHS = new Set(['/api/game/metrics', '/api/game/logs', '/api/game/requests'])
 
+/** The network debug endpoints, polled by the dashboard's Network tab and the editor's Network panel */
+export const UNLOGGED_PREFIX = '/api/game/dev/net/'
+
 const STATUS_LINE_RE = /^HTTP\/\d(?:\.\d)? (\d{3})/
 
 /**
@@ -86,7 +89,7 @@ export default class RequestLog {
 
   private onRequest(req: IncomingMessage, res: ServerResponse) {
     const path = pathOf(req)
-    if (UNLOGGED_PATHS.has(path) || this.ignoredPrefixes.some(prefix => path.startsWith(prefix)))
+    if (UNLOGGED_PATHS.has(path) || path.startsWith(UNLOGGED_PREFIX) || this.ignoredPrefixes.some(prefix => path.startsWith(prefix)))
       return
 
     const timestamp = Date.now()

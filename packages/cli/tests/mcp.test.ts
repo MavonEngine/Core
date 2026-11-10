@@ -8,6 +8,7 @@ import { parseMcpArgs } from '../src/commands/mcp'
 import { compareEntities } from '../src/mcp/clientTools'
 import { writeMcpConfig } from '../src/mcp/config'
 import GameServerClient from '../src/mcp/GameServerClient'
+import { mergeTimeline } from '../src/mcp/networkTools'
 import { createMcpServer } from '../src/mcp/server'
 
 const metrics = {
@@ -62,6 +63,8 @@ describe('mcp server', () => {
       'client_entity',
       'client_logs',
       'client_network',
+      'client_packet',
+      'client_packets',
       'client_scene',
       'client_screenshot',
       'client_status',
@@ -72,6 +75,10 @@ describe('mcp server', () => {
       'list_clients',
       'list_entities',
       'list_players',
+      'network_packet',
+      'network_packets',
+      'network_sync',
+      'network_timeline',
       'recent_logs',
       'recent_requests',
       'server_metrics',
@@ -297,6 +304,134 @@ describe('client tools', () => {
 
     await gameServer.clients()
     expect(calls[0]!.href).toBe('http://localhost:5173/vite/__mavonengine/clients')
+  })
+})
+
+describe('network tools', () => {
+  const bridge = '/__mavonengine/clients'
+  const record = (id: number, timestamp: number, extra: Record<string, unknown> = {}) => ({ id, timestamp, kind: 'packet', type: 'sv_state', hasPayload: true, ...extra })
+
+  it('lists the server\'s packets, passing the filters on', async () => {
+    const { call, calls } = await connect({
+      '/api/game/dev/net/packets': { enabled: true, latestId: 9, matched: 1, records: [record(9, 0, { direction: 'out', peer: 'p1', bytes: 120, tick: 4 })] },
+    })
+
+    const { data } = await call('network_packets', { peer: 'p1', direction: 'out', type: 'sv_state', afterId: 3, limit: 10 })
+
+    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ peer: 'p1', direction: 'out', type: 'sv_state', after: '3', limit: '10' })
+    expect(data).toEqual({
+      latestId: 9,
+      matched: 1,
+      records: [{ id: 9, kind: 'packet', type: 'sv_state', hasPayload: true, direction: 'out', peer: 'p1', bytes: 120, tick: 4, time: '1970-01-01T00:00:00.000Z' }],
+    })
+  })
+
+  it('says when a side records nothing', async () => {
+    const { call } = await connect({ '/api/game/dev/net/packets': { enabled: false, latestId: 0, matched: 0, records: [] } })
+    expect((await call('network_packets')).data.note).toContain('Nothing is being recorded')
+  })
+
+  it('shows one packet with its payload and explains a missing one', async () => {
+    const { call } = await connect({
+      '/api/game/dev/net/packets/9': { record: { ...record(9, 0), payload: { tick: 4, entities: [] } } },
+      '/api/game/dev/net/packets/1': { record: null },
+    })
+
+    expect((await call('network_packet', { id: 9 })).data.payload).toEqual({ tick: 4, entities: [] })
+    const missing = await call('network_packet', { id: 1 })
+    expect(missing.isError).toBe(true)
+    expect(missing.text).toContain('No record 1')
+  })
+
+  it('explains that the network tools need a development server', async () => {
+    const { call } = await connect({})
+    const result = await call('network_sync')
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain('NODE_ENV=production')
+  })
+
+  it('reads the state sync, for everyone or as one player', async () => {
+    const sync = {
+      tick: 40,
+      syncDistance: 100,
+      players: [{ id: 'p1', tracked: ['p1', 'rock'] }, { id: 'p2', tracked: ['p2'] }],
+      editors: [],
+      entities: [{ id: 'p1' }, { id: 'p2' }, { id: 'rock' }],
+    }
+    const { call } = await connect({ '/api/game/dev/net/sync': sync })
+
+    expect((await call('network_sync')).data).toEqual(sync)
+    expect((await call('network_sync', { includeEntities: false })).data).toMatchObject({ tick: 40, entityCount: 3, players: sync.players })
+
+    const asPlayer = (await call('network_sync', { player: 'p2' })).data
+    expect(asPlayer.player).toEqual({ id: 'p2', tracked: ['p2'] })
+    expect(asPlayer.entities).toEqual([{ id: 'p1', tracked: false }, { id: 'p2', tracked: true }, { id: 'rock', tracked: false }])
+
+    const unknown = await call('network_sync', { player: 'nope' })
+    expect(unknown.isError).toBe(true)
+    expect(unknown.text).toContain('Players: p1, p2')
+  })
+
+  it('lists and shows a tab\'s packets', async () => {
+    const { call, calls } = await connect({
+      [`${bridge}/auto/packets`]: { enabled: true, latestId: 2, matched: 1, records: [record(2, 0, { direction: 'in' })] },
+      [`${bridge}/tab1/packet`]: { record: { ...record(2, 0), payload: { tick: 1 } } },
+    })
+
+    expect((await call('client_packets', { kind: 'packet' })).data.records).toMatchObject([{ id: 2, direction: 'in' }])
+    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ kind: 'packet', after: '0', limit: '50' })
+
+    expect((await call('client_packet', { id: 2, clientId: 'tab1' })).data.payload).toEqual({ tick: 1 })
+    expect(calls.at(-1)!.searchParams.get('id')).toBe('2')
+  })
+
+  it('merges both sides of one client into a timeline', async () => {
+    const now = Date.now()
+    const { call, calls } = await connect({
+      [`${bridge}/auto/network`]: { network: { playerId: 'p1', pingMs: 20 } },
+      '/api/game/dev/net/packets': {
+        latestId: 4,
+        matched: 4,
+        records: [
+          record(1, now - 60000, { direction: 'out' }),
+          record(2, now - 300, { direction: 'out', tick: 7 }),
+          record(3, now - 200, { type: 'pong', direction: 'out' }),
+          record(4, now - 100, { kind: 'event', type: 'sync_leave' }),
+        ],
+      },
+      [`${bridge}/auto/packets`]: {
+        latestId: 2,
+        matched: 2,
+        records: [record(1, now - 280, { direction: 'in', tick: 7 }), record(2, now - 250, { type: 'command', direction: 'out', sequenceId: 3 })],
+      },
+    })
+
+    const { data } = await call('network_timeline')
+
+    expect(calls.find(url => url.pathname === '/api/game/dev/net/packets')!.searchParams.get('peer')).toBe('p1')
+    expect(data).toMatchObject({ playerId: 'p1', pingMs: 20, matched: 4 })
+    expect(data.entries.map((e: any) => [e.side, e.type, e.direction])).toEqual([
+      ['server', 'sv_state', 'out'],
+      ['client', 'sv_state', 'in'],
+      ['client', 'command', 'out'],
+      ['server', 'sync_leave', undefined],
+    ])
+
+    expect((await call('network_timeline', { includePings: true })).data.matched).toBe(5)
+    await call('network_timeline', { eventsOnly: true })
+    expect(calls.at(-1)!.searchParams.get('kind')).toBe('event')
+  })
+
+  it('explains a tab that is not connected', async () => {
+    const { call } = await connect({ [`${bridge}/auto/network`]: { network: null } })
+    const result = await call('network_timeline')
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain('not connected')
+  })
+
+  it('orders records with the same time server first', () => {
+    const merged = mergeTimeline([record(5, 100), record(6, 100)], [record(1, 100), record(2, 50)])
+    expect(merged.map(r => [r.side, r.id])).toEqual([['client', 2], ['server', 5], ['server', 6], ['client', 1]])
   })
 })
 

@@ -2,6 +2,7 @@ import type Game from '../Game'
 import type GameObject from '../World/GameObject'
 import type { BridgeClientInfo, BridgeQuery, BridgeRequest, BridgeResponse } from './bridgeProtocol'
 import type { EntitySummary } from './inspect'
+import { parseNetRecordQuery, setNetDebugDefault } from '../Networking/Debug/NetRecorder'
 import { BRIDGE_ANNOUNCE, BRIDGE_HELLO, BRIDGE_QUERIES, BRIDGE_REQUEST, BRIDGE_RESPONSE, traceDuration } from './bridgeProtocol'
 import { describeScene, detailEntity, parseEntityQuery, queryEntities, summarizeEntity, vec } from './inspect'
 import { recordTrace } from './trace'
@@ -46,6 +47,11 @@ export function startDevBridge(hot: HotChannel) {
   started = true
 
   captureConsole()
+
+  // Record the traffic of the game connection, whether it exists yet or not
+  setNetDebugDefault(true)
+  if (window.Game?.network?.net)
+    window.Game.network.net.enabled = true
 
   const hello = () => hot.send(BRIDGE_HELLO, info())
   hot.on(BRIDGE_ANNOUNCE, hello)
@@ -232,8 +238,34 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
         /** Inputs sent but not yet acknowledged by the server, replayed for prediction */
         pendingCommands: internals.localCommandQueue?.length ?? null,
         nextSequenceId: internals.currentSequenceId ?? null,
+        /** The last state update: its server tick, the last input it acknowledges, how long ago it arrived */
+        lastState: network.serverView && {
+          tick: network.serverView.tick,
+          serverTime: network.serverView.serverTime,
+          ack: network.serverView.ack,
+          ageMs: network.serverView.receivedAt === null ? null : Math.round(performance.now() - network.serverView.receivedAt),
+          missedStates: network.serverView.missedStates,
+        },
+        recording: network.net?.enabled ?? false,
       },
     }
+  },
+
+  packets(params) {
+    const query = parseNetRecordQuery(params)
+    if (typeof query === 'string')
+      throw new Error(query)
+    const net = game().network?.net
+    if (!net)
+      throw new Error('This tab has no NetworkManager: it is not connected to a game server')
+    return net.list(query)
+  },
+
+  packet({ id }) {
+    const net = game().network?.net
+    if (!net)
+      throw new Error('This tab has no NetworkManager: it is not connected to a game server')
+    return { record: net.get(Number(id)) ?? null }
   },
 
   logs({ after }) {

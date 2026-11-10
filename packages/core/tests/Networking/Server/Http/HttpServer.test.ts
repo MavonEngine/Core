@@ -2,6 +2,7 @@ import type { Server as NodeServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/HttpServer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import NetRecorder from '../../../../src/Networking/Debug/NetRecorder'
 import HttpServer, { METRICS_CLIENT_TIMEOUT_MS, parseEntityQuery } from '../../../../src/Networking/Server/Http/HttpServer'
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 import RequestLog from '../../../../src/Networking/Server/Stats/RequestLog'
@@ -176,6 +177,37 @@ describe('httpServer', () => {
       const bad = await request('/api/game/dev/entities?near=1,2')
       expect(bad.status).toBe(400)
       expect(await bad.json()).toEqual({ error: 'near must be x,y,z' })
+    })
+
+    it('serves the recorded packets and the state sync', async () => {
+      const net = new NetRecorder({ enabled: true })
+      net.packet('out', 'sv_state', { tick: 1, entities: [] }, { peer: 'p1' })
+      net.packet('in', 'command', { type: 'cl_move', sequenceId: 2 }, { peer: 'p1' })
+      const request = await serve({ net: { net, syncSnapshot: () => ({ tick: 9 }) as any } })
+
+      const all = await (await request('/api/game/dev/net/packets')).json()
+      expect(all).toMatchObject({ enabled: true, latestId: 2, matched: 2, records: [{ type: 'sv_state' }, { type: 'command' }] })
+
+      const filtered = await (await request('/api/game/dev/net/packets?after=1&direction=in&peer=p1&limit=5')).json()
+      expect(filtered.records).toMatchObject([{ id: 2, type: 'command', sequenceId: 2 }])
+
+      expect(await (await request('/api/game/dev/net/packets/1')).json()).toMatchObject({ record: { id: 1, payload: { tick: 1, entities: [] } } })
+      expect(await (await request('/api/game/dev/net/packets/99')).json()).toEqual({ record: null })
+      expect(await (await request('/api/game/dev/net/sync')).json()).toEqual({ tick: 9 })
+
+      const bad = await request('/api/game/dev/net/packets?kind=frame')
+      expect(bad.status).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'kind must be packet or event' })
+    })
+
+    it('does not serve the network debug endpoints in production or without a source', async () => {
+      expect((await (await serve({ inspector: fakeInspector() }))('/api/game/dev/net/sync')).status).toBe(404)
+      listener?.close()
+
+      vi.stubEnv('NODE_ENV', 'production')
+      const request = await serve({ net: { net: new NetRecorder({ enabled: true }), syncSnapshot: () => ({}) as any }, metrics: { token: 'secret' } })
+      expect((await request('/api/game/dev/net/sync?token=secret')).status).toBe(404)
+      expect((await request('/api/game/dev/net/packets?token=secret')).status).toBe(404)
     })
 
     it('are not registered without an inspector', async () => {
