@@ -106,6 +106,16 @@ export default class GameServerClient {
     return this.get(`api/game/dev/entities/${encodeURIComponent(id)}`, {}, DEV_UNAVAILABLE)
   }
 
+  /** The plugins of the project and whether each runs on the server */
+  plugins() {
+    return this.get('api/game/plugins', {}, 'The game server doesn\'t list its plugins: it runs a @mavonengine/core release without GET /api/game/plugins, or its metrics endpoints are off')
+  }
+
+  /** Every HTTP endpoint of the server, with who registered it */
+  routes() {
+    return this.get('api/game/routes', {}, 'The game server doesn\'t list its endpoints: it runs a @mavonengine/core release without GET /api/game/routes, or its metrics endpoints are off')
+  }
+
   /** Packets and network events the server recorded, oldest first */
   packets(query: PacketQuery = {}) {
     return this.get('api/game/dev/net/packets', packetParams(query), NET_UNAVAILABLE)

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parseDashboardArgs, UsageError } from '../src/commands/dashboard'
 
 describe('parseDashboardArgs', () => {
@@ -71,5 +71,28 @@ describe('parseDashboardArgs', () => {
 
   it('rejects unknown flags', () => {
     expect(() => parseDashboardArgs(['--nope'], {})).toThrow()
+  })
+
+  it('sends the metrics token, or else the server\'s admin token, which reads the metrics too', async () => {
+    const sent: (string | undefined)[] = []
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      sent.push((init?.headers as Record<string, string> | undefined)?.Authorization)
+      return Response.json({})
+    })
+
+    const tokenOf = async (args: string[], env: Record<string, string>) => {
+      const options = parseDashboardArgs(args, env)
+      if (options === 'help')
+        throw new Error('unexpected help')
+      await options.source.fetch()
+      return sent.at(-1)
+    }
+
+    expect(await tokenOf([], {})).toBeUndefined()
+    expect(await tokenOf([], { MAVONENGINE_ADMIN_TOKEN: 'admin' })).toBe('Bearer admin')
+    expect(await tokenOf([], { MAVONENGINE_METRICS_TOKEN: 'metrics', MAVONENGINE_ADMIN_TOKEN: 'admin' })).toBe('Bearer metrics')
+    expect(await tokenOf(['--token', 'flag'], { MAVONENGINE_METRICS_TOKEN: 'metrics', MAVONENGINE_ADMIN_TOKEN: 'admin' })).toBe('Bearer flag')
+
+    fetch.mockRestore()
   })
 })

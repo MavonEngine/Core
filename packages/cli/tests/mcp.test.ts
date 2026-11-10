@@ -37,9 +37,13 @@ function fakeFetch(routes: Record<string, unknown | Route>) {
   return { fetch, calls }
 }
 
-async function connect(routes: Record<string, unknown | Route>, url = 'http://localhost:8050') {
+const PLUGIN_LIST = 'https://plugins.test/plugins.json'
+
+async function connect(routes: Record<string, unknown | Route>, url = 'http://localhost:8050', pluginList: Record<string, unknown | Route> | false = {}) {
   const { fetch, calls } = fakeFetch(routes)
-  const server = createMcpServer(new GameServerClient({ url, fetch }))
+  // The list of plugins that can be installed is on another host than the game server
+  const web = fakeFetch(pluginList || {})
+  const server = createMcpServer(new GameServerClient({ url, fetch }), undefined, pluginList ? { url: PLUGIN_LIST, fetch: web.fetch } : undefined)
   const client = new Client({ name: 'test', version: '0' })
   const [a, b] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(a), client.connect(b)])
@@ -50,7 +54,7 @@ async function connect(routes: Record<string, unknown | Route>, url = 'http://lo
     return { isError: !!result.isError, text, data: result.isError ? undefined : JSON.parse(text) }
   }
 
-  return { client, call, calls }
+  return { client, call, calls, webCalls: web.calls }
 }
 
 describe('mcp server', () => {
@@ -59,6 +63,7 @@ describe('mcp server', () => {
 
     const { tools } = await client.listTools()
     expect(tools.map(t => t.name).sort()).toEqual([
+      'available_plugins',
       'client_entities',
       'client_entity',
       'client_logs',
@@ -75,10 +80,12 @@ describe('mcp server', () => {
       'list_clients',
       'list_entities',
       'list_players',
+      'list_plugins',
       'network_packet',
       'network_packets',
       'network_sync',
       'network_timeline',
+      'plugin_readme',
       'recent_logs',
       'recent_requests',
       'server_metrics',
@@ -435,6 +442,127 @@ describe('network tools', () => {
   })
 })
 
+describe('plugin tools', () => {
+  const installed = {
+    plugins: [
+      { package: '@mavonengine/chat', enabled: true, installed: true, runningOnServer: true, version: '0.0.1', target: 'both', declaredPrefabs: [], usedPrefabs: [] },
+      { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+    ],
+  }
+  const routes = {
+    routes: [
+      { method: 'GET', path: '/api/game/health', source: 'engine', devOnly: false },
+      { method: 'GET', path: '/api/chat/messages', source: 'plugin', plugin: '@mavonengine/chat', devOnly: false, summary: 'The recent chat messages', auth: 'The admin token' },
+      { method: 'POST', path: '/api/chat/mutes', source: 'plugin', plugin: '@mavonengine/chat', devOnly: false, summary: 'Mute a player' },
+      { method: 'GET', path: '/other', source: 'plugin', plugin: 'other', devOnly: false },
+    ],
+  }
+  const list = {
+    version: 1,
+    plugins: [
+      { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring', readme: 'https://plugins.test/monitoring/README.md' },
+      { package: '@mavonengine/chat', name: 'Chat', description: 'In-game text chat', target: 'both', readme: 'https://plugins.test/chat/README.md' },
+      { package: 'bare' },
+    ],
+  }
+  const web = {
+    '/plugins.json': list,
+    '/chat/README.md': () => new Response('# @mavonengine/chat\n\nText chat.'),
+  }
+
+  it('lists the project\'s plugins with the endpoints each registered', async () => {
+    const { call } = await connect({ '/api/game/plugins': installed, '/api/game/routes': routes })
+
+    const { data } = await call('list_plugins')
+
+    expect(data.plugins).toEqual([
+      {
+        ...installed.plugins[0],
+        endpoints: [
+          { method: 'GET', path: '/api/chat/messages', devOnly: false, summary: 'The recent chat messages' },
+          { method: 'POST', path: '/api/chat/mutes', devOnly: false, summary: 'Mute a player' },
+        ],
+      },
+      { ...installed.plugins[1], endpoints: [] },
+    ])
+  })
+
+  it('still lists the plugins of a server that doesn\'t list its endpoints, and says so when it lists neither', async () => {
+    const withoutRoutes = await connect({ '/api/game/plugins': installed })
+    expect((await withoutRoutes.call('list_plugins')).data.plugins.map((plugin: any) => [plugin.package, plugin.endpoints])).toEqual([['@mavonengine/chat', null], ['ghost', null]])
+
+    const older = await connect({})
+    const { isError, text } = await older.call('list_plugins')
+    expect(isError).toBe(true)
+    expect(text).toContain('GET /api/game/plugins')
+  })
+
+  it('lists the plugins that can be installed, with how, and which the project has', async () => {
+    const { call, webCalls } = await connect({ '/api/game/plugins': installed, '/api/game/routes': routes }, undefined, web)
+
+    const { data } = await call('available_plugins')
+
+    expect(webCalls.map(url => url.href)).toEqual([PLUGIN_LIST])
+    expect(data).toEqual({
+      source: PLUGIN_LIST,
+      projectPlugins: 'known',
+      plugins: [
+        { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', runsOn: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring', hasReadme: true, inProject: false, install: 'npx @mavonengine/cli install @mavonengine/http-monitoring' },
+        { package: '@mavonengine/chat', name: 'Chat', description: 'In-game text chat', runsOn: 'both', hasReadme: true, inProject: true, install: 'npx @mavonengine/cli install @mavonengine/chat' },
+        { package: 'bare', name: 'bare', hasReadme: false, inProject: false, install: 'npx @mavonengine/cli install bare' },
+      ],
+    })
+  })
+
+  it('lists them without a running game server, not knowing what the project has', async () => {
+    const { call } = await connect({}, undefined, web)
+
+    const { data } = await call('available_plugins')
+
+    expect(data.projectPlugins).toContain('unknown')
+    expect(data.plugins.map((plugin: any) => [plugin.package, plugin.inProject])).toEqual([['@mavonengine/http-monitoring', null], ['@mavonengine/chat', null], ['bare', null]])
+  })
+
+  it('reads the readme of a plugin on the list', async () => {
+    const { client, webCalls } = await connect({}, undefined, web)
+
+    const result = await client.callTool({ name: 'plugin_readme', arguments: { package: '@mavonengine/chat' } }) as { isError?: boolean, content: { text: string }[] }
+
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0]!.text).toBe('# @mavonengine/chat\n\nText chat.')
+    expect(webCalls.map(url => url.href)).toEqual([PLUGIN_LIST, 'https://plugins.test/chat/README.md'])
+  })
+
+  it('says what is wrong when there is no readme to read', async () => {
+    const { call } = await connect({}, undefined, web)
+
+    const unknown = await call('plugin_readme', { package: 'nope' })
+    expect(unknown.isError).toBe(true)
+    expect(unknown.text).toBe('nope is not on the list of plugins. It has: @mavonengine/http-monitoring, @mavonengine/chat, bare')
+
+    const without = await call('plugin_readme', { package: 'bare' })
+    expect(without.text).toBe('The list has no readme for bare')
+
+    // Listed, but its readme is gone
+    const missing = await call('plugin_readme', { package: '@mavonengine/http-monitoring' })
+    expect(missing.isError).toBe(true)
+    expect(missing.text).toContain('was not found')
+
+    const offline = await connect({}, undefined, {})
+    expect((await offline.call('available_plugins')).text).toBe(`${PLUGIN_LIST} was not found`)
+  })
+
+  it('leaves out the tools that read the list when told to, and keeps the project\'s plugins', async () => {
+    const { client } = await connect({}, undefined, false)
+
+    const names = (await client.listTools()).tools.map(tool => tool.name)
+
+    expect(names).toContain('list_plugins')
+    expect(names).not.toContain('available_plugins')
+    expect(names).not.toContain('plugin_readme')
+  })
+})
+
 describe('parseMcpArgs', () => {
   it('builds the server URL from host and port, or takes --url', () => {
     const fromPort = parseMcpArgs(['--port', '9000'], {})
@@ -450,6 +578,23 @@ describe('parseMcpArgs', () => {
     const vite = parseMcpArgs(['--client-url', 'http://localhost:5173'], {})
     expect(vite !== 'help' && vite.client.clientUrl).toBe('http://localhost:5173/')
     expect(() => parseMcpArgs(['--client-url', 'nope'], {})).toThrow('Invalid --client-url')
+  })
+
+  it('reads the list of plugins from GitHub, or from where it is told, or not at all', () => {
+    const options = (args: string[], env: Record<string, string> = {}) => {
+      const parsed = parseMcpArgs(args, env)
+      if (parsed === 'help')
+        throw new Error('unexpected help')
+      return parsed
+    }
+
+    expect(options([]).pluginsUrl).toBe('https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json')
+    expect(options([], { MAVONENGINE_PLUGINS_URL: 'https://example.com/fork.json' }).pluginsUrl).toBe('https://example.com/fork.json')
+    expect(options(['--plugins-url', 'https://example.com/mine.json'], { MAVONENGINE_PLUGINS_URL: 'https://example.com/fork.json' }).pluginsUrl).toBe('https://example.com/mine.json')
+    expect(options(['--no-plugin-list']).pluginsUrl).toBe(false)
+    // The docs tools are a separate switch
+    expect(options(['--no-plugin-list']).docsUrl).not.toBe(false)
+    expect(() => parseMcpArgs(['--plugins-url', 'nope'], {})).toThrow('Invalid --plugins-url')
   })
 
   it('rejects bad input and shows help', () => {

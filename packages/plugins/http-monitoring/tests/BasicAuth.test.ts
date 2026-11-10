@@ -167,6 +167,44 @@ describe('basicAuth', () => {
     expect(logger.warn.mock.calls[0][0]).toContain('could not re-read the htpasswd file')
   })
 
+  describe('with the game server\'s admin token', () => {
+    const adminToken = { configured: true, matches: (candidate: string) => candidate === 'server-secret' }
+
+    it('asks for a login and takes the token as the password or as a bearer token', async () => {
+      const auth = new BasicAuth({ realm: 'r', adminToken })
+
+      expect(auth.requiresLogin).toBe(true)
+      // Also from this machine: there is something to log in with now
+      expect((await call(auth, { address: '127.0.0.1' })).status).toBe(401)
+      expect((await call(auth, { authorization: basic('whoever', 'server-secret') })).passed).toBe(true)
+      expect((await call(auth, { authorization: 'Bearer server-secret' })).passed).toBe(true)
+      expect((await call(auth, { authorization: basic('server-secret', 'x') })).status).toBe(401)
+      expect((await call(auth, { authorization: 'Bearer nope' })).status).toBe(401)
+    })
+
+    it('counts wrong tokens as failed logins', async () => {
+      const logger = { info: vi.fn(), warn: vi.fn() }
+      const auth = new BasicAuth({ realm: 'r', adminToken, logger, maxFailures: 2 })
+
+      await call(auth, { authorization: 'Bearer nope' })
+      await call(auth, { authorization: basic('ops', 'nope') })
+
+      expect(logger.warn.mock.calls.map(c => c[0])).toEqual([
+        'Monitoring: failed login with a token from 203.0.113.5',
+        'Monitoring: failed login for "ops" from 203.0.113.5',
+      ])
+      // Locked out now, even with the right token
+      expect((await call(auth, { authorization: 'Bearer server-secret' })).status).toBe(429)
+    })
+
+    it('is no login when the server has no token', async () => {
+      const auth = new BasicAuth({ realm: 'r', adminToken: { configured: false, matches: () => false } })
+
+      expect(auth.requiresLogin).toBe(false)
+      expect((await call(auth, { address: '127.0.0.1' })).passed).toBe(true)
+    })
+  })
+
   describe('without a login configured', () => {
     it('only lets this machine in', async () => {
       const auth = new BasicAuth({ realm: 'r' })

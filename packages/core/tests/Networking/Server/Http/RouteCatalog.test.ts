@@ -1,6 +1,6 @@
 import express from 'express'
 import { describe, expect, it } from 'vitest'
-import RouteCatalog, { describeRoute } from '../../../../src/Networking/Server/Http/RouteCatalog'
+import RouteCatalog, { describeAuth, describeRoute } from '../../../../src/Networking/Server/Http/RouteCatalog'
 
 const handler = (_req: unknown, res: { end(): void }) => res.end()
 
@@ -108,6 +108,22 @@ describe('routeCatalog', () => {
       ['/api/debug/state', true],
       ['/api/scores', false],
       ['/api/undescribed', false],
+    ])
+  })
+
+  it('takes who may call a route from its guard, unless the route says so itself', () => {
+    const app = express()
+    const catalog = new RouteCatalog(app)
+    const guard = describeAuth((_req: unknown, _res: unknown, next: () => void) => next(), 'Members only')
+
+    app.get('/guarded', guard, handler)
+    app.get('/described', describeRoute({ summary: 'Described', auth: 'Its own rule' }), guard, handler)
+    app.get('/open', handler)
+
+    expect(catalog.list().map(route => [route.path, route.auth])).toEqual([
+      ['/guarded', 'Members only'],
+      ['/described', 'Its own rule'],
+      ['/open', undefined],
     ])
   })
 

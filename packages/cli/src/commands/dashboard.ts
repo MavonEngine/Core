@@ -19,7 +19,8 @@ Options:
   --host <host>        Server host (default: localhost)
   --port <port>        Server HTTP port (default: 8050)
   --url <url>          Full metrics URL, overrides --host and --port
-  --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
+  --token <token>      Metrics or admin token (or set MAVONENGINE_METRICS_TOKEN
+                       or MAVONENGINE_ADMIN_TOKEN)
   --interval <ms>      Poll interval in ms (default: 1000)
   --theme <name>       dark, dracula, nord, tokyoNight, gruvbox, matrix, light, …
   --transparent        Let a transparent terminal background show through
@@ -96,7 +97,8 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
     throw new UsageError(`Invalid --url: ${url}`)
   }
 
-  const token = values.token ?? env.MAVONENGINE_METRICS_TOKEN
+  // The server's admin token reads the metrics too
+  const token = values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN
 
   return { source: httpSource({ url, token }), clientUrl: new URL('/', url).href, intervalMs, theme: values.theme, transparent: values.transparent }
 }

@@ -9,6 +9,15 @@
       "engine": ">=0.0.22",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/http-monitoring",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/http-monitoring/README.md"
+    },
+    {
+      "package": "@mavonengine/chat",
+      "name": "Chat",
+      "description": "In-game text chat with rate limiting, mutes, proximity chat and an admin API",
+      "target": "both",
+      "engine": ">=0.0.22",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/chat",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/chat/README.md"
     }
   ]
 }

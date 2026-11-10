@@ -1,6 +1,6 @@
 import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Express, Request, Response } from 'express'
-import type { CredentialSource, Logger } from './auth/BasicAuth'
+import type { AdminToken, CredentialSource, Logger } from './auth/BasicAuth'
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
@@ -92,17 +92,23 @@ function afterId(req: Request): number {
 /**
  * Mount the dashboard and its data endpoints on `app`. Returns false when it stays off.
  */
-export function mountMonitoring(app: Express, ctx: Pick<ServerPluginContext, 'server' | 'logger' | 'options' | 'projectRoot'>, env: Env = process.env): boolean {
+export function mountMonitoring(app: Express, ctx: Pick<ServerPluginContext, 'server' | 'logger' | 'options' | 'projectRoot'> & { adminToken?: AdminToken }, env: Env = process.env): boolean {
   const logger = ctx.logger as Logger | undefined
   const options = resolveOptions(ctx.options as HttpMonitoringOptions, ctx.projectRoot ?? process.cwd(), env)
   const production = env.NODE_ENV === 'production'
 
-  if (!options.credentials && production) {
-    logger?.warn('Monitoring is off: set "htpasswd" in its mavonengine.json options, or MAVONENGINE_MONITORING_USER and MAVONENGINE_MONITORING_PASSWORD, to use it in production')
+  // Missing on a @mavonengine/core from before the server had an admin token
+  const adminToken = ctx.adminToken?.configured ? ctx.adminToken : undefined
+
+  if (!options.credentials && !adminToken && production) {
+    logger?.warn('Monitoring is off: give the game server an admin token (MAVONENGINE_ADMIN_TOKEN, or adminToken in its options) to use it in production')
     return false
   }
 
-  const auth = new BasicAuth({ realm: options.realm, credentials: options.credentials, logger })
+  if (options.credentials?.kind === 'user')
+    logger?.warn('Monitoring: MAVONENGINE_MONITORING_USER and MAVONENGINE_MONITORING_PASSWORD are deprecated. Log in with the game server\'s admin token (MAVONENGINE_ADMIN_TOKEN) as the password instead')
+
+  const auth = new BasicAuth({ realm: options.realm, credentials: options.credentials, adminToken, logger })
   if (options.credentials?.kind === 'htpasswd' && auth.userCount === 0)
     logger?.warn(`Monitoring: ${options.credentials.path} has no usable users, nobody can log in`)
 
@@ -151,10 +157,14 @@ export function mountMonitoring(app: Express, ctx: Pick<ServerPluginContext, 'se
     res.json(server.requests.since(afterId(req)))
   })
 
-  if (options.credentials)
-    logger?.info(`Monitoring dashboard at ${base}/, login with ${options.credentials.kind === 'htpasswd' ? `a user from ${options.credentials.path}` : `user "${options.credentials.user}"`}`)
+  const logins = [
+    ...(adminToken ? ['the game server\'s admin token as the password'] : []),
+    ...(options.credentials ? [options.credentials.kind === 'htpasswd' ? `a user from ${options.credentials.path}` : `user "${options.credentials.user}"`] : []),
+  ]
+  if (logins.length)
+    logger?.info(`Monitoring dashboard at ${base}/, login with ${logins.join(' or ')}`)
   else
-    logger?.warn(`Monitoring dashboard at ${base}/, only from this machine: no login is configured`)
+    logger?.warn(`Monitoring dashboard at ${base}/, only from this machine: the game server has no admin token`)
 
   return true
 }

@@ -1,7 +1,7 @@
-import type { Express, NextFunction, Request, Response } from 'express'
+import type { Express, NextFunction, Request, RequestHandler, Response } from 'express'
 import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
-import type { ServerPluginInfo } from '../../../Plugins/types'
+import type { AdminToken, ServerPluginInfo } from '../../../Plugins/types'
 import type { NetDebugSource } from '../../Debug/sync'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
@@ -17,7 +17,7 @@ import { parseEntityQuery } from '../../../Dev/inspect'
 import { parseNetRecordQuery } from '../../Debug/NetRecorder'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
-import RouteCatalog, { describeRoute } from './RouteCatalog'
+import RouteCatalog, { describeAuth, describeRoute } from './RouteCatalog'
 
 export { parseEntityQuery }
 
@@ -36,8 +36,16 @@ export interface MetricsEndpointOptions {
   token?: string
 }
 
+/** Where the admin token is read from when the server's options don't give one */
+export const ADMIN_TOKEN_ENV = 'MAVONENGINE_ADMIN_TOKEN'
+
 export interface HttpServerOptions {
   port?: number
+  /**
+   * The server's admin token: what `requireAdmin` asks for, and what the metrics endpoints take as well.
+   * Without one, `requireAdmin` only lets requests from localhost through.
+   */
+  adminToken?: string
   metrics?: MetricsEndpointOptions
   /** Serves recent log entries on GET /api/game/logs when given */
   logs?: LogBuffer
@@ -77,7 +85,18 @@ export default class HttpServer {
   /** Lists every route of `app`, see GET /api/game/routes */
   readonly routes: RouteCatalog
 
+  /**
+   * Guard for routes that change the server or tell what not everyone should know: put it in front of the handler.
+   * With an admin token it wants `Authorization: Bearer <token>`, without one it only lets localhost through.
+   * One token for the engine and every plugin, so nothing needs a token of its own.
+   */
+  readonly requireAdmin: RequestHandler
+
+  /** Checks a candidate against the admin token without giving the token away, for logins that take it as a password */
+  readonly adminToken: AdminToken
+
   private port: number
+  private adminSecret?: string
   private metricsOptions: MetricsEndpointOptions
   private logs?: LogBuffer
   private requests?: RequestLog
@@ -96,6 +115,18 @@ export default class HttpServer {
   ) {
     this.app = app
     this.port = options.port ?? 8050
+    const secret = options.adminToken || undefined
+    this.adminSecret = secret
+    this.adminToken = {
+      configured: !!secret,
+      matches: candidate => !!secret && typeof candidate === 'string' && safeEqual(candidate, secret),
+    }
+    this.requireAdmin = describeAuth(
+      (req, res, next) => this.authorizeAdmin(req, res, next),
+      secret
+        ? 'The server\'s admin token as `Authorization: Bearer <token>`'
+        : `Requests from localhost only. Set the server's admin token (\`adminToken\` in its options, or ${ADMIN_TOKEN_ENV}) to use it from elsewhere`,
+    )
     this.metricsOptions = options.metrics ?? {}
     this.logs = options.logs
     this.requests = options.requests
@@ -175,7 +206,7 @@ export default class HttpServer {
     if (!enabled)
       return false
 
-    return process.env.NODE_ENV !== 'production' || !!token
+    return process.env.NODE_ENV !== 'production' || !!token || !!this.adminSecret
   }
 
   private registerHealthEndpoint() {
@@ -397,19 +428,37 @@ export default class HttpServer {
       return
     }
 
-    const { token } = this.metricsOptions
+    // Whoever may administer the server may also read its metrics
+    const tokens = [this.metricsOptions.token, this.adminSecret].filter((token): token is string => !!token)
 
-    if (token) {
+    if (tokens.length) {
       const header = req.headers.authorization
       const provided = header?.startsWith('Bearer ') ? header.slice(7) : req.query.token
 
-      if (typeof provided !== 'string' || !safeEqual(provided, token)) {
+      if (typeof provided !== 'string' || !tokens.some(token => safeEqual(provided, token))) {
         res.status(401).json({ error: 'Invalid metrics token' })
         return
       }
     }
     else if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
       res.status(403).json({ error: 'Metrics are only available from localhost unless a token is configured' })
+      return
+    }
+
+    next()
+  }
+
+  private authorizeAdmin(req: Request, res: Response, next: NextFunction) {
+    if (this.adminSecret) {
+      // Only as a header: a token in the URL ends up in logs and browser histories
+      const header = req.headers.authorization
+      if (!header?.startsWith('Bearer ') || !this.adminToken.matches(header.slice(7))) {
+        res.status(401).json({ error: 'Invalid admin token' })
+        return
+      }
+    }
+    else if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+      res.status(403).json({ error: `Only available from localhost unless the server has an admin token (adminToken in its options, or ${ADMIN_TOKEN_ENV})` })
       return
     }
 

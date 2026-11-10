@@ -9,8 +9,9 @@
  * 4. a second tab opens the editor: both tabs are listed, and `auto` still picks the player's tab.
  *    Its Network panel lists the server's packets, and the overlay draws the player's ghost and sync ring
  *
- * Needs Chrome, core and the CLI built and the template's dependencies installed. The docs tools are left out
- * (--no-docs): they read mavonengine.com, which CI shouldn't depend on.
+ * Needs Chrome, core and the CLI built and the template's dependencies installed. The docs tools and the tools for
+ * the plugins that can be installed are left out (--no-docs, --no-plugin-list): they read mavonengine.com and
+ * GitHub, which CI shouldn't depend on.
  *
  *   node e2e/mcp/run.mjs
  */
@@ -135,7 +136,7 @@ async function main() {
 
     log('\n== mcp')
     mcp = new Client({ name: 'e2e', version: '0' })
-    await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--port', String(PORT), '--no-docs'], stderr: 'ignore' }))
+    await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--port', String(PORT), '--no-docs', '--no-plugin-list'], stderr: 'ignore' }))
 
     const call = async (name, args = {}) => {
       const result = await mcp.callTool({ name, arguments: args })
@@ -146,7 +147,7 @@ async function main() {
     const data = async (name, args) => JSON.parse((await call(name, args)).content[0].text)
 
     const { tools } = await mcp.listTools()
-    check(tools.length === 24 && tools.every(tool => tool.annotations?.readOnlyHint), 'it lists 24 read-only tools')
+    check(tools.length === 25 && tools.every(tool => tool.annotations?.readOnlyHint), 'it lists 25 read-only tools')
 
     // The name follows the connection in a message of its own, so the server may know the player before its name
     let serverPlayers
@@ -158,6 +159,9 @@ async function main() {
     }
     check(serverPlayers.length === 1 && serverPlayers[0].displayName === 'Alice', `list_players shows Alice on the server (got ${JSON.stringify(serverPlayers.map(player => player.displayName))})`)
     const playerId = serverPlayers[0].id
+
+    // The template has no plugins, and CI doesn't read the list of those it could add (--no-plugin-list)
+    check((await data('list_plugins')).plugins.length === 0, 'list_plugins asks the server for the project\'s plugins')
 
     const { clients } = await data('list_clients')
     check(clients.length === 1 && clients[0].playerId === playerId && !clients[0].editor, 'list_clients finds the tab, with the player id the server uses')

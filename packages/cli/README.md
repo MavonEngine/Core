@@ -151,7 +151,7 @@ npx @mavonengine/cli dashboard --sim
 | `--host <host>` | `localhost` | Server host |
 | `--port <port>` | `8050` | Server HTTP port (`ServerOptions.httpPort`) |
 | `--url <url>` | | Full metrics URL, overrides `--host` and `--port` |
-| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN` | Metrics token (`ServerOptions.metrics.token`) |
+| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN`, then `$MAVONENGINE_ADMIN_TOKEN` | Metrics token (`ServerOptions.metrics.token`), or the server's [admin token](#admin-token) |
 | `--interval <ms>` | `1000` | Poll interval |
 | `--theme <name>` | `dark` | `dark`, `dracula`, `nord`, `tokyoNight`, `gruvbox`, `matrix`, `monochrome`, `highContrast`, `light` |
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
@@ -190,8 +190,23 @@ const server = new MyServer(logger, physicsWorld, {
 
 - With no token, the endpoint only answers requests from localhost.
 - With `NODE_ENV=production` and no token, the endpoint is turned off.
+- The server's [admin token](#admin-token) is taken as well, and turns the endpoint on in production by itself.
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
+
+### Admin token
+
+A game server has one admin token, for everything that changes it or tells what not everyone should know. The engine and every plugin use the same one, so no plugin needs a secret of its own:
+
+```sh
+MAVONENGINE_ADMIN_TOKEN=… npm start
+```
+
+or `adminToken` in the server's options. Requests send it as `Authorization: Bearer <token>`. Without a token, admin routes only answer requests from localhost.
+
+- It also reads the metrics, so the dashboard and `mavonengine mcp` take it for `--token`. The metrics token stays read-only: it administers nothing.
+- [`@mavonengine/chat`](../plugins/chat) guards its admin API with it, and [`@mavonengine/http-monitoring`](../plugins/http-monitoring) takes it as the password of its login.
+- The Routes tab shows which routes ask for it.
 
 ## `mavonengine mcp`
 
@@ -237,6 +252,16 @@ Client tools, for the game tabs open while Vite serves the client in dev:
 | `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
 | `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, composer passes, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
 | `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
+
+Plugin tools:
+
+| Tool | |
+| --- | --- |
+| `list_plugins` | The plugins in the project's `mavonengine.json`: version, whether each is enabled and runs on the server, its prefabs and the HTTP endpoints it registered |
+| `available_plugins` | The official plugins from [`mavonengine plugins`](#mavonengine-plugins): what each does, where it runs, the command that installs it, and whether the project already has it |
+| `plugin_readme` | The README of one of them as Markdown: its options, how a game hooks into it and its limits |
+
+With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: every tool is read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
 
 Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
 
@@ -329,6 +354,18 @@ export default defineServerPlugin({
 ```
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+Guard a plugin's admin routes with `ctx.requireAdmin`, which asks for the server's [admin token](#admin-token), instead of giving the plugin a token of its own:
+
+```ts
+export default defineServerPlugin({
+  http(app, ctx) {
+    app.post('/api/my-plugin/reset', ctx.requireAdmin, (_req, res) => res.json({ reset: true }))
+  },
+})
+```
+
+A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
 
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 
