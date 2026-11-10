@@ -152,6 +152,18 @@ export interface PluginInfo {
   usedPrefabs: string[]
 }
 
+/**
+ * A plugin as the game server lists it on GET /api/game/plugins. Without the readme, which only the dev server sends
+ */
+export interface ServerPluginInfo extends Omit<PluginInfo, 'readme'> {
+  /** Its server entry was loaded by this server and is running */
+  runningOnServer: boolean
+}
+
+export interface ServerPluginList {
+  plugins: ServerPluginInfo[]
+}
+
 export interface PluginInfoList {
   /** Directory with mavonengine.json, null when the project has none */
   root: string | null

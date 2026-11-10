@@ -5,7 +5,7 @@ import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
 import { describe, expect, it } from 'vitest'
 import { simulatedSource } from '../src/dashboard/simulator'
 import { normalizePackets, normalizeSnapshot, normalizeSync } from '../src/dashboard/snapshot'
-import { describePacket, handleNetworkKey, handlePlayersKey, initialViewState, messageStats, renderDashboard, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
+import { describePacket, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, messageStats, renderDashboard, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -41,6 +41,12 @@ async function liveState(samples = 30): Promise<DashboardState> {
       { method: 'GET', path: '/monitoring/api/metrics', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
     ],
     routesAvailable: true,
+    plugins: [
+      { package: '@mavonengine/http-monitoring', enabled: true, installed: true, runningOnServer: true, version: '0.0.1', description: 'The dashboard in the browser', license: 'MIT', target: 'server', engine: '^0.0.22', declaredPrefabs: [], usedPrefabs: [] },
+      { package: '@acme/forest', enabled: true, installed: true, runningOnServer: false, version: '2.3.1', target: 'client', declaredPrefabs: ['Tree', 'Rock'], usedPrefabs: ['Tree'] },
+      { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+    ],
+    pluginsAvailable: true,
   }
 }
 
@@ -53,7 +59,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null, plugins: [], pluginsAvailable: null }
 }
 
 describe('dashboard view', () => {
@@ -190,7 +196,8 @@ describe('dashboard view', () => {
     expect(tabForKey('4')).toBe(3)
     expect(tabForKey('5')).toBe(4)
     expect(tabForKey('6')).toBe(5)
-    expect(tabForKey('7')).toBeNull()
+    expect(tabForKey('7')).toBe(6)
+    expect(tabForKey('8')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -220,6 +227,8 @@ describe('dashboard view', () => {
       packetDetail: null,
       routes: [],
       routesAvailable: null,
+      plugins: [],
+      pluginsAvailable: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
@@ -598,7 +607,6 @@ describe('toLogRows', () => {
 
     it('is reached with the 6 key', () => {
       expect(tabForKey('6')).toBe(5)
-      expect(tabForKey('7')).toBeNull()
     })
 
     it('says so when the server doesn\'t list its endpoints', async () => {
@@ -614,6 +622,77 @@ describe('toLogRows', () => {
       render(state, 150, 40, false, 5, view)
 
       expect(view.routeOffset).toBeLessThan(state.routes.length)
+    })
+  })
+
+  describe('plugins tab', () => {
+    it('lists the project\'s plugins and shows the first one with its endpoints', async () => {
+      const screen = render(await liveState(), 150, 40, false, 6)
+
+      expect(tabForKey('7')).toBe(6)
+      expect(screen.contains('Plugins (3)')).toBe(true)
+      const row = (pkg: string) => screen.line(screen.find(pkg)!.y)
+      expect(row('@mavonengine/http-monitoring')).toMatch(/0\.0\.1\s+enabled\s+server\s+1\s+0/)
+      expect(row('@acme/forest')).toMatch(/2\.3\.1\s+enabled\s+client\s+0\s+2/)
+      expect(row('Package')).toMatch(/Version\s+Status\s+Runs on\s+Routes\s+Prefabs/)
+      expect(row('ghost')).toMatch(/—\s+problem/)
+
+      for (const text of ['The dashboard in the browser', '@mavonengine/core ^0.0.22', 'MIT', 'running', 'HTTP endpoints (1)', '/monitoring/api/metrics', 'prod + dev'])
+        expect(screen.contains(text), text).toBe(true)
+      expect(screen.contains('CPU')).toBe(false)
+    })
+
+    it('shows the plugin that is selected with the arrow keys', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 6 })
+
+      expect(handlePluginsKey(view, state.plugins, 'down')).toBe(true)
+      expect(view.selectedPlugin).toBe('@acme/forest')
+
+      const screen = render(state, 150, 40, false, 6, view)
+      expect(screen.contains('Tree (used), Rock')).toBe(true)
+      expect(screen.contains('HTTP endpoints: none')).toBe(true)
+      expect(screen.contains('Select plugin')).toBe(true)
+
+      handlePluginsKey(view, state.plugins, 'j')
+      handlePluginsKey(view, state.plugins, 'down')
+      expect(view.selectedPlugin).toBe('ghost')
+      expect(render(state, 150, 40, false, 6, view).contains('Listed in mavonengine.json but not installed')).toBe(true)
+
+      handlePluginsKey(view, state.plugins, 'up')
+      expect(view.selectedPlugin).toBe('@acme/forest')
+    })
+
+    it('ignores the arrow keys outside the plugins tab', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 0 })
+
+      expect(handlePluginsKey(view, state.plugins, 'down')).toBe(false)
+      expect(view.selectedPlugin).toBeUndefined()
+    })
+
+    it('marks a server plugin that this server doesn\'t run', async () => {
+      const state = await liveState()
+      state.plugins = [{ ...state.plugins[0], runningOnServer: false }]
+
+      const screen = render(state, 150, 40, false, 6)
+
+      expect(screen.contains('not loaded')).toBe(true)
+      expect(screen.contains('not running')).toBe(true)
+    })
+
+    it('fits a narrow terminal', async () => {
+      const screen = render(await liveState(), 80, 40, false, 6)
+
+      expect(screen.contains('Plugins (3)')).toBe(true)
+      expect(screen.contains('HTTP endpoints (1)')).toBe(true)
+    })
+
+    it('says so when there are no plugins, or the server doesn\'t list them', async () => {
+      const state = await liveState()
+
+      expect(render({ ...state, plugins: [] }, 150, 40, false, 6).contains('The project has no plugins')).toBe(true)
+      expect(render({ ...state, plugins: [], pluginsAvailable: false }, 150, 40, false, 6).contains('without GET /api/game/plugins')).toBe(true)
     })
   })
 })

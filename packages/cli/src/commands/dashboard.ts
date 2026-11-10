@@ -6,7 +6,7 @@ import { openBrowser, servesPage } from '../browser'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
-import { handleNetworkKey, handlePlayersKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
+import { handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
 
 export const DASHBOARD_HELP = `Usage: mavonengine dashboard [options]
 
@@ -158,7 +158,7 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
       app.invalidate()
     }
 
-    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets))
+    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets) || handlePluginsKey(view, client.state.plugins, event.key))
       app.invalidate()
   })
 

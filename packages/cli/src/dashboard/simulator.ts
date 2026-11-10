@@ -1,11 +1,40 @@
 import type { MetricsSource } from './MetricsClient'
-import type { LogLine, RequestLine, RouteLine, ServerMetricsSnapshot } from './snapshot'
+import type { LogLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot } from './snapshot'
 
 const HISTORY_LENGTH = 60
 /** As many as a real server keeps */
 const PACKET_LIMIT = 2000
 /** State updates per player and second in the simulation: fewer than the tick rate, so the list stays readable */
 const STATES_PER_SECOND = 5
+
+const SIMULATED_PLUGINS: PluginLine[] = [
+  {
+    package: '@mavonengine/http-monitoring',
+    enabled: true,
+    installed: true,
+    runningOnServer: true,
+    version: '0.0.1',
+    description: 'The game server dashboard in the browser, behind HTTP Basic auth',
+    license: 'MIT',
+    target: 'server',
+    engine: '^0.0.22',
+    declaredPrefabs: [],
+    usedPrefabs: [],
+  },
+  {
+    package: '@acme/forest',
+    enabled: true,
+    installed: true,
+    runningOnServer: false,
+    version: '2.3.1',
+    description: 'Trees and rocks to place in a scene',
+    license: 'MIT',
+    target: 'client',
+    declaredPrefabs: ['Tree', 'Rock'],
+    usedPrefabs: ['Tree'],
+  },
+  { package: 'chat', enabled: false, installed: true, runningOnServer: false, version: '1.0.0', target: 'both', declaredPrefabs: [], usedPrefabs: [] },
+]
 
 const SIMULATED_ROUTES: RouteLine[] = [
   { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false, summary: 'Whether the server is up' },
@@ -294,6 +323,9 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
     },
     async fetchRoutes() {
       return { routes: SIMULATED_ROUTES }
+    },
+    async fetchPlugins() {
+      return { plugins: SIMULATED_PLUGINS }
     },
   }
 }

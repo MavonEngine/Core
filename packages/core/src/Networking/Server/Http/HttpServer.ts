@@ -1,6 +1,7 @@
 import type { Express, NextFunction, Request, Response } from 'express'
 import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
+import type { ServerPluginInfo } from '../../../Plugins/types'
 import type { NetDebugSource } from '../../Debug/sync'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
@@ -22,7 +23,8 @@ export { parseEntityQuery }
 
 export interface MetricsEndpointOptions {
   /**
-   * Expose GET /api/game/metrics, GET /api/game/logs, GET /api/game/requests and GET /api/game/routes.
+   * Expose GET /api/game/metrics, GET /api/game/logs, GET /api/game/requests, GET /api/game/routes
+   * and GET /api/game/plugins.
    * Defaults to true, but in production it stays off unless a token is set.
    */
   enabled?: boolean
@@ -54,6 +56,8 @@ export interface HttpServerOptions {
    * Same rules as `inspector`: never in production.
    */
   net?: NetDebugSource
+  /** Serves the project's plugins on GET /api/game/plugins when given */
+  plugins?(): ServerPluginInfo[]
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -80,6 +84,7 @@ export default class HttpServer {
   private clientOptions?: ClientOptions
   private inspector?: WorldInspector
   private net?: NetDebugSource
+  private plugins?: () => ServerPluginInfo[]
   private lastMetricsRequestAt?: number
   private listener?: NodeServer
 
@@ -97,6 +102,7 @@ export default class HttpServer {
     this.clientOptions = options.client
     this.inspector = options.inspector
     this.net = options.net
+    this.plugins = options.plugins
     this.routes = new RouteCatalog(app)
 
     this.routes.registerAs({ source: 'engine' }, () => {
@@ -105,6 +111,7 @@ export default class HttpServer {
       this.registerLogsEndpoint()
       this.registerRequestsEndpoint()
       this.registerRoutesEndpoint()
+      this.registerPluginsEndpoint()
 
       if (this.devEndpointsEnabled)
         this.registerDevEndpoints()
@@ -252,6 +259,25 @@ export default class HttpServer {
       auth: METRICS_AUTH,
     }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
       res.json({ routes: this.routes.list() })
+    })
+  }
+
+  /**
+   * GET /api/game/plugins lists the plugins of the project: the ones in mavonengine.json and the ones this server runs.
+   */
+  private registerPluginsEndpoint() {
+    this.app.get('/api/game/plugins', describeRoute({
+      summary: 'The plugins of this project',
+      description: 'Every plugin in mavonengine.json with its version, target and prefabs, and whether its server entry runs in this server. See GET /api/game/routes for the endpoints a plugin registered.',
+      response: '`{ plugins }`, or 404 when the server doesn\'t know its plugins',
+      auth: METRICS_AUTH,
+    }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
+      if (!this.plugins) {
+        res.status(404).end()
+        return
+      }
+
+      res.json({ plugins: this.plugins() })
     })
   }
 

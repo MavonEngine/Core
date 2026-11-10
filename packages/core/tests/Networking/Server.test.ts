@@ -419,6 +419,37 @@ describe('server', () => {
       expect(onDisconnect).toHaveBeenCalledWith(channel, expect.anything())
     })
 
+    it('lists the project\'s plugins and says which of them it runs', async () => {
+      const root = tempProject()
+      installPlugin(root, 'probe', { target: 'server', server: './server.js' }, { 'server.js': 'export default {}', 'README.md': '# Probe' })
+      installPlugin(root, 'hud', { target: 'client', client: './client.js', assets: { prefabs: { Bar: ['bar.png'] } } }, { 'client.js': 'export default {}' })
+      writeConfig(root, { plugins: { probe: {}, hud: { prefabs: ['Bar'] }, gone: { enabled: false } } })
+      const server = startable(new TestServer(logger, undefined, { plugins: { root } }))
+
+      await server.start()
+      const infos = server.pluginInfos()
+      server.stop()
+      rmSync(root, { recursive: true, force: true })
+
+      expect(infos).toEqual([
+        { package: 'probe', enabled: true, installed: true, version: '1.0.0', target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true },
+        { package: 'hud', enabled: true, installed: true, version: '1.0.0', target: 'client', declaredPrefabs: ['Bar'], usedPrefabs: ['Bar'], runningOnServer: false },
+        { package: 'gone', enabled: false, installed: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [], runningOnServer: false },
+      ])
+    })
+
+    it('lists plugins that were passed to it directly', async () => {
+      const server = startable(new TestServer(logger, undefined, { plugins: [{ name: 'inline' }, { package: 'forest', options: {}, plugin: {} }] }))
+
+      await server.start()
+      const infos = server.pluginInfos()
+      server.stop()
+
+      expect(infos.map(info => [info.package, info.runningOnServer])).toEqual([['inline', true], ['forest', true]])
+      // Nothing runs anymore
+      expect(server.pluginInfos()).toEqual([])
+    })
+
     it('tells plugins loaded from mavonengine.json their project root', async () => {
       const root = tempProject()
       installPlugin(root, 'probe', { target: 'server', server: './server.js' }, {

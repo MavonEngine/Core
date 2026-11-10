@@ -340,8 +340,9 @@ function text(value: unknown): string | undefined {
 /**
  * Every plugin in mavonengine.json, turned off or not, with what its package says about itself.
  * A plugin that is missing or invalid is listed too, with the reason in `problem`.
+ * Pass `readme: false` to leave the readmes out.
  */
-export function pluginInfos(root: string): PluginInfo[] {
+export function pluginInfos(root: string, { readme = true }: { readme?: boolean } = {}): PluginInfo[] {
   return Object.entries(readConfig(root).plugins).map(([pkg, entry]) => {
     const info: PluginInfo = {
       package: pkg,
@@ -369,7 +370,7 @@ export function pluginInfos(root: string): PluginInfo[] {
       description: text(packageJson.description),
       license: text(packageJson.license),
       homepage: text(packageJson.homepage) ?? text(typeof repository === 'string' ? repository : repository?.url),
-      readme: readReadme(dir),
+      readme: readme ? readReadme(dir) : undefined,
     })
 
     if (packageJson.mavonengine === undefined)

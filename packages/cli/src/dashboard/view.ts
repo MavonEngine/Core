@@ -1,6 +1,6 @@
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { LogLine, PacketDetail, PacketLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
+import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
 import { DEFAULT_COLOR, hex } from '@profullstack/hqtui'
@@ -37,6 +37,8 @@ export interface ViewState {
   payloadOffset: number
   /** Rows the Routes table is scrolled down by */
   routeOffset?: number
+  /** Package of the plugin shown in the details on the Plugins tab, the first one while unset */
+  selectedPlugin?: string | null
 }
 
 export function initialViewState(): ViewState {
@@ -68,7 +70,7 @@ export interface StartupInfo {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes'] as const
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins'] as const
 
 /** Whether the tab showing needs the packets and the state sync, which are only fetched for it */
 export function showsNetwork(view: ViewState): boolean {
@@ -234,6 +236,23 @@ export function describePacket(packet: PacketLine): string {
   return parts.join(' · ')
 }
 
+/**
+ * Arrow keys / j k move the plugin selection on the Plugins tab. Returns whether the key was used.
+ */
+export function handlePluginsKey(view: ViewState, plugins: PluginLine[], key: string): boolean {
+  if (DASHBOARD_TABS[view.tab] !== 'Plugins')
+    return false
+
+  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  if (delta === 0 || plugins.length === 0)
+    return false
+
+  // Nothing picked yet shows the first one
+  const current = Math.max(0, plugins.findIndex(p => p.package === view.selectedPlugin))
+  view.selectedPlugin = plugins[Math.max(0, Math.min(plugins.length - 1, current + delta))].package
+  return true
+}
+
 function statusColor(status: ConnectionStatus, theme: Theme): Color {
   if (status === 'live')
     return theme.success
@@ -291,6 +310,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       else if (tab === 'Routes') {
         routesPanel(root, theme, state, view, transparent)
       }
+      else if (tab === 'Plugins') {
+        pluginsTab(root, theme, state, view, transparent)
+      }
       else {
         root.responsive({
           [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
@@ -318,6 +340,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
               ...(view.selectedPacketId !== null ? [{ key: 'esc', label: 'Close' }] : []),
             ]
           : []),
+        ...(snapshot && DASHBOARD_TABS[view.tab] === 'Plugins' && state.plugins.length > 1 ? [{ key: '↑↓', label: 'Select plugin' }] : []),
       ],
       right: [starting
         ? { label: 'STARTING', color: statusColor('connecting', theme) }
@@ -1090,6 +1113,124 @@ function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: V
         { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
         { key: 'source', title: 'From', width: 30, color: r => r.source === 'engine' ? theme.muted : r.source === 'plugin' ? theme.primary : undefined, render: routeSource },
         { key: 'summary', title: 'What it does', color: theme.muted, render: r => r.summary ?? '' },
+      ],
+    })
+  })
+}
+
+const PLUGIN_TARGETS = { client: 'client', server: 'server', both: 'client + server' }
+
+/** One word for whether a plugin is in use, with the colour to show it in */
+export function pluginStatus(plugin: PluginLine, theme: Theme): { label: string, color: Color } {
+  if (plugin.problem)
+    return { label: 'problem', color: theme.danger }
+  if (!plugin.enabled)
+    return { label: 'disabled', color: theme.muted }
+  // Its server entry should run here but doesn't: it failed to load, or the server needs a restart
+  if ((plugin.target === 'server' || plugin.target === 'both') && !plugin.runningOnServer)
+    return { label: 'not loaded', color: theme.warning }
+  return { label: 'enabled', color: theme.success }
+}
+
+function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
+  const { plugins } = state
+
+  if (state.pluginsAvailable === false || plugins.length === 0) {
+    ui.panel({ title: 'Plugins', size: '1fr' }, (panel) => {
+      if (state.pluginsAvailable === false)
+        panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/plugins')
+      else
+        panel.label(state.pluginsAvailable === null ? 'Asking the server for its plugins…' : 'The project has no plugins. Add one with: mavonengine install <package>')
+    })
+    return
+  }
+
+  const selected = plugins.find(p => p.package === view.selectedPlugin) ?? plugins[0]
+  const endpoints = (plugin: PluginLine) => state.routes.filter(r => r.source === 'plugin' && r.plugin === plugin.package)
+
+  let top = 0
+  const list = (c: Container, size: number | string) => c.panel({ title: `Plugins (${plugins.length})`, size }, (panel) => {
+    panel.table<PluginLine>({
+      rows: plugins,
+      selected: plugins.indexOf(selected),
+      followSelection: true,
+      // With more plugins than rows the table scrolls to the selection, so a click counts from the row drawn first
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          top = index
+      },
+      onSelectRow: (visibleRow) => {
+        const row = plugins[top + visibleRow]
+        if (!row)
+          return
+        view.selectedPlugin = row.package
+        ui.ctx.invalidate()
+      },
+      scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
+      size: '1fr',
+      columns: [
+        { key: 'package', title: 'Package' },
+        { key: 'version', title: 'Version', width: 8, render: p => p.version ?? '—' },
+        { key: 'status', title: 'Status', width: 10, color: p => pluginStatus(p, theme).color, render: p => pluginStatus(p, theme).label },
+        { key: 'target', title: 'Runs on', width: 7, render: p => p.target ?? '—' },
+        { key: 'endpoints', title: 'Routes', width: 6, align: 'right', render: p => state.routesAvailable ? String(endpoints(p).length) : '—' },
+        { key: 'prefabs', title: 'Prefabs', width: 7, align: 'right', render: p => String(new Set([...p.declaredPrefabs, ...p.usedPrefabs]).size) },
+      ],
+    })
+  })
+
+  // The list on top at its full width, so the package names and every column fit whatever the terminal's width
+  list(ui, Math.min(plugins.length, 8) + 3)
+  pluginDetails(ui, theme, state, selected, endpoints(selected), '1fr', transparent)
+}
+
+function pluginDetails(ui: Container, theme: Theme, state: DashboardState, plugin: PluginLine, endpoints: RouteLine[], size: number | string, transparent: boolean) {
+  const status = pluginStatus(plugin, theme)
+  const prefabs = [...new Set([...plugin.declaredPrefabs, ...plugin.usedPrefabs])]
+
+  ui.panel({ title: plugin.package, size }, (panel) => {
+    if (plugin.description)
+      panel.text(plugin.description, { wrap: true })
+    if (plugin.problem)
+      panel.text([{ text: plugin.problem, fg: theme.danger }], { wrap: true })
+
+    panel.keyValues([
+      { label: 'Version', value: plugin.version ?? '—' },
+      { label: 'Status', value: status.label, color: status.color },
+      { label: 'Runs on', value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—' },
+      // A client plugin has nothing to run here
+      plugin.target === 'client'
+        ? { label: 'On this server', value: 'nothing to run', color: theme.muted }
+        : { label: 'On this server', value: plugin.runningOnServer ? 'running' : 'not running', color: plugin.runningOnServer ? theme.success : theme.warning },
+      { label: 'Engine', value: plugin.engine ? `@mavonengine/core ${plugin.engine}` : '—' },
+      { label: 'License', value: plugin.license ?? '—' },
+      // Used ones ship their assets in a release
+      { label: 'Prefabs', value: prefabs.length ? prefabs.map(name => plugin.usedPrefabs.includes(name) ? `${name} (used)` : name).join(', ') : 'none' },
+    ], { spread: true })
+
+    panel.spacer(1)
+
+    if (state.routesAvailable !== true) {
+      panel.label('HTTP endpoints: unknown, the server doesn\'t list its endpoints')
+      return
+    }
+    if (endpoints.length === 0) {
+      panel.label('HTTP endpoints: none')
+      return
+    }
+
+    panel.label(`HTTP endpoints (${endpoints.length})`)
+    panel.table<RouteLine>({
+      rows: endpoints,
+      scrollbar: true,
+      zebra: !transparent,
+      size: '1fr',
+      columns: [
+        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        { key: 'path', title: 'Path' },
+        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
       ],
     })
   })

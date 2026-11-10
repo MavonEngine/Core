@@ -59,6 +59,7 @@ describe('httpServer', () => {
         'GET /api/game/logs',
         'GET /api/game/requests',
         'GET /api/game/routes',
+        'GET /api/game/plugins',
       ])
       expect(routes.every(route => route.source === 'engine' && route.summary && route.auth)).toBe(true)
       expect(routes[2].query).toHaveProperty('after')
@@ -92,6 +93,32 @@ describe('httpServer', () => {
 
       expect((await request('/api/game/routes')).status).toBe(401)
       expect((await request('/api/game/routes?token=secret')).status).toBe(200)
+    })
+  })
+
+  describe('plugins', () => {
+    const plugins = [{ package: 'forest', enabled: true, installed: true, version: '1.0.0', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true }]
+
+    it('lists the plugins it is given, asked anew every time', async () => {
+      const list = vi.fn(() => plugins)
+      const request = await serve({ plugins: list })
+
+      expect(await (await request('/api/game/plugins')).json()).toEqual({ plugins })
+      await request('/api/game/plugins')
+      expect(list).toHaveBeenCalledTimes(2)
+    })
+
+    it('is not found on a server that doesn\'t know its plugins', async () => {
+      const request = await serve()
+
+      expect((await request('/api/game/plugins')).status).toBe(404)
+    })
+
+    it('is protected like the metrics', async () => {
+      const request = await serve({ plugins: () => plugins, metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/plugins')).status).toBe(401)
+      expect((await request('/api/game/plugins?token=secret')).status).toBe(200)
     })
   })
 

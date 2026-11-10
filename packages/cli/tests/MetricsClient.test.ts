@@ -446,6 +446,59 @@ describe('metricsClient', () => {
       expect(client.state.status).toBe('live')
     })
 
+    it('fetches the plugins along with the endpoints', async () => {
+      const fetchPlugins = vi.fn(async () => ({ plugins: [{ package: 'forest', version: '1.0.0', target: 'client', runningOnServer: false, usedPrefabs: ['Tree'] }] }))
+      const fetchRoutes = vi.fn(async () => ({ routes: [] }))
+      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes, fetchPlugins }, { routesIntervalMs: 60_000 })
+
+      expect(client.state.pluginsAvailable).toBeNull()
+      await client.poll()
+      await client.poll()
+
+      expect(fetchPlugins).toHaveBeenCalledTimes(1)
+      expect(client.state.plugins).toEqual([{ package: 'forest', enabled: true, installed: true, runningOnServer: false, version: '1.0.0', target: 'client', declaredPrefabs: [], usedPrefabs: ['Tree'] }])
+      expect(client.state.pluginsAvailable).toBe(true)
+    })
+
+    it('keeps the endpoints when the server doesn\'t list plugins, and tries again after a passing failure', async () => {
+      const fetchRoutes = vi.fn(async () => ({ routes: [] }))
+      const disabled = vi.fn(async () => {
+        throw new MetricsSourceError('not found', 'disabled')
+      })
+      const older = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes, fetchPlugins: disabled }, { routesIntervalMs: 60_000 })
+
+      await older.poll()
+      await older.poll()
+
+      expect(older.state.pluginsAvailable).toBe(false)
+      expect(older.state.routesAvailable).toBe(true)
+      expect(disabled).toHaveBeenCalledTimes(1)
+      expect(fetchRoutes).toHaveBeenCalledTimes(1)
+
+      let fail = true
+      const flaky = vi.fn(async () => {
+        if (fail)
+          throw new MetricsSourceError('timeout', 'unreachable')
+        return { plugins: [] }
+      })
+      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPlugins: flaky }, { routesIntervalMs: 60_000 })
+
+      await client.poll()
+      expect(client.state.pluginsAvailable).toBeNull()
+      fail = false
+      await client.poll()
+      expect(client.state.pluginsAvailable).toBe(true)
+    })
+
+    it('derives the plugins url from the metrics url', async () => {
+      const fetch = vi.fn(async () => response(200, { plugins: [] }))
+      const source = httpSource({ url: 'http://localhost:8050/api/game/metrics', fetch })
+
+      await source.fetchPlugins!()
+
+      expect(fetch).toHaveBeenCalledWith('http://localhost:8050/api/game/plugins', expect.anything())
+    })
+
     it('derives the routes url from the metrics url', async () => {
       const fetch = vi.fn(async () => response(200, { routes: [] }))
       const source = httpSource({ url: 'http://localhost:8050/api/game/metrics', fetch })
