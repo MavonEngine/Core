@@ -32,6 +32,76 @@ async function waitFor(page, fn, arg, timeout = 30000) {
   await page.waitForFunction(fn, arg, { timeout, polling: 200 })
 }
 
+/**
+ * What went wrong on a page besides thrown errors: console errors, requests that failed or were refused.
+ * A module of the editor that doesn't load shows up here and nowhere else
+ */
+function watchPage(page, name, problems) {
+  page.on('console', (message) => {
+    if (message.type() === 'error')
+      problems.push(`${name} console: ${message.text()}`)
+  })
+  page.on('requestfailed', request => problems.push(`${name} request failed: ${request.url()} (${request.failure()?.errorText})`))
+  page.on('response', (response) => {
+    if (response.status() >= 400)
+      problems.push(`${name} ${response.status()}: ${response.url()}`)
+  })
+}
+
+/** How long the editor's UI may take to load: it is built from source by the dev server, next to a game that renders in software */
+const EDITOR_UI_TIMEOUT = 120000
+
+/**
+ * The editor exists as soon as `.` is pressed, its UI only once the dev server has built it and React has drawn it.
+ * Fails with what the page reported when that doesn't happen, instead of a bare timeout
+ */
+async function waitForEditorUi(page, errors, problems) {
+  const started = Date.now()
+  const tab = page.getByRole('tab', { name: 'Network' })
+
+  while (true) {
+    if (await tab.count() > 0)
+      break
+    if (errors.length)
+      throw new Error(`the editor's UI did not load:\n  ${errors.join('\n  ')}`)
+    if (Date.now() - started > EDITOR_UI_TIMEOUT)
+      throw new Error(`the editor's UI was not there after ${EDITOR_UI_TIMEOUT / 1000}s${problems.length ? `:\n  ${problems.slice(-20).join('\n  ')}` : ', and the page reported nothing'}`)
+    await delay(500)
+  }
+
+  log(`  the editor's UI took ${((Date.now() - started) / 1000).toFixed(1)}s to load`)
+  return tab
+}
+
+/** Everything that helps to tell why a run failed, since CI can't be looked at afterwards */
+async function reportFailure(context, server, errors, problems) {
+  log('\n== failure details')
+  if (errors.length)
+    log(`page errors:\n  ${errors.join('\n  ')}`)
+  if (problems.length)
+    log(`page problems (last 30):\n  ${problems.slice(-30).join('\n  ')}`)
+
+  for (const [index, page] of (context?.pages() ?? []).entries()) {
+    try {
+      const state = await page.evaluate(() => ({
+        title: document.title,
+        editor: !!window.Game?.editor,
+        uiChildren: window.Game?.uiRoot?.childElementCount ?? null,
+        tabs: Array.from(document.querySelectorAll('[role=tab]'), tab => tab.textContent),
+        text: document.body.textContent.replace(/\s+/g, ' ').slice(0, 300),
+      }))
+      log(`page ${index}: ${JSON.stringify(state)}`)
+      await page.screenshot({ path: join(screenshots, `failure-page-${index}.png`), timeout: 15000 })
+    }
+    catch (err) {
+      log(`page ${index}: could not be looked at: ${err.message.split('\n')[0]}`)
+    }
+  }
+
+  if (server)
+    log(`server output (last 40 lines):\n${server.output().split('\n').slice(-40).join('\n')}`)
+}
+
 async function joinGame(page, name) {
   await page.goto(base)
   await page.locator('.name-input').fill(name)
@@ -43,7 +113,9 @@ async function main() {
   let server
   let browser
   let mcp
+  let context
   const errors = []
+  const problems = []
 
   rmSync(screenshots, { recursive: true, force: true })
   mkdirSync(screenshots, { recursive: true })
@@ -55,9 +127,10 @@ async function main() {
 
     log('\n== player')
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-    const context = await browser.newContext({ viewport: { width: 1200, height: 800 } })
+    context = await browser.newContext({ viewport: { width: 1200, height: 800 } })
     const player = await context.newPage()
     player.on('pageerror', error => errors.push(`player: ${error.message}`))
+    watchPage(player, 'player', problems)
     await joinGame(player, 'Alice')
 
     log('\n== mcp')
@@ -168,6 +241,7 @@ async function main() {
     log('\n== editor')
     const editor = await context.newPage()
     editor.on('pageerror', error => errors.push(`editor: ${error.message}`))
+    watchPage(editor, 'editor', problems)
     await editor.goto(base)
     await waitFor(editor, () => window.Game?.activeScene?.name === 'main')
     await editor.locator('canvas').click({ position: { x: 600, y: 400 }, force: true })
@@ -188,7 +262,7 @@ async function main() {
     check((await data('client_network', { clientId: editorId })).network.editorMode === true, 'and the editor tab by its id')
 
     log('\n== editor network panel')
-    await editor.getByRole('tab', { name: 'Network' }).click()
+    await (await waitForEditorUi(editor, errors, problems)).click()
     await editor.getByText('sv_state').first().waitFor({ timeout: 10000 })
     check(await editor.getByText('Alice').count() === 1, 'the Network panel lists the server\'s packets and the players it syncs')
 
@@ -218,6 +292,10 @@ async function main() {
 
     check(errors.length === 0, `no page errors${errors.length ? `:\n  ${errors.join('\n  ')}` : ''}`)
     log('\nmcp end-to-end test passed')
+  }
+  catch (err) {
+    await reportFailure(context, server, errors, problems).catch(() => {})
+    throw err
   }
   finally {
     await mcp?.close().catch(() => {})

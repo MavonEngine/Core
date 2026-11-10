@@ -117,3 +117,11 @@ jobs:
     - name: MCP end-to-end test
       timeout-minutes: 5
       run: npm run test:mcp-e2e
+
+    - name: Upload MCP end-to-end screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcp-e2e-screenshots-${{ matrix.os }}
+        path: e2e/mcp/screenshots
+        if-no-files-found: ignore

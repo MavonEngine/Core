@@ -102,6 +102,9 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
       import('./Editor/UI/global.css'),
     ]).then(([{ mountEditorUI }]) => {
       this.reactRoot = mountEditorUI(Game.instance().uiRoot)
+    }).catch((err: Error) => {
+      // Without its UI the editor is a blank page: say why rather than leave it at that
+      Game.instance().logger?.error(`The editor's UI could not be loaded: ${err?.stack ?? err}`)
     })
   }
 
