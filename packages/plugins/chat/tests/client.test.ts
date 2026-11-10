@@ -3,7 +3,7 @@
 import type { ChatMessage } from '../src/protocol'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ChatBox, { nameColor } from '../src/ChatBox'
-import plugin, { CHAT_EVENT, sendChat } from '../src/client'
+import plugin, { chat, CHAT_EVENT, sendChat } from '../src/client'
 
 const said = (text: string, id = 1, from: ChatMessage['from'] = { id: 'a1', name: 'Ada' }): ChatMessage => ({ id, from, text, at: 0 })
 
@@ -236,9 +236,92 @@ describe('chat client plugin', () => {
     receive('chat:notice', { text: 'You are muted' })
 
     expect(log()).toEqual(['Adaearlier', 'Adanow', 'You are muted'])
-    // The game only hears what is said right now, e.g. for a bubble over the player
-    expect(instance.trigger.mock.calls).toEqual([[CHAT_EVENT, said('now', 2)]])
+    // What is said right now is a message, e.g. for a bubble over the player. The rest has events of its own
+    expect(instance.trigger.mock.calls).toEqual([
+      ['chat:history', [said('earlier', 1)]],
+      [CHAT_EVENT, said('now', 2)],
+      ['chat:notice', 'You are muted'],
+    ])
     expect(CHAT_EVENT).toBe('chat:message')
+  })
+
+  describe('chat(game)', () => {
+    it('tells the game\'s own listeners messages, notices and the history', () => {
+      const { connect, receive, instance } = game({ ui: false })
+      const heard: unknown[] = []
+      // Registered before the game connected
+      chat(instance).onMessage(message => heard.push(['message', message.text]))
+      chat(instance).onNotice(text => heard.push(['notice', text]))
+      const offHistory = chat(instance).onHistory(messages => heard.push(['history', messages.map(message => message.text)]))
+      connect()
+
+      receive('chat:history', { messages: [said('earlier', 1), said('before that', 2)] })
+      receive('chat:message', said('now', 3))
+      receive('chat:notice', { text: 'You are muted' })
+
+      expect(heard).toEqual([['history', ['earlier', 'before that']], ['message', 'now'], ['notice', 'You are muted']])
+
+      // What a listener registered returns stops it
+      offHistory()
+      receive('chat:history', { messages: [] })
+      expect(heard).toHaveLength(3)
+    })
+
+    it('sends for the game, once it is connected', () => {
+      const { connect, socket, instance } = game({ ui: false })
+
+      expect(chat(instance).send('too early')).toBe(false)
+      connect()
+
+      expect(chat(instance).send('hello')).toBe(true)
+      expect(socket.emit).toHaveBeenCalledWith('chat:send', { text: 'hello' }, { reliable: true })
+    })
+
+    it('hands out the chat box, to add lines to or hide', () => {
+      const withBox = game()
+      const box = chat(withBox.instance).box!
+
+      box.notice('Welcome to the server')
+      expect(withBox.log()).toEqual(['Welcome to the server'])
+      box.hide()
+      expect(document.querySelector<HTMLElement>('.mavonengine-chat')!.hidden).toBe(true)
+
+      document.body.replaceChildren()
+      expect(chat(game({ ui: false }).instance).box).toBeUndefined()
+    })
+
+    it('is the same for the game and the plugin, and one per game', () => {
+      const first = game({ ui: false })
+      const second = game({ ui: false })
+
+      expect(chat(first.instance)).toBe(chat(first.instance))
+      expect(chat(first.instance)).not.toBe(chat(second.instance))
+    })
+
+    it('keeps going when a listener throws', () => {
+      const { connect, receive, instance, ctx } = game({ ui: false })
+      ctx.logger = { error: vi.fn() }
+      const heard: string[] = []
+      chat(instance).onMessage(() => {
+        throw new Error('boom')
+      })
+      chat(instance).onMessage(message => heard.push(message.text))
+      connect()
+
+      receive('chat:message', said('still heard'))
+
+      expect(heard).toEqual(['still heard'])
+      expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('a listener threw'))
+    })
+  })
+
+  it('sits in the corner it is told to', () => {
+    game({ position: 'top-right' })
+    expect(document.querySelector('.mavonengine-chat')!.classList.contains('top-right')).toBe(true)
+
+    document.body.replaceChildren()
+    game({ position: 'somewhere' })
+    expect(document.querySelector('.mavonengine-chat')!.classList.contains('bottom-left')).toBe(true)
   })
 
   it('lets the game talk and listen without the chat box', () => {

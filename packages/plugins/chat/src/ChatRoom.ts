@@ -62,6 +62,9 @@ export function resolveChatOptions(options: ChatOptions = {}): ResolvedChatOptio
 /** What became of something a player sent: a message to pass on, a notice for the sender alone, or nothing */
 export type SayResult = { message: ChatMessage } | { notice: string } | { ignored: true }
 
+/** Whether a player may say something right now: the cleaned up text, a notice for the sender alone, or nothing */
+export type CheckResult = { text: string } | { notice: string } | { ignored: true }
+
 export interface Mute {
   playerId: string
   /** Epoch ms the mute ends, null for one that doesn't */
@@ -93,9 +96,18 @@ export default class ChatRoom {
   }
 
   /**
-   * A player wants to say `text`
+   * A player wants to say `text`: check it and, when it may be said, add it to the chat
    */
   say(sender: ChatSender, text: unknown): SayResult {
+    const checked = this.check(sender, text)
+    return 'text' in checked ? { message: this.post(sender, checked.text) } : checked
+  }
+
+  /**
+   * Whether a player may say `text` right now: cleans it up and applies the mute, the length limit and the
+   * rate limit. What passes counts against the rate limit, whatever becomes of it afterwards.
+   */
+  check(sender: ChatSender, text: unknown): CheckResult {
     const clean = ChatRoom.clean(text)
     if (!clean)
       return { ignored: true }
@@ -124,7 +136,15 @@ export default class ChatRoom {
     recent.push(now)
     this.sent.set(sender.id, recent)
 
-    return { message: this.add({ id: sender.id, name: sender.name }, clean) }
+    return { text: clean }
+  }
+
+  /**
+   * Add a message of a player to the chat as it is, without checking it. With `remember` off it is left out of
+   * the history, for a message that is not meant for everyone.
+   */
+  post(sender: ChatSender, text: string, remember = true): ChatMessage {
+    return this.add({ id: sender.id, name: sender.name }, text, remember)
   }
 
   /**
@@ -134,10 +154,10 @@ export default class ChatRoom {
     return this.add(null, ChatRoom.clean(text) ?? '')
   }
 
-  private add(from: ChatSender | null, text: string): ChatMessage {
+  private add(from: ChatSender | null, text: string, remember = true): ChatMessage {
     const message: ChatMessage = { id: this.nextId++, from, text, at: this.now() }
 
-    if (this.options.history > 0) {
+    if (remember && this.options.history > 0) {
       this.messages.push(message)
       if (this.messages.length > this.options.history)
         this.messages.splice(0, this.messages.length - this.options.history)

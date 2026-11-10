@@ -11,8 +11,14 @@ export interface ChatBoxOptions {
   openKey?: string
   /** Shown in the empty input */
   placeholder?: string
+  /** Corner of the page the chat sits in. Default `bottom-left` */
+  position?: ChatPosition
   document?: Document
 }
+
+export type ChatPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
+
+const POSITIONS: ChatPosition[] = ['bottom-left', 'bottom-right', 'top-left', 'top-right']
 
 const STYLE_ID = 'mavonengine-chat-style'
 
@@ -40,6 +46,8 @@ const STYLE = `
   color: var(--chat-text);
   pointer-events: none;
 }
+.mavonengine-chat.bottom-right, .mavonengine-chat.top-right { left: auto; right: 12px; }
+.mavonengine-chat.top-left, .mavonengine-chat.top-right { bottom: auto; top: 12px; flex-direction: column-reverse; }
 .mavonengine-chat[hidden] { display: none; }
 .mavonengine-chat-log {
   display: flex;
@@ -101,7 +109,7 @@ export default class ChatBox {
   private openKey: string
   private send: (text: string) => void
 
-  constructor({ send, maxMessages = 100, maxLength = 200, openKey = 'Enter', placeholder, document: doc = document }: ChatBoxOptions) {
+  constructor({ send, maxMessages = 100, maxLength = 200, openKey = 'Enter', placeholder, position = 'bottom-left', document: doc = document }: ChatBoxOptions) {
     this.document = doc
     this.send = send
     this.maxMessages = maxMessages
@@ -115,7 +123,7 @@ export default class ChatBox {
     }
 
     this.element = doc.createElement('div')
-    this.element.className = 'mavonengine-chat'
+    this.element.className = `mavonengine-chat ${POSITIONS.includes(position) ? position : 'bottom-left'}`
 
     this.log = doc.createElement('ul')
     this.log.className = 'mavonengine-chat-log'

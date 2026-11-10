@@ -1,7 +1,7 @@
 import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Express, Request, RequestHandler, Response } from 'express'
-import type { ChatOptions } from './ChatRoom.js'
-import type { ChatHistory, ChatMessage, ChatNotice, ChatSend } from './protocol.js'
+import type { ChatOptions, Mute } from './ChatRoom.js'
+import type { ChatHistory, ChatMessage, ChatNotice, ChatSend, ChatSender } from './protocol.js'
 import ChatRoom, { resolveChatOptions } from './ChatRoom.js'
 import { CHAT_HISTORY, CHAT_MESSAGE, CHAT_NOTICE, CHAT_SEND } from './protocol.js'
 
@@ -30,20 +30,128 @@ const RELIABLE = { reliable: true }
 /** How long a new player's "joined" waits for the game to give it a name, before its id is used */
 export const JOIN_NAME_WAIT_MS = 2000
 
+/** What an interceptor is told about a message a player wants to send */
+export interface OutgoingChat {
+  from: ChatSender
+  /** Cleaned up, within the length limit */
+  text: string
+}
+
+export interface ChatInterceptTools {
+  /** Tell the sender something that nobody else sees, like the answer to a command */
+  reply(text: string): void
+  /** The sender's entity in the world */
+  player: unknown
+}
+
+/**
+ * What an interceptor makes of a message:
+ * - nothing: it goes out as it is
+ * - `false`: it is dropped, and nobody is told
+ * - a string: it goes out with this text instead
+ * - `{ text?, to? }`: with this text, and with `to` only to these players (and its sender), like a whisper
+ *   or a team chat. A message that isn't for everyone is left out of the history
+ */
+export type ChatInterceptResult = void | false | string | { text?: string, to?: string[] }
+
+/** Called with every message a player sends, before it goes out. May change it, drop it or answer it */
+export type ChatInterceptor = (message: OutgoingChat, tools: ChatInterceptTools) => ChatInterceptResult
+
+/** Called with every message after it went out, also those of the server itself (`from` is null) */
+export type ChatListener = (message: ChatMessage, info: { recipients: string[] }) => void
+
 interface ChatState {
-  room: ChatRoom
+  /** Set while the plugin runs on the server */
+  room?: ChatRoom
+  ctx?: Context
   /** What each announced player was last called, so a goodbye can still name someone whose entity is gone */
   names: Map<string, string>
   /** Players whose "joined" is still to be said, with when they connected */
   joining: Map<string, number>
+  interceptors: Set<ChatInterceptor>
+  listeners: Set<ChatListener>
+  hooks?: ChatHooks
 }
 
-/** The chat of each running server: the plugin object itself is shared by all of them */
-const states = new WeakMap<object, ChatState>()
+/**
+ * The chat of each server. Kept on the global object under a registered symbol, not in this module: the game
+ * imports this package by name and the engine loads the plugin by path, which can be two copies of the module.
+ */
+const STATES = Symbol.for('mavonengine.chat.servers')
+
+function stateOf(server: object): ChatState {
+  const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, ChatState>
+  let state = registry.get(server)
+  if (!state) {
+    state = { names: new Map(), joining: new Map(), interceptors: new Set(), listeners: new Set() }
+    registry.set(server, state)
+  }
+  return state
+}
+
+/**
+ * What a game does with the chat on its server. Get it with `chat(server)`, also before the server starts:
+ * what is registered then applies once the plugin runs.
+ */
+export interface ChatHooks {
+  /**
+   * Have a say in every message a player sends, before it goes out: change it, drop it, answer the sender or
+   * send it to some players only. Interceptors run in the order they were added, after the chat's own checks
+   * (mute, length, rate). Returns a function that removes it again.
+   *
+   *   chat(server).intercept((message, tools) => {
+   *     if (message.text === '/roll') {
+   *       tools.reply(`You rolled ${1 + Math.floor(Math.random() * 6)}`)
+   *       return false
+   *     }
+   *   })
+   */
+  intercept(interceptor: ChatInterceptor): () => void
+  /** Be told every message after it went out, e.g. to log it. Returns a function that stops that */
+  onMessage(listener: ChatListener): () => void
+  /** Say something to everyone as the server. Undefined while the plugin isn't running */
+  announce(text: string): ChatMessage | undefined
+  /** Stop passing on what a player says, for `minutes` or until it is unmuted. Undefined while the plugin isn't running */
+  mute(playerId: string, minutes?: number): Mute | undefined
+  /** Returns whether the player was muted */
+  unmute(playerId: string): boolean
+  /** The chat itself, while the plugin runs: its history, mutes and options */
+  readonly room: ChatRoom | undefined
+}
+
+/**
+ * The chat of a game server, for the game's own code:
+ *
+ *   import { chat } from '@mavonengine/chat/server'
+ *
+ *   chat(server).onMessage(message => logger.info(`${message.from?.name ?? 'server'}: ${message.text}`))
+ */
+export function chat(server: object): ChatHooks {
+  const state = stateOf(server)
+
+  state.hooks ??= {
+    intercept(interceptor) {
+      state.interceptors.add(interceptor)
+      return () => void state.interceptors.delete(interceptor)
+    },
+    onMessage(listener) {
+      state.listeners.add(listener)
+      return () => void state.listeners.delete(listener)
+    },
+    announce: text => state.ctx && announce(state.ctx, text),
+    mute: (playerId, minutes) => state.room?.mute(playerId, minutes),
+    unmute: playerId => state.room?.unmute(playerId) ?? false,
+    get room() {
+      return state.room
+    },
+  }
+
+  return state.hooks
+}
 
 /** The chat of the server a plugin context belongs to, once the plugin was set up */
 export function chatRoom(ctx: Pick<ServerPluginContext, 'server'>): ChatRoom | undefined {
-  return states.get(ctx.server)?.room
+  return stateOf(ctx.server).room
 }
 
 function connections(ctx: Context): Channel[] {
@@ -63,18 +171,39 @@ function nameOf(entity: NonNullable<ReturnType<typeof entityOf>>): string {
 }
 
 /**
- * Send a message to everyone who should get it: with a range, only to those close enough to `around`.
- * Connections without a player, like the editor, get everything.
+ * Send a message to everyone who should get it, and tell the game's listeners.
+ * With a range, only to those close enough to `around`; with `to`, only to those players and the sender.
+ * Connections without a player, like the editor, get everything that is meant for everyone.
  */
-function broadcast(ctx: Context, room: ChatRoom, message: ChatMessage, around?: Position) {
-  const { range } = room.options
+function deliver(ctx: Context, message: ChatMessage, { around, to }: { around?: Position, to?: string[] } = {}) {
+  const state = stateOf(ctx.server)
+  const range = state.room?.options.range ?? 0
+  const only = to && new Set([...to, ...(message.from ? [message.from.id] : [])])
+  const recipients: string[] = []
 
   for (const channel of connections(ctx)) {
-    const position = range > 0 && around ? entityOf(ctx, channel.id)?.position : undefined
-    if (position && position.distanceTo(around!) > range)
-      continue
+    if (only) {
+      if (channel.id === undefined || !only.has(channel.id))
+        continue
+    }
+    else {
+      const position = range > 0 && around ? entityOf(ctx, channel.id)?.position : undefined
+      if (position && position.distanceTo(around!) > range)
+        continue
+    }
 
     channel.emit(CHAT_MESSAGE, message, RELIABLE)
+    if (channel.id !== undefined)
+      recipients.push(channel.id)
+  }
+
+  for (const listener of state.listeners) {
+    try {
+      listener(message, { recipients })
+    }
+    catch (err) {
+      ctx.logger?.error(`Chat: a message listener threw: ${(err as Error)?.stack ?? err}`)
+    }
   }
 }
 
@@ -85,8 +214,63 @@ export function announce(ctx: Context, text: string): ChatMessage | undefined {
     return undefined
 
   const message = room.system(text)
-  broadcast(ctx, room, message)
+  deliver(ctx, message)
   return message
+}
+
+/**
+ * A player sent something: the chat's own checks first, then the game's interceptors, then out it goes
+ */
+function receive(ctx: Context, connection: Channel, id: string, data: unknown) {
+  const state = stateOf(ctx.server)
+  // Only players talk: the editor's connection has no entity
+  const entity = entityOf(ctx, id)
+  if (!state.room || !entity)
+    return
+
+  const sender: ChatSender = { id, name: nameOf(entity) }
+  if (state.names.has(id))
+    state.names.set(id, sender.name)
+
+  const notice = (text: string) => connection.emit(CHAT_NOTICE, { text } satisfies ChatNotice, RELIABLE)
+
+  const checked = state.room.check(sender, (data as Partial<ChatSend> | null)?.text)
+  if ('notice' in checked)
+    notice(checked.notice)
+  if (!('text' in checked))
+    return
+
+  let { text } = checked
+  let to: string[] | undefined
+  const tools: ChatInterceptTools = { reply: notice, player: entity }
+
+  for (const intercept of state.interceptors) {
+    let result: ChatInterceptResult
+    try {
+      result = intercept({ from: { ...sender }, text }, tools)
+    }
+    catch (err) {
+      // A broken interceptor must not take the chat down, nor let through what it may have meant to stop
+      ctx.logger?.error(`Chat: an interceptor threw, the message was dropped: ${(err as Error)?.stack ?? err}`)
+      return
+    }
+
+    if (result === false)
+      return
+
+    const changed = typeof result === 'string' ? result : result?.text
+    if (changed !== undefined) {
+      const clean = ChatRoom.clean(changed)
+      if (!clean)
+        return
+      text = clean
+    }
+    if (result && typeof result === 'object' && Array.isArray(result.to))
+      to = result.to.filter(player => typeof player === 'string')
+  }
+
+  // What isn't for everyone stays out of the history new players are sent
+  deliver(ctx, state.room.post(sender, text, !to), { around: entity.position, to })
 }
 
 /** Registered symbol core reads a route's description from. Written here so the plugin runs on a core without it too */
@@ -205,16 +389,15 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
  *
  * Players send `chat:send`, everyone (or everyone in range) gets `chat:message`. The server cleans up what is
  * said, limits how fast a player may talk and how long a message may be, and keeps muted players quiet.
+ * The game has its say through `chat(server)`.
  */
 const plugin: ServerPlugin = {
   name: 'Chat',
 
   setup(ctx) {
-    states.set(ctx.server, {
-      room: new ChatRoom(resolveChatOptions(ctx.options as ChatOptions)),
-      names: new Map(),
-      joining: new Map(),
-    })
+    const state = stateOf(ctx.server)
+    state.room = new ChatRoom(resolveChatOptions(ctx.options as ChatOptions))
+    state.ctx = ctx
   },
 
   http(app, ctx) {
@@ -224,10 +407,10 @@ const plugin: ServerPlugin = {
   },
 
   onConnection(channel, _client, ctx) {
-    const state = states.get(ctx.server)
+    const state = stateOf(ctx.server)
     const connection = channel as unknown as Channel
     const id = connection.id
-    if (!state || id === undefined)
+    if (!state.room || id === undefined)
       return
 
     const { room } = state
@@ -236,22 +419,7 @@ const plugin: ServerPlugin = {
     if (room.options.history > 0 && room.options.range === 0)
       connection.emit(CHAT_HISTORY, { messages: room.history } satisfies ChatHistory, RELIABLE)
 
-    connection.on(CHAT_SEND, (data) => {
-      // Only players talk: the editor's connection has no entity
-      const entity = entityOf(ctx, id)
-      if (!entity)
-        return
-
-      const name = nameOf(entity)
-      if (state.names.has(id))
-        state.names.set(id, name)
-
-      const result = room.say({ id, name }, (data as Partial<ChatSend> | null)?.text)
-      if ('message' in result)
-        broadcast(ctx, room, result.message, entity.position)
-      else if ('notice' in result)
-        connection.emit(CHAT_NOTICE, { text: result.notice } satisfies ChatNotice, RELIABLE)
-    })
+    connection.on(CHAT_SEND, data => receive(ctx, connection, id, data))
 
     // Said on a later tick: a game usually names a player just after it connected
     if (room.options.announce && entityOf(ctx, id))
@@ -259,8 +427,8 @@ const plugin: ServerPlugin = {
   },
 
   tick(_delta, ctx) {
-    const state = states.get(ctx.server)
-    if (!state?.joining.size)
+    const state = stateOf(ctx.server)
+    if (!state.joining.size)
       return
 
     const now = Date.now()
@@ -282,9 +450,9 @@ const plugin: ServerPlugin = {
   },
 
   onDisconnect(channel, ctx) {
-    const state = states.get(ctx.server)
+    const state = stateOf(ctx.server)
     const id = (channel as unknown as Channel).id
-    if (!state || id === undefined)
+    if (!state.room || id === undefined)
       return
 
     state.room.forget(id)
@@ -297,8 +465,13 @@ const plugin: ServerPlugin = {
       announce(ctx, `${name} left`)
   },
 
+  /** The game's interceptors and listeners stay: they belong to the game, not to this run of the plugin */
   destroy(ctx) {
-    states.delete(ctx.server)
+    const state = stateOf(ctx.server)
+    state.room = undefined
+    state.ctx = undefined
+    state.names.clear()
+    state.joining.clear()
   },
 }
 

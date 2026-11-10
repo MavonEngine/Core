@@ -1,10 +1,11 @@
 import type { ClientPlugin, ClientPluginContext } from '@mavonengine/core/Plugins/types'
+import type { ChatPosition } from './ChatBox.js'
 import type { ChatHistory, ChatMessage, ChatNotice, ChatSend } from './protocol.js'
 import ChatBox from './ChatBox.js'
 import { CHAT_HISTORY, CHAT_MESSAGE, CHAT_NOTICE, CHAT_SEND } from './protocol.js'
 
 export { default as ChatBox, nameColor } from './ChatBox.js'
-export type { ChatBoxOptions } from './ChatBox.js'
+export type { ChatBoxOptions, ChatPosition } from './ChatBox.js'
 export * from './protocol.js'
 
 export interface ChatClientOptions {
@@ -16,7 +17,9 @@ export interface ChatClientOptions {
   openKey?: string
   /** Shown in the empty input */
   placeholder?: string
-  /** Don't put the chat on screen: the game shows the messages itself, from the `chat:message` event */
+  /** Corner of the page the chat sits in: `bottom-left` (default), `bottom-right`, `top-left` or `top-right` */
+  position?: ChatPosition
+  /** Don't put the chat on screen: the game shows the messages itself, see `chat(game)` */
   ui?: boolean
 }
 
@@ -29,16 +32,93 @@ interface Socket {
   emit(event: string, data: unknown, options?: { reliable?: boolean }): void
 }
 
-interface ChatClient {
-  box?: ChatBox
-  socket?: Socket
+/** The parts of the game the chat uses */
+interface GameLike {
+  trigger?(name: string, event?: unknown): void
+  network?: { socket?: Socket }
 }
 
-/** The chat of each running game: the plugin object itself is shared by all of them */
-const clients = new WeakMap<object, ChatClient>()
+type Listener<T> = (value: T) => void
 
-function socketOf(ctx: ClientPluginContext): Socket | undefined {
-  return (ctx.game as unknown as { network?: { socket?: Socket } }).network?.socket
+interface ChatClientState {
+  box?: ChatBox
+  socket?: Socket
+  messages: Set<Listener<ChatMessage>>
+  notices: Set<Listener<string>>
+  histories: Set<Listener<ChatMessage[]>>
+  api?: ChatClient
+}
+
+/**
+ * The chat of each running game. Kept on the global object under a registered symbol, not in this module,
+ * so the game and the plugin share it even when the bundler ends up with two copies of the module.
+ */
+const STATES = Symbol.for('mavonengine.chat.clients')
+
+function stateOf(game: object): ChatClientState {
+  const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, ChatClientState>
+  let state = registry.get(game)
+  if (!state) {
+    state = { messages: new Set(), notices: new Set(), histories: new Set() }
+    registry.set(game, state)
+  }
+  return state
+}
+
+/**
+ * What a game does with the chat in the browser. Get it with `chat(game)`, also before the game has connected.
+ */
+export interface ChatClient {
+  /** Be told every message as it is said, e.g. to show a bubble over the player. Returns a function that stops that */
+  onMessage(listener: Listener<ChatMessage>): () => void
+  /** Be told what the server says to this player alone, like "you are sending messages too fast" */
+  onNotice(listener: Listener<string>): () => void
+  /** Be told the recent messages the server sends when the game connects */
+  onHistory(listener: Listener<ChatMessage[]>): () => void
+  /** Say something, as if the player had typed it. Returns false while the game isn't connected */
+  send(text: string): boolean
+  /** The chat box on screen, to add lines of your own, hide it or move it. Undefined with `ui: false` */
+  readonly box: ChatBox | undefined
+}
+
+/**
+ * The chat of a game, for the game's own code:
+ *
+ *   import { chat } from '@mavonengine/chat/client'
+ *
+ *   chat(game).onMessage(message => console.log(message.from?.name, message.text))
+ */
+export function chat(game: object): ChatClient {
+  const state = stateOf(game)
+  const subscribe = <T>(listeners: Set<Listener<T>>) => (listener: Listener<T>) => {
+    listeners.add(listener)
+    return () => void listeners.delete(listener)
+  }
+
+  state.api ??= {
+    onMessage: subscribe(state.messages),
+    onNotice: subscribe(state.notices),
+    onHistory: subscribe(state.histories),
+    send(text) {
+      if (!state.socket)
+        return false
+      state.socket.emit(CHAT_SEND, { text } satisfies ChatSend, { reliable: true })
+      return true
+    },
+    get box() {
+      return state.box
+    },
+  }
+
+  return state.api
+}
+
+/**
+ * Say something in the chat, as if the player had typed it. Returns false while the game isn't connected.
+ * Same as `chat(game).send(message)`.
+ */
+export function sendChat(ctx: Pick<ClientPluginContext, 'game'>, message: string): boolean {
+  return chat(ctx.game).send(message)
 }
 
 function number(value: unknown): number | undefined {
@@ -49,70 +129,82 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined
 }
 
-/**
- * Say something in the chat, as if the player had typed it. Returns false while the game isn't connected.
- */
-export function sendChat(ctx: Pick<ClientPluginContext, 'game'>, message: string): boolean {
-  const socket = clients.get(ctx.game)?.socket
-  if (!socket)
-    return false
-
-  socket.emit(CHAT_SEND, { text: message } satisfies ChatSend, { reliable: true })
-  return true
+/** A listener of the game that throws must not stop the others, nor the chat */
+function tell<T>(listeners: Set<Listener<T>>, value: T, ctx: ClientPluginContext) {
+  for (const listener of listeners) {
+    try {
+      listener(value)
+    }
+    catch (err) {
+      ctx.logger?.error(`Chat: a listener threw: ${(err as Error)?.stack ?? err}`)
+    }
+  }
 }
 
 /**
  * Text chat between the players of a game.
  *
- * Puts a chat box in the bottom left corner and passes what is typed there to the server over the game's
- * connection. Every message also reaches the game as a `chat:message` event, e.g. to show a bubble over a player.
+ * Puts a chat box in a corner of the page and passes what is typed there to the server over the game's
+ * connection. The game listens in and talks through `chat(game)`, and gets every message, notice and history
+ * as a `chat:message`, `chat:notice` and `chat:history` event as well.
  */
 const plugin: ClientPlugin = {
   name: 'Chat',
 
   setup(ctx) {
     const options = ctx.options as ChatClientOptions
-    const client: ChatClient = {}
-    clients.set(ctx.game, client)
+    const state = stateOf(ctx.game)
 
     if (options.ui === false || typeof document === 'undefined')
       return
 
-    client.box = new ChatBox({
-      send: message => void sendChat(ctx, message),
+    state.box = new ChatBox({
+      send: message => void chat(ctx.game).send(message),
       maxMessages: number(options.maxMessages),
       maxLength: number(options.maxLength),
       openKey: text(options.openKey),
       placeholder: text(options.placeholder),
+      position: text(options.position) as ChatPosition | undefined,
     })
   },
 
   /** The game connects whenever it wants to, so the connection is looked for until it is there */
   update(_delta, ctx) {
-    const client = clients.get(ctx.game)
-    const socket = socketOf(ctx)
-    if (!client || !socket || client.socket === socket)
+    const state = stateOf(ctx.game)
+    const game = ctx.game as unknown as GameLike
+    const socket = game.network?.socket
+    if (!socket || state.socket === socket)
       return
 
-    client.socket = socket
+    state.socket = socket
 
-    const show = (message: ChatMessage) => {
-      client.box?.add(message)
-      ctx.game.trigger(CHAT_EVENT, message)
-    }
-
-    socket.on(CHAT_MESSAGE, data => show(data as ChatMessage))
-    socket.on(CHAT_HISTORY, (data) => {
-      // Shown, but not told to the game: nobody is saying these right now
-      for (const message of (data as ChatHistory).messages ?? [])
-        client.box?.add(message)
+    socket.on(CHAT_MESSAGE, (data) => {
+      const message = data as ChatMessage
+      state.box?.add(message)
+      game.trigger?.(CHAT_EVENT, message)
+      tell(state.messages, message, ctx)
     })
-    socket.on(CHAT_NOTICE, data => client.box?.notice((data as ChatNotice).text))
+
+    socket.on(CHAT_HISTORY, (data) => {
+      // Shown, but not told as messages: nobody is saying these right now
+      const messages = (data as ChatHistory).messages ?? []
+      for (const message of messages)
+        state.box?.add(message)
+      game.trigger?.(CHAT_HISTORY, messages)
+      tell(state.histories, messages, ctx)
+    })
+
+    socket.on(CHAT_NOTICE, (data) => {
+      const notice = (data as ChatNotice).text
+      state.box?.notice(notice)
+      game.trigger?.(CHAT_NOTICE, notice)
+      tell(state.notices, notice, ctx)
+    })
   },
 
   /** The editor takes the whole page, and whoever runs it is no player */
   editor(ctx) {
-    clients.get(ctx.game)?.box?.hide()
+    stateOf(ctx.game).box?.hide()
   },
 }
 

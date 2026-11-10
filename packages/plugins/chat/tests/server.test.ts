@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net'
 import express from 'express'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import plugin, { announce, chatRoom, JOIN_NAME_WAIT_MS } from '../src/server'
+import plugin, { announce, chat, chatRoom, JOIN_NAME_WAIT_MS } from '../src/server'
 
 class Position {
   constructor(public x = 0) {}
@@ -127,6 +127,196 @@ describe('chat server plugin', () => {
 
     expect(ada.got('chat:history')).toEqual([{ messages: [] }])
     expect(bob.got('chat:history')).toEqual([{ messages: [expect.objectContaining({ text: 'anyone?', from: { id: 'a1', name: 'Ada' } })] }])
+  })
+
+  describe('chat(server)', () => {
+    it('lets the game change what is said', () => {
+      const { ctx, connect } = world({ announce: false })
+      const ada = connect('a1', { name: 'Ada' })
+      const seen: unknown[] = []
+
+      chat(ctx.server).intercept((message, tools) => {
+        seen.push([message.from, message.text, (tools.player as any).id])
+        return message.text.replace('darn', '****')
+      })
+      // An object does the same
+      chat(ctx.server).intercept(message => ({ text: `${message.text}!` }))
+
+      ada.receive('chat:send', { text: ' darn  it ' })
+
+      // Interceptors get the cleaned up text and who sent it
+      expect(seen).toEqual([[{ id: 'a1', name: 'Ada' }, 'darn it', 'a1']])
+      expect(texts(ada.got('chat:message'))).toEqual(['**** it!'])
+    })
+
+    it('lets the game drop a message and answer the sender alone, like for a command', () => {
+      const { ctx, connect } = world({ announce: false })
+      const ada = connect('a1', { name: 'Ada' })
+      const bob = connect('b2', { name: 'Bob' })
+
+      chat(ctx.server).intercept((message, tools) => {
+        if (message.text !== '/roll')
+          return
+        tools.reply('You rolled 4')
+        return false
+      })
+
+      ada.receive('chat:send', { text: '/roll' })
+      ada.receive('chat:send', { text: 'did you see that' })
+
+      expect(ada.got('chat:notice')).toEqual([{ text: 'You rolled 4' }])
+      expect(bob.got('chat:notice')).toEqual([])
+      expect(texts(bob.got('chat:message'))).toEqual(['did you see that'])
+      // A dropped message is not in the history either
+      expect(texts(chat(ctx.server).room!.history)).toEqual(['did you see that'])
+    })
+
+    it('lets the game send a message to some players only, and keeps that out of the history', () => {
+      const { ctx, connect } = world({ announce: false })
+      const ada = connect('a1', { name: 'Ada' })
+      const bob = connect('b2', { name: 'Bob' })
+      const eve = connect('e3', { name: 'Eve' })
+      const editor = connect('e9', { player: false })
+
+      chat(ctx.server).intercept((message) => {
+        const whisper = /^\/w (\S+) (.+)$/.exec(message.text)
+        return whisper ? { text: whisper[2], to: [whisper[1]] } : undefined
+      })
+
+      ada.receive('chat:send', { text: '/w b2 meet me at the lake' })
+
+      // The one it is for, and the sender
+      expect(texts(bob.got('chat:message'))).toEqual(['meet me at the lake'])
+      expect(texts(ada.got('chat:message'))).toEqual(['meet me at the lake'])
+      expect(eve.got('chat:message')).toEqual([])
+      expect(editor.got('chat:message')).toEqual([])
+      expect(chat(ctx.server).room!.history).toEqual([])
+    })
+
+    it('runs interceptors after the chat\'s own checks, in the order they were added, and can remove them', () => {
+      const { ctx, connect } = world({ announce: false, maxLength: 10, rateLimit: { messages: 2, perSeconds: 60 } })
+      const ada = connect('a1', { name: 'Ada' })
+      const order: string[] = []
+      const off = chat(ctx.server).intercept(() => void order.push('first'))
+      chat(ctx.server).intercept(() => void order.push('second'))
+
+      ada.receive('chat:send', { text: 'far too long for this chat' })
+      expect(order).toEqual([])
+
+      ada.receive('chat:send', { text: 'one' })
+      expect(order).toEqual(['first', 'second'])
+
+      off()
+      ada.receive('chat:send', { text: 'two' })
+      expect(order).toEqual(['first', 'second', 'second'])
+
+      // Rate limited: the interceptors are not asked
+      ada.receive('chat:send', { text: 'three' })
+      expect(order).toHaveLength(3)
+    })
+
+    it('drops a message when an interceptor throws or empties it, and says so in the log', () => {
+      const { ctx, connect } = world({ announce: false, rateLimit: { messages: 10 } })
+      ctx.logger.error = vi.fn()
+      const ada = connect('a1', { name: 'Ada' })
+      const broken = chat(ctx.server).intercept(() => {
+        throw new Error('boom')
+      })
+
+      ada.receive('chat:send', { text: 'lost' })
+      expect(ada.got('chat:message')).toEqual([])
+      expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('an interceptor threw, the message was dropped'))
+
+      broken()
+      chat(ctx.server).intercept(() => '   ')
+      ada.receive('chat:send', { text: 'emptied' })
+      expect(ada.got('chat:message')).toEqual([])
+    })
+
+    it('tells the game every message after it went out, with who got it', () => {
+      const { ctx, connect } = world({ announce: false, range: 10 })
+      const heard: unknown[] = []
+      // Registered before anyone connected
+      const off = chat(ctx.server).onMessage((message, info) => heard.push([message.from?.name ?? null, message.text, info.recipients]))
+      const ada = connect('a1', { name: 'Ada', x: 0 })
+      connect('n2', { name: 'Near', x: 5 })
+      connect('f3', { name: 'Far', x: 500 })
+
+      ada.receive('chat:send', { text: 'psst' })
+      chat(ctx.server).announce('Server restarts soon')
+
+      expect(heard).toEqual([
+        ['Ada', 'psst', ['a1', 'n2']],
+        [null, 'Server restarts soon', ['a1', 'n2', 'f3']],
+      ])
+
+      off()
+      ada.receive('chat:send', { text: 'again' })
+      expect(heard).toHaveLength(2)
+    })
+
+    it('keeps going when a listener throws', () => {
+      const { ctx, connect } = world({ announce: false })
+      ctx.logger.error = vi.fn()
+      const ada = connect('a1', { name: 'Ada' })
+      const heard: string[] = []
+      chat(ctx.server).onMessage(() => {
+        throw new Error('boom')
+      })
+      chat(ctx.server).onMessage(message => heard.push(message.text))
+
+      ada.receive('chat:send', { text: 'still heard' })
+
+      expect(heard).toEqual(['still heard'])
+      expect(texts(ada.got('chat:message'))).toEqual(['still heard'])
+    })
+
+    it('mutes, unmutes and announces for the game', () => {
+      const { ctx, connect } = world({ announce: false })
+      const ada = connect('a1', { name: 'Ada' })
+      const hooks = chat(ctx.server)
+
+      expect(hooks.mute('a1', 5)).toEqual({ playerId: 'a1', until: expect.any(Number) })
+      ada.receive('chat:send', { text: 'hello?' })
+      expect(ada.got('chat:notice')).toHaveLength(1)
+
+      expect(hooks.unmute('a1')).toBe(true)
+      expect(hooks.unmute('a1')).toBe(false)
+      expect(hooks.announce('Welcome')).toMatchObject({ from: null, text: 'Welcome' })
+      expect(texts(ada.got('chat:message'))).toEqual(['Welcome'])
+    })
+
+    it('takes callbacks before the plugin runs and keeps them when it stops', () => {
+      const server = { gameSocket: { connectionsManager: { connections: new Map() } } }
+      const hooks = chat(server)
+      const interceptor = vi.fn()
+      hooks.intercept(interceptor)
+
+      // Nothing to do them with yet
+      expect(hooks.room).toBeUndefined()
+      expect(hooks.announce('too early')).toBeUndefined()
+      expect(hooks.mute('a1')).toBeUndefined()
+      expect(hooks.unmute('a1')).toBe(false)
+
+      const entities = new Map<string, any>([['a1', { id: 'a1', name: 'Ada', position: new Position() }]])
+      const ctx = { server, game: { world: { entities: { items: entities } } }, logger: { info: vi.fn(), error: vi.fn() }, options: { announce: false } } as any
+      plugin.setup!(ctx)
+      const handlers = new Map<string, (data: unknown) => void>()
+      const channel = { id: 'a1', emit: vi.fn(), on: (event: string, callback: (data: unknown) => void) => void handlers.set(event, callback) }
+      server.gameSocket.connectionsManager.connections.set('a1', { channel })
+      plugin.onConnection!(channel as any, entities.get('a1'), ctx)
+
+      handlers.get('chat:send')!({ text: 'hello' })
+      expect(interceptor).toHaveBeenCalledTimes(1)
+      expect(chat(server)).toBe(hooks)
+
+      plugin.destroy!(ctx)
+      expect(hooks.room).toBeUndefined()
+      plugin.setup!(ctx)
+      plugin.onConnection!(channel as any, entities.get('a1'), ctx)
+      handlers.get('chat:send')!({ text: 'again' })
+      expect(interceptor).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('proximity', () => {
