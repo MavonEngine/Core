@@ -18,22 +18,22 @@ describe('resolveChatOptions', () => {
       range: 0,
       announce: true,
       path: '/api/chat',
-      adminToken: undefined,
     })
   })
 
-  it('takes what mavonengine.json and the environment say', () => {
-    expect(resolveChatOptions({ maxLength: 80, rateLimit: { messages: 2, perSeconds: 30 }, history: 0, range: 25, announce: false, path: 'admin/chat/' }, { MAVONENGINE_CHAT_ADMIN_TOKEN: 'from-env' })).toEqual({
+  it('takes what mavonengine.json says', () => {
+    expect(resolveChatOptions({ maxLength: 80, rateLimit: { messages: 2, perSeconds: 30 }, history: 0, range: 25, announce: false, path: 'admin/chat/' })).toEqual({
       maxLength: 80,
       rateLimit: { messages: 2, perMs: 30_000 },
       history: 0,
       range: 25,
       announce: false,
       path: '/admin/chat',
-      adminToken: 'from-env',
     })
-    // The option wins over the environment
-    expect(resolveChatOptions({ adminToken: 'from-options' }, { MAVONENGINE_CHAT_ADMIN_TOKEN: 'from-env' }).adminToken).toBe('from-options')
+  })
+
+  it('has no admin token of its own: the server\'s guards its admin API', () => {
+    expect(resolveChatOptions({ adminToken: 'ignored' } as any)).not.toHaveProperty('adminToken')
   })
 
   it('falls back to the default for nonsense', () => {

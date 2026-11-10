@@ -14,13 +14,8 @@ export interface ChatOptions {
   range?: number
   /** Say so in the chat when a player joins or leaves. Default true */
   announce?: boolean
-  /** URL path of the admin API. Default `/api/chat` */
+  /** URL path of the admin API, which is guarded by the server's admin token. Default `/api/chat` */
   path?: string
-  /**
-   * Required as `Authorization: Bearer <token>` by the admin API. Also `MAVONENGINE_CHAT_ADMIN_TOKEN`.
-   * Without a token the admin API only answers requests from localhost.
-   */
-  adminToken?: string
 }
 
 export interface ResolvedChatOptions {
@@ -30,7 +25,6 @@ export interface ResolvedChatOptions {
   range: number
   announce: boolean
   path: string
-  adminToken?: string
 }
 
 /** Control characters, line breaks and tabs among them */
@@ -48,12 +42,10 @@ function atLeastZero(value: unknown, fallback: number): number {
 }
 
 /**
- * Options from mavonengine.json and the environment, with the defaults filled in
+ * Options from mavonengine.json, with the defaults filled in
  */
-export function resolveChatOptions(options: ChatOptions = {}, env: Record<string, string | undefined> = {}): ResolvedChatOptions {
+export function resolveChatOptions(options: ChatOptions = {}): ResolvedChatOptions {
   const path = `/${(typeof options.path === 'string' ? options.path : '/api/chat').replace(LEADING_SLASHES_RE, '').replace(TRAILING_SLASHES_RE, '')}`
-  const token = typeof options.adminToken === 'string' && options.adminToken ? options.adminToken : env.MAVONENGINE_CHAT_ADMIN_TOKEN
-
   return {
     maxLength: Math.floor(positive(options.maxLength, 200)),
     rateLimit: {
@@ -64,7 +56,6 @@ export function resolveChatOptions(options: ChatOptions = {}, env: Record<string
     range: atLeastZero(options.range, 0),
     announce: options.announce !== false,
     path: path === '/' ? '/api/chat' : path,
-    adminToken: token || undefined,
   }
 }
 

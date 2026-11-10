@@ -151,7 +151,7 @@ npx @mavonengine/cli dashboard --sim
 | `--host <host>` | `localhost` | Server host |
 | `--port <port>` | `8050` | Server HTTP port (`ServerOptions.httpPort`) |
 | `--url <url>` | | Full metrics URL, overrides `--host` and `--port` |
-| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN` | Metrics token (`ServerOptions.metrics.token`) |
+| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN`, then `$MAVONENGINE_ADMIN_TOKEN` | Metrics token (`ServerOptions.metrics.token`), or the server's [admin token](#admin-token) |
 | `--interval <ms>` | `1000` | Poll interval |
 | `--theme <name>` | `dark` | `dark`, `dracula`, `nord`, `tokyoNight`, `gruvbox`, `matrix`, `monochrome`, `highContrast`, `light` |
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
@@ -190,8 +190,23 @@ const server = new MyServer(logger, physicsWorld, {
 
 - With no token, the endpoint only answers requests from localhost.
 - With `NODE_ENV=production` and no token, the endpoint is turned off.
+- The server's [admin token](#admin-token) is taken as well, and turns the endpoint on in production by itself.
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
+
+### Admin token
+
+A game server has one admin token, for everything that changes it or tells what not everyone should know. The engine and every plugin use the same one, so no plugin needs a secret of its own:
+
+```sh
+MAVONENGINE_ADMIN_TOKEN=… npm start
+```
+
+or `adminToken` in the server's options. Requests send it as `Authorization: Bearer <token>`. Without a token, admin routes only answer requests from localhost.
+
+- It also reads the metrics, so the dashboard and `mavonengine mcp` take it for `--token`. The metrics token stays read-only: it administers nothing.
+- [`@mavonengine/chat`](../plugins/chat) guards its admin API with it, and [`@mavonengine/http-monitoring`](../plugins/http-monitoring) takes it as the password of its login.
+- The Routes tab shows which routes ask for it.
 
 ## `mavonengine mcp`
 
@@ -329,6 +344,18 @@ export default defineServerPlugin({
 ```
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+Guard a plugin's admin routes with `ctx.requireAdmin`, which asks for the server's [admin token](#admin-token), instead of giving the plugin a token of its own:
+
+```ts
+export default defineServerPlugin({
+  http(app, ctx) {
+    app.post('/api/my-plugin/reset', ctx.requireAdmin, (_req, res) => res.json({ reset: true }))
+  },
+})
+```
+
+A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
 
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 

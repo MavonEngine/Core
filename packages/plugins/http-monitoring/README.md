@@ -12,9 +12,15 @@ Then open `http://<your server>:8050/monitoring/`.
 
 ## Logging in
 
-Pick one way to configure who may log in:
+The dashboard logs in with the game server's admin token, the same one as every other admin route of the server, so it needs no secret of its own:
 
-**An htpasswd file** (recommended). Create it with Apache's `htpasswd`; bcrypt (`-B`) is the strongest hash it supports:
+```sh
+MAVONENGINE_ADMIN_TOKEN=… npm start
+```
+
+or `adminToken` in the server's options. In the browser's login prompt, enter the token as the password; the user name can be anything. Tools can send it as `Authorization: Bearer <token>` instead.
+
+**An htpasswd file** adds a login per person next to that. Create it with Apache's `htpasswd`; bcrypt (`-B`) is the strongest hash it supports:
 
 ```sh
 htpasswd -cB .htpasswd alice
@@ -33,13 +39,9 @@ The path is relative to the project root, the directory with `mavonengine.json`.
 
 Supported hashes: bcrypt (`$2y$`, `$2b$`, `$2a$`), Apache MD5 (`$apr1$`, htpasswd's default) and SHA-1 (`{SHA}`). crypt(3) and plain-text lines are skipped with a warning.
 
-**One user from the environment**, for a quick setup:
+`MAVONENGINE_MONITORING_USER` and `MAVONENGINE_MONITORING_PASSWORD`, the plugin's own single login, still work but are deprecated: use the admin token instead. The server logs a warning when they are set.
 
-```sh
-MAVONENGINE_MONITORING_USER=ops MAVONENGINE_MONITORING_PASSWORD=… npm start
-```
-
-**No login configured**: in development the dashboard only answers requests from the server's own machine. With `NODE_ENV=production` it stays off, and the server logs why.
+**No admin token and no htpasswd file**: in development the dashboard only answers requests from the server's own machine. With `NODE_ENV=production` it stays off, and the server logs why.
 
 Basic auth sends the password with every request, readable to anyone in between unless the connection is encrypted. On a public server, put HTTPS in front of the game server, for example with a reverse proxy.
 

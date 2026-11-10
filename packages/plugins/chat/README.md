@@ -47,7 +47,6 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 | `range` | `0` | How far a message is heard, in world units. `0` means everyone hears it. With a range no history is sent, since it could have been said out of earshot |
 | `announce` | `true` | Say so in the chat when a player joins or leaves |
 | `path` | `/api/chat` | URL path of the admin API |
-| `adminToken` | | Token the admin API asks for. Also `MAVONENGINE_CHAT_ADMIN_TOKEN` |
 | `openKey` | `Enter` | Key that starts typing |
 | `placeholder` | `Press Enter to chat` | Shown in the empty input |
 | `maxMessages` | `100` | Lines the chat box keeps |
@@ -84,10 +83,11 @@ The colours of the chat box are CSS custom properties on `.mavonengine-chat`: `-
 | `POST /api/chat/mutes` | Mute a player: `{ "playerId": "…", "minutes": 10 }`. Without `minutes` until it is lifted |
 | `DELETE /api/chat/mutes/:playerId` | Unmute a player |
 
-Without an `adminToken` the API only answers requests from localhost. With one, it wants `Authorization: Bearer <token>` from everyone.
+The API is guarded by the game server's admin token, the same one as every other admin route of the server: set `MAVONENGINE_ADMIN_TOKEN` (or `adminToken` in the server's options) and send it as `Authorization: Bearer <token>`. Without one the API only answers requests from localhost. The chat has no token of its own.
 
 ```sh
 curl -X POST localhost:8050/api/chat/mutes -d '{ "playerId": "abc123", "minutes": 10 }'
+curl -X POST https://game.example.com/api/chat/mutes -H "Authorization: Bearer $MAVONENGINE_ADMIN_TOKEN" -d '{ "playerId": "abc123" }'
 ```
 
 Player ids are the ones `mavonengine dashboard` lists on its Players tab.

@@ -122,6 +122,96 @@ describe('httpServer', () => {
     })
   })
 
+  describe('admin token', () => {
+    function adminRoute() {
+      http.app.post('/api/admin/reset', http.requireAdmin, (_req, res) => void res.json({ reset: true }))
+    }
+
+    it('lets localhost through without a token, and nobody else', async () => {
+      const request = await serve()
+      adminRoute()
+
+      expect((await request('/api/admin/reset', { method: 'POST' })).status).toBe(200)
+
+      // What Express would hand the guard for a request from another machine
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() }
+      const next = vi.fn()
+      http.requireAdmin({ headers: {}, socket: { remoteAddress: '203.0.113.9' } } as any, res as any, next)
+      expect(res.status).toHaveBeenCalledWith(403)
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('MAVONENGINE_ADMIN_TOKEN') })
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    it('wants the token as a bearer header when one is set, also from localhost', async () => {
+      const request = await serve({ adminToken: 'secret' })
+      adminRoute()
+      const post = (headers: Record<string, string> = {}, query = '') => request(`/api/admin/reset${query}`, { method: 'POST', headers })
+
+      expect((await post()).status).toBe(401)
+      expect((await post({ Authorization: 'Bearer wrong' })).status).toBe(401)
+      expect((await post({ Authorization: 'secret' })).status).toBe(401)
+      // Not in the URL, where it would end up in logs
+      expect((await post({}, '?token=secret')).status).toBe(401)
+
+      const res = await post({ Authorization: 'Bearer secret' })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ reset: true })
+    })
+
+    it('checks a candidate without giving the token away', async () => {
+      await serve({ adminToken: 'secret' })
+      expect(http.adminToken.configured).toBe(true)
+      expect(http.adminToken.matches('secret')).toBe(true)
+      expect(http.adminToken.matches('wrong')).toBe(false)
+      expect(http.adminToken.matches('')).toBe(false)
+      expect(JSON.stringify(http.adminToken)).not.toContain('secret')
+      listener?.close()
+
+      await serve()
+      expect(http.adminToken.configured).toBe(false)
+      expect(http.adminToken.matches('')).toBe(false)
+    })
+
+    it('also opens the metrics, next to their own token', async () => {
+      const request = await serve({ adminToken: 'admin', metrics: { token: 'metrics' } })
+      adminRoute()
+
+      expect((await request('/api/game/metrics')).status).toBe(401)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer metrics' } })).status).toBe(200)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+      expect((await request('/api/game/metrics?token=admin')).status).toBe(200)
+
+      // The metrics token reads, it doesn't administer
+      expect((await request('/api/admin/reset', { method: 'POST', headers: { Authorization: 'Bearer metrics' } })).status).toBe(401)
+    })
+
+    it('turns the metrics on in production by itself', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const request = await serve({ adminToken: 'admin' })
+
+      expect((await request('/api/game/metrics')).status).toBe(401)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+    })
+
+    it('says on the routes it guards who may call them, unless they say so themselves', async () => {
+      const request = await serve({ adminToken: 'secret' })
+      adminRoute()
+
+      const { routes } = await (await request('/api/game/routes', { headers: { Authorization: 'Bearer secret' } })).json() as { routes: any[] }
+      const reset = routes.find(route => route.path === '/api/admin/reset')
+
+      expect(reset).toMatchObject({ method: 'POST', source: 'game', auth: 'The server\'s admin token as `Authorization: Bearer <token>`' })
+      expect(routes.find(route => route.path === '/api/game/health').auth).toBe('None')
+
+      // Without a token the same route says it is localhost only
+      listener?.close()
+      const local = await serve()
+      adminRoute()
+      const listed = await (await local('/api/game/routes')).json() as { routes: any[] }
+      expect(listed.routes.find(route => route.path === '/api/admin/reset').auth).toContain('Requests from localhost only')
+    })
+  })
+
   it('serves metrics to localhost without a token', async () => {
     const request = await serve()
 

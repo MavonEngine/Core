@@ -27,7 +27,8 @@ Options:
   --url <url>          Server base URL, e.g. http://localhost:8050, overrides --host and --port
   --client-url <url>   Where Vite serves the client in dev (default: the server URL,
                        which serves it in the template), e.g. http://localhost:5173
-  --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
+  --token <token>      Metrics or admin token (or set MAVONENGINE_METRICS_TOKEN
+                       or MAVONENGINE_ADMIN_TOKEN)
   --docs-url <url>     MCP server of the documentation for the docs_* tools
                        (default: https://mavonengine.com/mcp)
   --no-docs            Leave out the docs_* tools, e.g. offline
@@ -82,7 +83,7 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
   }
 
   return {
-    client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }),
+    client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN }),
     docsUrl: values.docs ? (values['docs-url'] ?? DEFAULT_DOCS_URL) : false,
   }
 }

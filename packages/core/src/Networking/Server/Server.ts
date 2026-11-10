@@ -17,6 +17,7 @@ import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
 import { watch } from 'node:fs'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
@@ -29,7 +30,7 @@ import { rememberJson, tapMessages } from '../Debug/tap'
 import Player from '../Entities/Player'
 import NetworkedGameObject from '../NetworkedGameObject'
 import { ClientCommand, ServerCommand } from './Commands'
-import HttpServer from './Http/HttpServer'
+import HttpServer, { ADMIN_TOKEN_ENV } from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
 import LogBuffer from './Stats/LogBuffer'
 import RequestLog from './Stats/RequestLog'
@@ -50,6 +51,13 @@ export interface ServerOptions {
 
   /** Port the HTTP server listens on. Default 8050 */
   httpPort?: number
+
+  /**
+   * The admin token of this server, also read from `MAVONENGINE_ADMIN_TOKEN`. It is what `server.http.requireAdmin`
+   * and `ctx.requireAdmin` of plugins ask for, as `Authorization: Bearer <token>`, and the metrics endpoints take it too.
+   * Without one, admin routes only answer requests from localhost.
+   */
+  adminToken?: string
 
   /**
    * Serve the game client from the HTTP server: the source through Vite when `dev` is set, the built files otherwise.
@@ -185,6 +193,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.metrics = new ServerMetrics(this, this.logger, this.options.metrics)
     this.http = new HttpServer(this.logger, this.metrics, {
       port: this.options.httpPort,
+      adminToken: this.options.adminToken ?? process.env[ADMIN_TOKEN_ENV],
       metrics: this.options.metrics,
       logs: this.logs,
       requests: this.requests,
@@ -665,6 +674,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
       projectRoot: this.projectRoot,
+      requireAdmin: this.http.requireAdmin,
+      adminToken: this.http.adminToken,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })

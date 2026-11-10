@@ -34,10 +34,12 @@ function fakeServer({ logs = true, requests = true } = {}) {
 }
 
 /** Mount the dashboard on a fresh Express app and listen on a random port */
-async function serve(options: Record<string, unknown> = {}, { env = {}, server = fakeServer() }: { env?: Record<string, string>, server?: ReturnType<typeof fakeServer> } = {}) {
+async function serve(options: Record<string, unknown> = {}, { env = {}, server = fakeServer(), adminToken }: { env?: Record<string, string>, server?: ReturnType<typeof fakeServer>, adminToken?: string } = {}) {
   const app = express()
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  const mounted = mountMonitoring(app, { server: server as any, logger: logger as any, options, projectRoot: dir }, env)
+  // What core hands every plugin: checks the server's admin token without telling it
+  const admin = adminToken === undefined ? undefined : { configured: !!adminToken, matches: (candidate: string) => !!adminToken && candidate === adminToken }
+  const mounted = mountMonitoring(app, { server: server as any, logger: logger as any, options, projectRoot: dir, adminToken: admin }, env)
   // Stands in for the game client's page fallback, which comes after plugin routes
   app.use((_req, res) => void res.status(200).send('game'))
 
@@ -161,7 +163,7 @@ describe('dashboard', () => {
 
       expect(mounted).toBe(true)
       expect((await get('/monitoring/')).status).toBe(200)
-      expect(logger.warn).toHaveBeenCalledWith('Monitoring dashboard at /monitoring/, only from this machine: no login is configured')
+      expect(logger.warn).toHaveBeenCalledWith('Monitoring dashboard at /monitoring/, only from this machine: the game server has no admin token')
     })
 
     it('stays off in production', async () => {
@@ -170,6 +172,52 @@ describe('dashboard', () => {
       expect(mounted).toBe(false)
       expect(await (await get('/monitoring/')).text()).toBe('game')
       expect(logger.warn.mock.calls[0][0]).toContain('Monitoring is off')
+    })
+  })
+
+  describe('with the game server\'s admin token', () => {
+    it('logs in with the token as the password, whatever the user name, also in production', async () => {
+      const { get, logger, mounted } = await serve({}, { env: { NODE_ENV: 'production' }, adminToken: 'server-secret' })
+
+      expect(mounted).toBe(true)
+      expect(logger.info).toHaveBeenCalledWith('Monitoring dashboard at /monitoring/, login with the game server\'s admin token as the password')
+
+      const prompt = await get('/monitoring/')
+      expect(prompt.status).toBe(401)
+      expect(prompt.headers.get('www-authenticate')).toContain('Basic realm=')
+      expect((await get('/monitoring/', { Authorization: basic('admin', 'wrong') })).status).toBe(401)
+
+      expect((await get('/monitoring/', { Authorization: basic('admin', 'server-secret') })).status).toBe(200)
+      expect((await get('/monitoring/api/metrics', { Authorization: basic('anyone', 'server-secret') })).status).toBe(200)
+      // Tools send it the way every other admin route takes it
+      expect((await get('/monitoring/api/metrics', { Authorization: 'Bearer server-secret' })).status).toBe(200)
+      expect((await get('/monitoring/api/metrics', { Authorization: 'Bearer wrong' })).status).toBe(401)
+    })
+
+    it('still takes the users of an htpasswd file next to it', async () => {
+      writeFileSync(join(dir, '.htpasswd'), `${BOB}\n`)
+      const { get, logger } = await serve({ htpasswd: '.htpasswd' }, { adminToken: 'server-secret' })
+
+      expect((await get('/monitoring/', { Authorization: basic('bob', 'hunter2') })).status).toBe(200)
+      expect((await get('/monitoring/', { Authorization: basic('bob', 'server-secret') })).status).toBe(200)
+      expect((await get('/monitoring/', { Authorization: basic('bob', 'wrong') })).status).toBe(401)
+      expect(logger.info.mock.calls.at(-1)![0]).toContain('login with the game server\'s admin token as the password or a user from ')
+    })
+
+    it('counts for nothing when the server has none', async () => {
+      const { get, mounted, logger } = await serve({}, { env: { NODE_ENV: 'production' }, adminToken: '' })
+
+      expect(mounted).toBe(false)
+      expect(logger.warn.mock.calls[0][0]).toContain('MAVONENGINE_ADMIN_TOKEN')
+      expect(await (await get('/monitoring/')).text()).toBe('game')
+    })
+
+    it('says that the plugin\'s own user and password are on their way out', async () => {
+      const { get, logger } = await serve({}, { env: { MAVONENGINE_MONITORING_USER: 'ops', MAVONENGINE_MONITORING_PASSWORD: 'pw' } })
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('MAVONENGINE_MONITORING_USER and MAVONENGINE_MONITORING_PASSWORD are deprecated'))
+      // They still work for now
+      expect((await get('/monitoring/', { Authorization: basic('ops', 'pw') })).status).toBe(200)
     })
   })
 

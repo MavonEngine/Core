@@ -259,8 +259,9 @@ describe('chat server plugin', () => {
       close = undefined
     })
 
-    async function api(options: object = {}) {
+    async function api(options: object = {}, context: object = {}) {
       const game = world({ announce: false, ...options })
+      Object.assign(game.ctx, context)
       const app = express()
       plugin.http!(app, game.ctx)
 
@@ -312,27 +313,37 @@ describe('chat server plugin', () => {
       expect((await post('/api/chat/mutes', { minutes: 5 })).status).toBe(400)
     })
 
-    it('wants the admin token when one is set', async () => {
-      const { request, post } = await api({ adminToken: 'secret' })
+    it('is guarded by the server\'s admin guard, which the plugin gets from the engine', async () => {
+      // What core hands every plugin: asks for the server's admin token
+      const requireAdmin = vi.fn((req: any, res: any, next: () => void) => {
+        if (req.headers.authorization === 'Bearer server-admin-token')
+          next()
+        else
+          res.status(401).json({ error: 'Invalid admin token' })
+      })
+      const { request, post } = await api({}, { requireAdmin })
 
       expect((await request('/api/chat/messages')).status).toBe(401)
-      expect((await request('/api/chat/messages', { headers: { Authorization: 'Bearer wrong' } })).status).toBe(401)
+      expect((await post('/api/chat/messages', { text: 'hi' })).status).toBe(401)
+      expect((await request('/api/chat/mutes')).status).toBe(401)
       expect((await post('/api/chat/mutes', { playerId: 'a1' })).status).toBe(401)
       expect((await request('/api/chat/mutes/a1', { method: 'DELETE' })).status).toBe(401)
+      expect(requireAdmin).toHaveBeenCalledTimes(5)
 
-      expect((await request('/api/chat/messages', { headers: { Authorization: 'Bearer secret' } })).status).toBe(200)
-      expect((await post('/api/chat/mutes', { playerId: 'a1' }, { Authorization: 'Bearer secret' })).status).toBe(200)
+      const headers = { Authorization: 'Bearer server-admin-token' }
+      expect((await request('/api/chat/messages', { headers })).status).toBe(200)
+      expect((await post('/api/chat/mutes', { playerId: 'a1' }, headers)).status).toBe(200)
     })
 
-    it('takes the admin token from the environment', async () => {
-      vi.stubEnv('MAVONENGINE_CHAT_ADMIN_TOKEN', 'from-env')
-      const { request } = await api()
+    it('has no token of its own', async () => {
+      vi.stubEnv('MAVONENGINE_CHAT_ADMIN_TOKEN', 'old-way')
+      const { request } = await api({ adminToken: 'old-way' })
 
-      expect((await request('/api/chat/mutes')).status).toBe(401)
-      expect((await request('/api/chat/mutes', { headers: { Authorization: 'Bearer from-env' } })).status).toBe(200)
+      // Neither the option nor the variable of earlier versions does anything: localhost gets in as before
+      expect((await request('/api/chat/mutes')).status).toBe(200)
     })
 
-    it('only answers localhost without a token', async () => {
+    it('only answers localhost on a core without an admin guard', async () => {
       const { app } = await api()
       // What Express would hand the route for a request from another machine
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() }

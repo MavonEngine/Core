@@ -7,6 +7,9 @@ export type { HttpRouteDoc, HttpRouteInfo, HttpRouteSource }
 /** Registered symbol, so a plugin that bundles its own copy of this file still describes its routes */
 const ROUTE_DOC = Symbol.for('mavonengine.routeDoc')
 
+/** Registered symbol a guard says who it lets through with, for routes that don't say themselves */
+const ROUTE_AUTH = Symbol.for('mavonengine.routeAuth')
+
 const PATH_PARAM_RE = /:(\w+)/g
 const DUPLICATE_SLASHES_RE = /\/{2,}/g
 const TRAILING_SLASH_RE = /(?<=.)\/$/
@@ -23,6 +26,15 @@ export function describeRoute(doc: HttpRouteDoc): RequestHandler {
   const handler: RequestHandler = (_req, _res, next) => next()
   ;(handler as unknown as Record<symbol, HttpRouteDoc>)[ROUTE_DOC] = doc
   return handler
+}
+
+/**
+ * Say who a guard lets through, e.g. "The admin token". Every route the guard is put in front of then lists
+ * that as its `auth`, unless the route describes its own. Returns the guard.
+ */
+export function describeAuth<T extends RequestHandler>(guard: T, auth: string): T {
+  ;(guard as unknown as Record<symbol, string>)[ROUTE_AUTH] = auth
+  return guard
 }
 
 export interface RouteOrigin {
@@ -125,6 +137,8 @@ export default class RouteCatalog {
 
   private addRoute(route: NonNullable<Layer['route']>, prefix: string, origin: RouteOrigin, routes: HttpRouteInfo[]) {
     const doc = route.stack.map(layer => layer.handle?.[ROUTE_DOC]).find(Boolean) as HttpRouteDoc | undefined
+    // What its guard says, when the route doesn't say who may call it
+    const auth = doc?.auth ?? route.stack.map(layer => layer.handle?.[ROUTE_AUTH]).find(Boolean) as string | undefined
     const registered = Object.keys(route.methods).filter(method => route.methods[method])
     // app.all() registers the route once per HTTP method
     const all = registered.includes('_all') || METHODS.every(method => route.methods[method.toLowerCase()])
@@ -139,6 +153,7 @@ export default class RouteCatalog {
       for (const method of methods) {
         routes.push({
           ...doc,
+          ...(auth ? { auth } : {}),
           method,
           path,
           source: origin.source,

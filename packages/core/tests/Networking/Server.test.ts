@@ -388,6 +388,33 @@ describe('server', () => {
       expect(routes.some(route => route.source === 'engine' && route.path === '/api/game/routes')).toBe(true)
     })
 
+    it('gives plugins the server\'s admin guard, with the token from the options or the environment', async () => {
+      const contexts: any[] = []
+      const fromOptions = startable(new TestServer(logger, undefined, { adminToken: 'from-options', plugins: [{ setup: ctx => void contexts.push(ctx) }] }))
+      await fromOptions.start()
+      fromOptions.stop()
+
+      vi.stubEnv('MAVONENGINE_ADMIN_TOKEN', 'from-env')
+      const fromEnv = startable(new TestServer(logger, undefined, { plugins: [{ setup: ctx => void contexts.push(ctx) }] }))
+      await fromEnv.start()
+      fromEnv.stop()
+      vi.unstubAllEnvs()
+
+      expect(contexts[0].requireAdmin).toBe(fromOptions.http.requireAdmin)
+      expect(contexts[1].requireAdmin).toBe(fromEnv.http.requireAdmin)
+      expect(contexts[0].adminToken.matches('from-options')).toBe(true)
+      expect(contexts[1].adminToken).toBe(fromEnv.http.adminToken)
+
+      const allowed = (guard: any, token: string) => {
+        const next = vi.fn()
+        guard({ headers: { authorization: `Bearer ${token}` }, socket: { remoteAddress: '203.0.113.9' } }, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next)
+        return next.mock.calls.length === 1
+      }
+      expect(allowed(contexts[0].requireAdmin, 'from-options')).toBe(true)
+      expect(allowed(contexts[0].requireAdmin, 'from-env')).toBe(false)
+      expect(allowed(contexts[1].requireAdmin, 'from-env')).toBe(true)
+    })
+
     it('passes the options of loaded plugins to their context', async () => {
       const setup = vi.fn()
       const server = startable(new TestServer(logger, undefined, {

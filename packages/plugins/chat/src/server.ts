@@ -1,10 +1,7 @@
 import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
-import type { Express, NextFunction, Request, RequestHandler, Response } from 'express'
+import type { Express, Request, RequestHandler, Response } from 'express'
 import type { ChatOptions } from './ChatRoom.js'
 import type { ChatHistory, ChatMessage, ChatNotice, ChatSend } from './protocol.js'
-import { Buffer } from 'node:buffer'
-import { timingSafeEqual } from 'node:crypto'
-import process from 'node:process'
 import ChatRoom, { resolveChatOptions } from './ChatRoom.js'
 import { CHAT_HISTORY, CHAT_MESSAGE, CHAT_NOTICE, CHAT_SEND } from './protocol.js'
 
@@ -12,7 +9,8 @@ export { default as ChatRoom, resolveChatOptions } from './ChatRoom.js'
 export type { ChatOptions, Mute, ResolvedChatOptions } from './ChatRoom.js'
 export * from './protocol.js'
 
-type Context = Pick<ServerPluginContext, 'server' | 'game' | 'logger' | 'options'>
+/** `requireAdmin` is missing on a @mavonengine/core from before the server had an admin token */
+type Context = Pick<ServerPluginContext, 'server' | 'game' | 'logger' | 'options'> & Partial<Pick<ServerPluginContext, 'requireAdmin'>>
 
 /** The parts of a connection the chat uses, which is what geckos.io's ServerChannel has */
 interface Channel {
@@ -91,17 +89,11 @@ export function announce(ctx: Context, text: string): ChatMessage | undefined {
   return message
 }
 
-function safeEqual(a: string, b: string) {
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB)
-}
-
 /** Registered symbol core reads a route's description from. Written here so the plugin runs on a core without it too */
 const ROUTE_DOC = Symbol.for('mavonengine.routeDoc')
 
 /** Says what a route does, for the endpoint lists of the dashboard and the editor. Does nothing to the request */
-function describe(doc: { summary: string, description?: string, params?: Record<string, string>, response?: string, auth?: string }): RequestHandler {
+function describe(doc: { summary: string, description?: string, params?: Record<string, string>, response?: string }): RequestHandler {
   const handler: RequestHandler = (_req, _res, next) => next()
   ;(handler as unknown as Record<symbol, unknown>)[ROUTE_DOC] = doc
   return handler
@@ -133,31 +125,24 @@ function readJson(req: Request): Promise<Record<string, unknown>> {
   })
 }
 
+/** What guards the admin API on a core without an admin token of its own: only this machine gets in */
+const localhostOnly: RequestHandler = (req, res, next) => {
+  if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+    res.status(403).json({ error: 'The chat admin API is only available from localhost: this @mavonengine/core has no admin token' })
+    return
+  }
+
+  next()
+}
+
 /**
  * The admin API: read the chat, announce something, mute and unmute players.
- * With an admin token it wants that token, without one it only answers requests from localhost.
+ * Guarded by the server's admin token, like every other admin route of the server: the chat has no token of its own.
  */
 export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
-  const { path, adminToken } = room.options
-  const auth = adminToken
-    ? 'The admin token as `Authorization: Bearer <token>`'
-    : 'Requests from localhost only. Set `adminToken` in the plugin\'s options, or MAVONENGINE_CHAT_ADMIN_TOKEN, to use it from elsewhere'
-
-  const admin = (req: Request, res: Response, next: NextFunction) => {
-    if (adminToken) {
-      const header = req.headers.authorization
-      if (!header?.startsWith('Bearer ') || !safeEqual(header.slice(7), adminToken)) {
-        res.status(401).json({ error: 'Invalid admin token' })
-        return
-      }
-    }
-    else if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
-      res.status(403).json({ error: 'The chat admin API is only available from localhost unless an admin token is configured' })
-      return
-    }
-
-    next()
-  }
+  const { path } = room.options
+  // Who it lets through is listed with the routes by the guard itself
+  const admin = ctx.requireAdmin ?? localhostOnly
 
   const body = (handle: (body: Record<string, unknown>, req: Request, res: Response) => void) => (req: Request, res: Response) => {
     readJson(req).then(parsed => handle(parsed, req, res), (err: Error) => res.status(400).json({ error: err.message }))
@@ -166,7 +151,6 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
   app.get(`${path}/messages`, describe({
     summary: 'The recent chat messages',
     response: '`{ messages }`, oldest first, as many as the `history` option keeps',
-    auth,
   }), admin, (_req, res) => {
     res.json({ messages: room.history })
   })
@@ -175,7 +159,6 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
     summary: 'Announce something in the chat',
     description: 'Send `{ "text": "..." }`. Everyone gets it as a message of the server.',
     response: '`{ message }`, or 400 without a text',
-    auth,
   }), admin, body((parsed, _req, res) => {
     const text = ChatRoom.clean(parsed.text)
     if (!text) {
@@ -189,7 +172,6 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
   app.get(`${path}/mutes`, describe({
     summary: 'The players that are muted',
     response: '`{ mutes }`, each with `playerId` and `until` (epoch ms, null for a mute that doesn\'t end)',
-    auth,
   }), admin, (_req, res) => {
     res.json({ mutes: room.listMutes() })
   })
@@ -198,7 +180,6 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
     summary: 'Mute a player',
     description: 'Send `{ "playerId": "...", "minutes": 10 }`. Without `minutes` the mute lasts until it is lifted. A player is known by the id of its connection, so it is unmuted when it connects again.',
     response: '`{ mute }`, or 400 without a player id',
-    auth,
   }), admin, body((parsed, _req, res) => {
     if (typeof parsed.playerId !== 'string' || !parsed.playerId) {
       res.status(400).json({ error: 'Expected { playerId, minutes? }' })
@@ -214,7 +195,6 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
     summary: 'Unmute a player',
     params: { playerId: 'Id of the player' },
     response: '`{ unmuted }`, false when the player was not muted',
-    auth,
   }), admin, (req, res) => {
     res.json({ unmuted: room.unmute(String(req.params.playerId)) })
   })
@@ -231,7 +211,7 @@ const plugin: ServerPlugin = {
 
   setup(ctx) {
     states.set(ctx.server, {
-      room: new ChatRoom(resolveChatOptions(ctx.options as ChatOptions, process.env)),
+      room: new ChatRoom(resolveChatOptions(ctx.options as ChatOptions)),
       names: new Map(),
       joining: new Map(),
     })
