@@ -55,6 +55,20 @@ describe('plugins.json in the repository', () => {
     expect(readFileSync(join(REPO_ROOT, 'packages', 'plugins', 'http-monitoring', 'README.md'), 'utf8')).toContain(pkg.name)
   })
 
+  it('describes every plugin of this repository the way its package does', () => {
+    for (const plugin of registry.plugins.filter(entry => entry.homepage?.includes('/MavonEngine/Core/tree/main/packages/plugins/'))) {
+      const dir = join(REPO_ROOT, 'packages', 'plugins', plugin.homepage!.split('/').at(-1)!)
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+
+      expect(plugin, plugin.package).toMatchObject({ package: pkg.name, target: pkg.mavonengine.target, engine: pkg.mavonengine.engine })
+      // The readme it points to exists next to the package
+      expect(plugin.readme, plugin.package).toBe(`https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/${plugin.homepage!.split('/').at(-1)}/README.md`)
+      expect(readFileSync(join(dir, 'README.md'), 'utf8')).toContain(pkg.name)
+    }
+
+    expect(registry.plugins.map(plugin => plugin.package)).toEqual(['@mavonengine/http-monitoring', '@mavonengine/chat'])
+  })
+
   it('is read from the main branch on GitHub', () => {
     expect(PLUGIN_REGISTRY_URL).toBe('https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json')
   })
