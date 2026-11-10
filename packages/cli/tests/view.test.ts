@@ -207,6 +207,10 @@ describe('dashboard view', () => {
       logsAvailable: null,
       requests: [],
       requestsAvailable: null,
+      packets: [],
+      packetsAvailable: null,
+      sync: null,
+      packetDetail: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
