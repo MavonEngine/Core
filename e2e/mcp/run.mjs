@@ -218,15 +218,17 @@ async function main() {
     check(sync.syncDistance === 200 && sync.players.length === 1 && sync.players[0].tracked.includes(playerId), 'network_sync shows what the player is sent')
     check(sync.players[0].lastState.tick <= sync.tick && sync.entities.find(e => e.id === playerId).trackedBy === 1, 'and by how many players each entity is tracked')
 
-    // The newest arrival and the newest handled input: their other halves are older, so well inside the window
+    // The two sides are read one after the other, so the newest record of one can be missing its other half:
+    // take the newest state and the newest input that both sides have
     const timeline = await data('network_timeline', { sinceMs: 10000, limit: 2000 })
-    const arrived = timeline.entries.findLast(e => e.side === 'client' && e.type === 'sv_state')
-    const left = timeline.entries.find(e => e.side === 'server' && e.type === 'sv_state' && e.tick === arrived?.tick)
+    const on = (side, type) => timeline.entries.filter(e => e.side === side && e.type === type)
+    const arrived = on('client', 'sv_state').findLast(e => on('server', 'sv_state').some(sent => sent.tick === e.tick))
+    const left = on('server', 'sv_state').find(e => e.tick === arrived?.tick)
     // Two clocks a millisecond apart can swap the two on localhost, so the order is not checked
     const travelMs = arrived && left ? new Date(arrived.time) - new Date(left.time) : Number.NaN
     check(Math.abs(travelMs) < 1000, `network_timeline shows a state on both sides (tick ${arrived?.tick}, ${travelMs}ms apart)`)
-    const handled = timeline.entries.findLast(e => e.side === 'server' && e.type === 'command')
-    const input = timeline.entries.find(e => e.side === 'client' && e.type === 'command' && e.sequenceId === handled?.sequenceId)
+    const handled = on('server', 'command').findLast(e => on('client', 'command').some(sent => sent.sequenceId === e.sequenceId))
+    const input = on('client', 'command').find(e => e.sequenceId === handled?.sequenceId)
     check(input && handled, `and an input on both sides (seq ${handled?.sequenceId}, ${handled && input && new Date(handled.time) - new Date(input.time)}ms apart)`)
     const events = await data('network_timeline', { sinceMs: 60000, eventsOnly: true })
     check(events.entries.some(e => e.side === 'server' && e.type === 'sync_enter' && e.info.entities.includes(playerId)), 'and, events only, the player coming into its own sync range')
@@ -243,8 +245,9 @@ async function main() {
     writeFileSync(join(screenshots, 'client.jpg'), image)
     check(shot.content[0].type === 'image' && image[0] === 0xFF && image[1] === 0xD8 && image.length > 5000, `client_screenshot returns a JPEG (${image.length} bytes, ${shot.content[1].text})`)
 
-    const traced = await data('client_trace', { durationMs: 1500, savePath: join(screenshots, 'trace.json') })
-    check(traced.frames > 5 && traced.renderCpu?.p50 > 0 && traced.perFrame.drawCalls > 0, `client_trace records frames (${traced.frames} frames, render CPU p50 ${traced.renderCpu?.p50}ms, ${traced.perFrame.drawCalls} draw calls, ${traced.bottleneck.verdict})`)
+    // A CI runner without a GPU renders a few frames a second, so the count only has to show that frames were recorded
+    const traced = await data('client_trace', { durationMs: 3000, savePath: join(screenshots, 'trace.json') })
+    check(traced.frames >= 3 && traced.renderCpu?.p50 > 0 && traced.perFrame.drawCalls > 0, `client_trace records frames (${traced.frames} frames, render CPU p50 ${traced.renderCpu?.p50}ms, ${traced.perFrame.drawCalls} draw calls, ${traced.bottleneck.verdict})`)
     check(traced.passes.some(p => p.name === 'RenderPass'), 'and times the composer passes')
     check(traced.js?.hotFunctions.length > 0, `and samples JS stacks through the Document-Policy header (${traced.notes.join('; ') || 'no notes'})`)
     check(JSON.parse(readFileSync(traced.traceFile, 'utf8')).traceEvents.length > traced.frames, `and saves a trace file (${traced.traceFile})`)
