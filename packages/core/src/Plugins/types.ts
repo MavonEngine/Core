@@ -1,5 +1,5 @@
 import type { ServerChannel } from '@geckos.io/server'
-import type { Express } from 'express'
+import type { Express, RequestHandler } from 'express'
 import type winston from 'winston'
 import type BaseGame from '../BaseGame'
 import type Game from '../Game'
@@ -15,6 +15,17 @@ import type GameObject from '../World/GameObject'
 export type PluginTarget = 'client' | 'server' | 'both'
 
 export type PluginOptions = Record<string, unknown>
+
+/**
+ * The server's admin token, without telling what it is: for a plugin that takes it some other way than
+ * `requireAdmin` does, like as the password of a login
+ */
+export interface AdminToken {
+  /** Whether the server has one. Without, `requireAdmin` only lets requests from localhost through */
+  readonly configured: boolean
+  /** Whether `candidate` is the token. Always false without one */
+  matches(candidate: string): boolean
+}
 
 interface PluginContextBase<TGame extends BaseGame> {
   /** npm package name of the plugin */
@@ -49,6 +60,15 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame> {
   readonly server: Server<GameObject>
   /** Directory with mavonengine.json, when the plugins were loaded from it */
   readonly projectRoot?: string
+  /**
+   * Guard for the plugin's admin routes: `app.post('/api/my-plugin/reset', ctx.requireAdmin, handler)`.
+   * It asks for the server's admin token (`adminToken` in its options, or MAVONENGINE_ADMIN_TOKEN) as
+   * `Authorization: Bearer <token>`, and without one only lets requests from localhost through.
+   * Use it instead of a token of the plugin's own, so one token administers the whole server.
+   */
+  readonly requireAdmin: RequestHandler
+  /** The same token for a plugin that checks it itself, e.g. as a password. Prefer `requireAdmin` for routes */
+  readonly adminToken: AdminToken
 }
 
 interface PluginBase<TContext> {
@@ -121,6 +141,54 @@ export function pluginAssetBase(pkg: string): string {
 
 /** Dev only: the editor posts `{ plugin, prefab }` here when it places a plugin prefab, see `mavonEnginePlugins()` */
 export const PREFAB_USED_PATH = '/__mavonengine/prefab-used'
+
+/** Dev only: GET lists the plugins in mavonengine.json with their version and readme, for the editor's Plugins view */
+export const PLUGINS_INFO_PATH = '/__mavonengine/plugins'
+
+/**
+ * A plugin listed in the project's mavonengine.json, as the dev server describes it on `PLUGINS_INFO_PATH`
+ */
+export interface PluginInfo {
+  /** npm package name */
+  package: string
+  /** Not turned off with `enabled: false` in mavonengine.json */
+  enabled: boolean
+  /** Found in node_modules with a valid `mavonengine` field in its package.json */
+  installed: boolean
+  /** Why it can't be used, when it isn't installed or its manifest is invalid */
+  problem?: string
+  version?: string
+  description?: string
+  license?: string
+  homepage?: string
+  target?: PluginTarget
+  /** Supported @mavonengine/core versions, a semver range */
+  engine?: string
+  /** Its README as Markdown, cut off when it is very long */
+  readme?: string
+  /** Prefabs its manifest ships assets for */
+  declaredPrefabs: string[]
+  /** Prefabs the project uses, from `prefabs` in mavonengine.json: their assets ship in a release */
+  usedPrefabs: string[]
+}
+
+/**
+ * A plugin as the game server lists it on GET /api/game/plugins. Without the readme, which only the dev server sends
+ */
+export interface ServerPluginInfo extends Omit<PluginInfo, 'readme'> {
+  /** Its server entry was loaded by this server and is running */
+  runningOnServer: boolean
+}
+
+export interface ServerPluginList {
+  plugins: ServerPluginInfo[]
+}
+
+export interface PluginInfoList {
+  /** Directory with mavonengine.json, null when the project has none */
+  root: string | null
+  plugins: PluginInfo[]
+}
 
 /** Dev server endpoint the editor saves scenes to: POST { name, scene } */
 export const SCENE_SAVE_PATH = '/__mavonengine/scene-save'

@@ -11,6 +11,20 @@
     overflow: hidden;
 }
 
+.workspace {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+}
+
+/* A view picked in the activity bar that takes the place of the whole editor */
+.fullView {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+}
+
 .editor {
     flex: 1;
     height: 100%;

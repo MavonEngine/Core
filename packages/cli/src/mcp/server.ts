@@ -1,10 +1,13 @@
 import type { DocsClient } from './docs'
 import type GameServerClient from './GameServerClient'
+import type { PluginListSource } from './pluginTools'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { version } from '../../package.json'
 import { registerClientTools } from './clientTools'
 import { registerDocsTools } from './docs'
+import { registerNetworkTools } from './networkTools'
+import { registerPluginTools } from './pluginTools'
 import { LOG_LEVELS, READ_ONLY, run, vec3 } from './result'
 
 const INSTRUCTIONS = `Reads the live state of a running MavonEngine game: the game server (health, performance, players, scene,
@@ -13,8 +16,12 @@ network state, console logs, screenshots). Every tool is read-only.
 Server scene / entity tools need the server in development (NODE_ENV is not "production"); client tools need the client
 served by Vite in dev. Start with server_status and list_clients. Use type / near filters rather than paging through a world.
 compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.
+network_packets / client_packets list the packets each side sent and received, network_timeline merges both sides for one
+client, and network_sync tells which entities each player is sent: use them when something does not arrive or arrives late.
 client_trace records a few seconds of a tab for frame drops, stutter and slow rendering: the bottleneck, hitches with
 their causes, hot JS functions, WebGL load, and a trace file for flame charts.
+list_plugins shows the plugins the project has, available_plugins the official ones it could add and plugin_readme how
+one is set up and used: look there before building something a plugin already does, like chat.
 docs_list_pages / docs_get_page read the MavonEngine documentation: check it before guessing how an engine API works.`
 
 /** The metrics snapshot without its per-second history arrays */
@@ -35,9 +42,10 @@ function levelOf(level: string) {
 }
 
 /**
- * The MCP server with the game server and client tools, and the docs_* tools when `docs` is given (left out with `--no-docs`)
+ * The MCP server with the game server and client tools, the docs_* tools when `docs` is given (left out with `--no-docs`)
+ * and the tools for the plugins that can be installed when `pluginList` is (left out with `--no-plugin-list`)
  */
-export function createMcpServer(client: GameServerClient, docs?: DocsClient): McpServer {
+export function createMcpServer(client: GameServerClient, docs?: DocsClient, pluginList?: PluginListSource): McpServer {
   const server = new McpServer({ name: 'mavonengine', version }, { instructions: INSTRUCTIONS })
 
   server.registerTool('server_status', {
@@ -163,6 +171,8 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient): Mc
   }))
 
   registerClientTools(server, client)
+  registerNetworkTools(server, client)
+  registerPluginTools(server, client, pluginList)
   if (docs)
     registerDocsTools(server, docs)
 

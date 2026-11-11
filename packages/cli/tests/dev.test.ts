@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkDevScript, descendants, detectPackageManager, devScriptOf, findProjectRoot, parseDevArgs, runDevCommand, startDev } from '../src/commands/dev'
+import { checkDevScript, descendants, detectPackageManager, devScriptOf, findProjectRoot, parseDevArgs, runDevCommand, startDev, startDevSession, startDevWithInstaller } from '../src/commands/dev'
 
 let dir: string
 
@@ -242,4 +242,64 @@ describe.skipIf(process.platform === 'win32')('startDev', () => {
 
     expect(() => process.kill(serverPid, 0)).toThrow()
   }, 15000)
+})
+
+describe.skipIf(process.platform === 'win32')('startDevSession', () => {
+  /** A dev script that counts how often it was started and then keeps running */
+  function countingProject() {
+    writeFileSync(join(dir, 'server.cjs'), `
+      const fs = require('node:fs')
+      const runs = fs.existsSync('runs') ? Number(fs.readFileSync('runs', 'utf8')) : 0
+      fs.writeFileSync('runs', String(runs + 1))
+      fs.writeFileSync('control', process.env.MAVONENGINE_DEV_CONTROL_URL + ' ' + process.env.MAVONENGINE_DEV_CONTROL_TOKEN)
+      console.log('run ' + (runs + 1))
+      setInterval(() => {}, 1000)
+    `)
+    writePackage(dir, { ...project, scripts: { dev: 'node server.cjs' } })
+  }
+  const runs = () => existsSync(join(dir, 'runs')) ? Number(readFileSync(join(dir, 'runs'), 'utf8')) : 0
+
+  it('restarts the dev script without counting that as its exit', async () => {
+    countingProject()
+    const session = startDevSession(dir, { capture: true })
+    let exited = false
+    void session.exited.then(() => exited = true)
+    await vi.waitFor(() => expect(runs()).toBe(1), { timeout: 5000 })
+
+    await session.restart()
+    await vi.waitFor(() => expect(runs()).toBe(2), { timeout: 5000 })
+
+    expect(exited).toBe(false)
+    // Written after the file the wait above looks at, and it arrives through a pipe
+    await vi.waitFor(() => expect(session.output()).toContain('run 2'), { timeout: 5000 })
+
+    await session.stop()
+    await session.exited
+    expect(exited).toBe(true)
+  }, 20000)
+
+  it('lets the dev script reach the installer, which restarts it after an install', async () => {
+    countingProject()
+    const output: string[] = []
+    const { session, installer, close } = await startDevWithInstaller(dir, { capture: true, onOutput: text => output.push(text) })
+    // No package manager here: the install itself is covered by the install command's tests
+    ;(installer as any).options.install = async (_root: string, packages: string[], write: (text: string) => void) => {
+      write(`installed ${packages.join(' ')}\n`)
+      return 0
+    }
+    await vi.waitFor(() => expect(runs()).toBe(1), { timeout: 5000 })
+
+    const [url, token] = readFileSync(join(dir, 'control'), 'utf8').split(' ')
+    const started = await fetch(`${url}/install`, { method: 'POST', headers: { 'x-mavonengine-dev-token': token }, body: JSON.stringify({ packages: ['forest'] }) })
+    expect(started.status).toBe(202)
+    await installer.finished
+
+    expect(installer.job).toMatchObject({ status: 'done', packages: ['forest'] })
+    await vi.waitFor(() => expect(runs()).toBe(2), { timeout: 5000 })
+    expect(output.join('')).toContain('installed forest')
+    expect(output.join('')).toContain('restarting the dev script')
+
+    await session.stop()
+    await close()
+  }, 20000)
 })

@@ -1,5 +1,5 @@
-import type { LogLine, RequestLine, ServerMetricsSnapshot } from './snapshot'
-import { normalizeLogs, normalizeRequests, normalizeSnapshot } from './snapshot'
+import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncInfo } from './snapshot'
+import { normalizeLogs, normalizePacketDetail, normalizePackets, normalizePlugins, normalizeRequests, normalizeRoutes, normalizeSnapshot, normalizeSync } from './snapshot'
 
 export type ConnectionStatus = 'connecting' | 'live' | 'unreachable' | 'unauthorized' | 'forbidden' | 'disabled'
 
@@ -21,6 +21,22 @@ export interface DashboardState {
   requests: RequestLine[]
   /** false once the server turned out not to record requests, null until known */
   requestsAvailable: boolean | null
+  /** Recent packets and network events of the game socket, oldest first. Only followed while `watchNetwork` is on */
+  packets: PacketLine[]
+  /** false once the server turned out not to serve them (production, or an older server), null until known */
+  packetsAvailable: boolean | null
+  /** Who is sent what, null until known or when the server doesn't tell */
+  sync: SyncInfo | null
+  /** The packet opened with `inspectPacket()`, null when none is */
+  packetDetail: PacketDetail | null
+  /** The server's HTTP endpoints, in the order it registered them */
+  routes: RouteLine[]
+  /** false once the server turned out not to list its endpoints, null until known */
+  routesAvailable: boolean | null
+  /** The plugins of the server's project, in the order of its mavonengine.json */
+  plugins: PluginLine[]
+  /** false once the server turned out not to list its plugins, null until known */
+  pluginsAvailable: boolean | null
 }
 
 /** Log lines kept in memory by the dashboard */
@@ -28,6 +44,9 @@ export const MAX_LOG_LINES = 1000
 
 /** HTTP requests kept in memory by the dashboard */
 export const MAX_REQUEST_LINES = 1000
+
+/** Packets kept in memory by the dashboard: as many as the server keeps, a few seconds of a busy server */
+export const MAX_PACKET_LINES = 2000
 
 export class MetricsSourceError extends Error {
   constructor(message: string, readonly status: ConnectionStatus) {
@@ -44,6 +63,14 @@ export interface MetricsSource {
   fetch(): Promise<unknown>
   fetchLogs?(afterId: number): Promise<unknown>
   fetchRequests?(afterId: number): Promise<unknown>
+  /** Packets and network events of the game socket newer than `afterId` */
+  fetchPackets?(afterId: number): Promise<unknown>
+  /** The server's state sync */
+  fetchSync?(): Promise<unknown>
+  /** One packet with its payload */
+  fetchPacket?(id: number): Promise<unknown>
+  fetchRoutes?(): Promise<unknown>
+  fetchPlugins?(): Promise<unknown>
 }
 
 export interface HttpSourceOptions {
@@ -57,6 +84,12 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
   // Logs live next to metrics: .../api/game/metrics -> .../api/game/logs
   const logsUrl = new URL('logs', url)
   const requestsUrl = new URL('requests', url)
+  // Dev only: .../api/game/dev/net/*
+  const packetsUrl = new URL('dev/net/packets', url)
+  packetsUrl.searchParams.set('limit', String(MAX_PACKET_LINES))
+  const syncUrl = new URL('dev/net/sync', url)
+  const routesUrl = new URL('routes', url)
+  const pluginsUrl = new URL('plugins', url)
 
   async function request(target: string) {
     let res: Response
@@ -94,6 +127,14 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
       requestsUrl.searchParams.set('after', String(afterId))
       return request(requestsUrl.toString())
     },
+    fetchPackets: (afterId) => {
+      packetsUrl.searchParams.set('after', String(afterId))
+      return request(packetsUrl.toString())
+    },
+    fetchSync: () => request(syncUrl.toString()),
+    fetchPacket: id => request(new URL(`dev/net/packets/${id}`, url).toString()),
+    fetchRoutes: () => request(routesUrl.toString()),
+    fetchPlugins: () => request(pluginsUrl.toString()),
   }
 }
 
@@ -151,6 +192,8 @@ export interface MetricsClientOptions {
   maxBackoffMs?: number
   /** Poll this often, without backoff, until the first snapshot arrives. For a server that is still starting */
   startupIntervalMs?: number
+  /** How often the HTTP endpoints and the plugins are fetched again. They rarely change, so less often than the metrics */
+  routesIntervalMs?: number
 }
 
 /**
@@ -167,13 +210,27 @@ export default class MetricsClient {
   private listeners = new Set<(state: DashboardState) => void>()
   private logs: Feed<LogLine>
   private requests: Feed<RequestLine>
+  private packets: Feed<PacketLine>
+  private syncAvailable: boolean
 
-  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs }: MetricsClientOptions = {}) {
+  /**
+   * Follow the packets and the state sync too. Off by default: it is a lot of data on a busy server,
+   * so the dashboard only turns it on while its Network tab is shown.
+   */
+  watchNetwork = false
+  private routesIntervalMs: number
+  /** Date.now() the endpoints and plugins were last fetched, null to fetch them with the next poll */
+  private projectFetchedAt: number | null = null
+
+  constructor(private source: MetricsSource, { intervalMs = 1000, maxBackoffMs = 10000, startupIntervalMs, routesIntervalMs = 5000 }: MetricsClientOptions = {}) {
     this.intervalMs = intervalMs
+    this.routesIntervalMs = routesIntervalMs
     this.maxBackoffMs = maxBackoffMs
     this.startupIntervalMs = startupIntervalMs
     this.logs = new Feed(source.fetchLogs?.bind(source), normalizeLogs, MAX_LOG_LINES)
     this.requests = new Feed(source.fetchRequests?.bind(source), normalizeRequests, MAX_REQUEST_LINES)
+    this.packets = new Feed(source.fetchPackets?.bind(source), normalizePackets, MAX_PACKET_LINES)
+    this.syncAvailable = !!source.fetchSync
     this.state = {
       status: 'connecting',
       source: source.label,
@@ -185,7 +242,54 @@ export default class MetricsClient {
       logsAvailable: this.logs.available,
       requests: [],
       requestsAvailable: this.requests.available,
+      packets: [],
+      packetsAvailable: this.packets.available,
+      sync: null,
+      packetDetail: null,
+      routes: [],
+      routesAvailable: source.fetchRoutes ? null : false,
+      plugins: [],
+      pluginsAvailable: source.fetchPlugins ? null : false,
     }
+  }
+
+  /**
+   * Load the content of one packet into `state.packetDetail`, or close it with null.
+   */
+  async inspectPacket(id: number | null) {
+    if (id === null) {
+      this.state.packetDetail = null
+      this.notify()
+      return
+    }
+
+    if (!this.source.fetchPacket) {
+      this.state.packetDetail = { id, status: 'error', lines: [], error: 'This source does not serve packet contents' }
+      this.notify()
+      return
+    }
+
+    this.state.packetDetail = { id, status: 'loading', lines: [] }
+    this.notify()
+
+    let detail: PacketDetail
+    try {
+      detail = normalizePacketDetail(id, await this.source.fetchPacket(id))
+    }
+    catch (err) {
+      detail = { id, status: 'error', lines: [], error: (err as Error).message }
+    }
+
+    // Another packet was opened, or this one closed, while it loaded
+    if (this.state.packetDetail?.id !== id)
+      return
+
+    this.state.packetDetail = detail
+    this.notify()
+  }
+
+  private notify() {
+    this.listeners.forEach(listener => listener(this.state))
   }
 
   onChange(listener: (state: DashboardState) => void) {
@@ -216,6 +320,7 @@ export default class MetricsClient {
     if (this.timer)
       clearTimeout(this.timer)
     this.timer = null
+    this.projectFetchedAt = null
 
     await this.loop()
   }
@@ -233,11 +338,17 @@ export default class MetricsClient {
       this.state.error = null
       this.state.failures = 0
 
-      await Promise.all([this.logs.poll(), this.requests.poll()])
+      await Promise.all([this.logs.poll(), this.requests.poll(), this.pollProject()])
       this.state.logs = this.logs.entries
       this.state.logsAvailable = this.logs.available
       this.state.requests = this.requests.entries
       this.state.requestsAvailable = this.requests.available
+
+      if (this.watchNetwork) {
+        await Promise.all([this.packets.poll(), this.pollSync()])
+        this.state.packets = this.packets.entries
+        this.state.packetsAvailable = this.packets.available
+      }
     }
     catch (err) {
       this.state.status = err instanceof MetricsSourceError ? err.status : 'unreachable'
@@ -245,7 +356,68 @@ export default class MetricsClient {
       this.state.failures++
     }
 
-    this.listeners.forEach(listener => listener(this.state))
+    this.notify()
+  }
+
+  private async pollSync() {
+    if (!this.syncAvailable)
+      return
+
+    try {
+      this.state.sync = normalizeSync(await this.source.fetchSync!())
+    }
+    catch (err) {
+      // Not served (production, or an older server): stop asking. Anything else is transient
+      if (err instanceof MetricsSourceError && err.status === 'disabled') {
+        this.syncAvailable = false
+        this.state.sync = null
+      }
+    }
+  }
+
+  /**
+   * Fetch the server's HTTP endpoints and plugins, unless they were fetched a moment ago
+   */
+  private async pollProject(now = Date.now()) {
+    if (this.projectFetchedAt !== null && now - this.projectFetchedAt < this.routesIntervalMs)
+      return
+
+    const { source, state } = this
+    const done = await Promise.all([
+      this.fetchList(state.routesAvailable, source.fetchRoutes?.bind(source), (raw) => {
+        state.routes = normalizeRoutes(raw)
+        state.routesAvailable = true
+      }, () => state.routesAvailable = false),
+      this.fetchList(state.pluginsAvailable, source.fetchPlugins?.bind(source), (raw) => {
+        state.plugins = normalizePlugins(raw)
+        state.pluginsAvailable = true
+      }, () => state.pluginsAvailable = false),
+    ])
+
+    // Whatever failed for now is tried again with the next poll
+    if (done.every(Boolean))
+      this.projectFetchedAt = now
+  }
+
+  /**
+   * Returns false when the list could not be fetched this time but may be next time
+   */
+  private async fetchList(available: boolean | null, fetchList: (() => Promise<unknown>) | undefined, onList: (raw: unknown) => void, onUnavailable: () => void): Promise<boolean> {
+    if (!fetchList || available === false)
+      return true
+
+    try {
+      onList(await fetchList())
+      return true
+    }
+    catch (err) {
+      // Metrics work but this doesn't: an older server
+      if (err instanceof MetricsSourceError && err.status === 'disabled') {
+        onUnavailable()
+        return true
+      }
+      return false
+    }
   }
 
   /**

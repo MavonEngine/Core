@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/http-monitoring",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: the game server dashboard in the browser, behind HTTP Basic auth",
   "license": "MIT",
   "repository": {

@@ -7,6 +7,8 @@ import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { canOpenBrowserHere } from '../browser'
+import { startDevControl } from '../dev/control'
+import PluginInstaller from '../dev/installer'
 import { parseDashboardArgs, runDashboard, UsageError } from './dashboard'
 
 export const DEV_HELP = `Usage: mavonengine dev [options]
@@ -268,17 +270,24 @@ export interface DevProcess {
   output(): string
 }
 
+export interface StartDevOptions {
+  /** Keep the output in memory instead of writing it to the terminal, which belongs to the dashboard then */
+  capture?: boolean
+  /** Added to the environment of the dev script */
+  env?: Record<string, string>
+}
+
 /**
  * Start the project's dev script. With `capture` its output is kept in memory instead of
  * written to the terminal, which belongs to the dashboard then.
  */
-export function startDev(root: string, { capture = false } = {}): DevProcess {
+export function startDev(root: string, { capture = false, env = {} }: StartDevOptions = {}): DevProcess {
   const pm = detectPackageManager(root)
   const script = checkDevScript(root)
 
   const child = spawn(pm, ['run', script], {
     cwd: root,
-    env: { ...process.env, [DEV_ENV_FLAG]: '1' },
+    env: { ...process.env, ...env, [DEV_ENV_FLAG]: '1' },
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     // npm, pnpm and yarn are .cmd shims on Windows
     shell: process.platform === 'win32',
@@ -354,11 +363,95 @@ export function startDev(root: string, { capture = false } = {}): DevProcess {
   return { exited, stop, output: () => output }
 }
 
+export interface DevSession {
+  /** Resolves with the dev script's exit code once it exits on its own, not when it is restarted */
+  exited: Promise<number>
+  /** Stop the dev script and start it again */
+  restart(): Promise<void>
+  stop(): Promise<number>
+  /** The captured output of the running dev script, when started with `capture` */
+  output(): string
+}
+
 /**
- * Run the project's dev script and resolve with its exit code.
+ * The project's dev script as something that can be restarted: `startDev()`, again and again
  */
-export function runDev(root: string): Promise<number> {
-  return startDev(root).exited
+export function startDevSession(root: string, options: StartDevOptions = {}): DevSession {
+  let dev = startDev(root, options)
+  let restarting = false
+
+  let settle!: { resolve(code: number): void, reject(err: Error): void }
+  const exited = new Promise<number>((resolve, reject) => settle = { resolve, reject })
+
+  const watch = (current: DevProcess) => {
+    current.exited.then((code) => {
+      // Stopped by a restart: the session goes on
+      if (current === dev && !restarting)
+        settle.resolve(code)
+    }, (err: Error) => settle.reject(err))
+  }
+  watch(dev)
+
+  return {
+    exited,
+    output: () => dev.output(),
+    stop: () => dev.stop(),
+    async restart() {
+      restarting = true
+      try {
+        await dev.stop().catch(() => {})
+        dev = startDev(root, options)
+      }
+      finally {
+        restarting = false
+      }
+      watch(dev)
+    },
+  }
+}
+
+/**
+ * The dev script with what lets the editor and the dashboard install packages while it runs: an installer
+ * that restarts the script afterwards, and the control server the dev servers reach it through.
+ */
+export async function startDevWithInstaller(root: string, { capture = false, onOutput }: { capture?: boolean, onOutput?(text: string): void } = {}) {
+  // The session needs the control server's address for the dev script, the installer needs the session to restart
+  let session: DevSession | undefined
+  const installer = new PluginInstaller({ root, restart: async () => session?.restart() })
+  const control = await startDevControl(installer)
+
+  let written = 0
+  installer.onChange((job) => {
+    // Only what is new since the last change. An output cut off at the front can't be told apart, so it starts over
+    onOutput?.(job.output.slice(written <= job.output.length ? written : 0))
+    written = job.output.length
+    if (job.status === 'done' || job.status === 'failed')
+      written = 0
+  })
+
+  try {
+    session = startDevSession(root, { capture, env: control.env })
+  }
+  catch (err) {
+    await control.close()
+    throw err
+  }
+
+  return { session, installer, close: () => control.close() }
+}
+
+/**
+ * Run the project's dev script and resolve with its exit code. The editor can install packages while it runs.
+ */
+export async function runDev(root: string): Promise<number> {
+  const { session, close } = await startDevWithInstaller(root, { onOutput: text => process.stdout.write(text) })
+
+  try {
+    return await session.exited
+  }
+  finally {
+    await close()
+  }
 }
 
 /**
@@ -366,7 +459,7 @@ export function runDev(root: string): Promise<number> {
  * the dev script exiting on its own closes the dashboard and prints what it wrote.
  */
 export async function runDevWithDashboard(root: string, dashboard: DashboardOptions): Promise<number> {
-  const dev = startDev(root, { capture: true })
+  const { session: dev, installer, close } = await startDevWithInstaller(root, { capture: true })
   const engineVersion = installedEngineVersion(root)
   const startup = () => ({ engineVersion, output: dev.output() })
 
@@ -375,12 +468,15 @@ export async function runDevWithDashboard(root: string, dashboard: DashboardOpti
 
   let quit = false
   try {
-    await runDashboard({ ...dashboard, startup }, devExited.signal)
+    await runDashboard({ ...dashboard, startup, installer }, devExited.signal)
   }
   finally {
     quit = !devExited.signal.aborted
+    // An install that is still restarting the dev script would start it again behind our back
+    await installer.finished
     if (quit)
       await dev.stop().catch(() => {})
+    await close()
   }
 
   // The user quit, so stopping the dev servers is the expected outcome

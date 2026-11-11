@@ -1,5 +1,5 @@
-import type { PluginOptions, PluginTarget } from './types'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import type { PluginInfo, PluginOptions, PluginTarget } from './types'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 /**
@@ -312,4 +312,84 @@ export function releaseAssets(root: string): { assets: ReleaseAsset[], warnings:
   }
 
   return { assets, warnings }
+}
+
+/** A README longer than this is cut off: it is sent to the editor whole */
+export const MAX_README_CHARS = 200_000
+
+const README_RE = /^readme(?:\.md|\.markdown|\.txt)?$/i
+
+function readReadme(dir: string): string | undefined {
+  try {
+    const file = readdirSync(dir).find(name => README_RE.test(name))
+    if (!file)
+      return undefined
+
+    const text = readFileSync(join(dir, file), 'utf8')
+    return text.length > MAX_README_CHARS ? `${text.slice(0, MAX_README_CHARS)}\n\n… (cut off)` : text
+  }
+  catch {
+    return undefined
+  }
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined
+}
+
+/**
+ * Every plugin in mavonengine.json, turned off or not, with what its package says about itself.
+ * A plugin that is missing or invalid is listed too, with the reason in `problem`.
+ * Pass `readme: false` to leave the readmes out.
+ */
+export function pluginInfos(root: string, { readme = true }: { readme?: boolean } = {}): PluginInfo[] {
+  return Object.entries(readConfig(root).plugins).map(([pkg, entry]) => {
+    const info: PluginInfo = {
+      package: pkg,
+      enabled: entry?.enabled !== false,
+      installed: false,
+      declaredPrefabs: [],
+      usedPrefabs: Array.isArray(entry?.prefabs) ? entry.prefabs.filter(prefab => typeof prefab === 'string') : [],
+    }
+
+    const dir = findPackageDir(root, pkg)
+    if (!dir)
+      return { ...info, problem: `Listed in ${CONFIG_FILE} but not installed` }
+
+    let packageJson: Record<string, unknown>
+    try {
+      packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    }
+    catch (err) {
+      return { ...info, problem: `Its package.json can't be read: ${(err as Error).message}` }
+    }
+
+    const repository = packageJson.repository as { url?: unknown } | string | undefined
+    Object.assign(info, {
+      version: text(packageJson.version),
+      description: text(packageJson.description),
+      license: text(packageJson.license),
+      homepage: text(packageJson.homepage) ?? text(typeof repository === 'string' ? repository : repository?.url),
+      readme: readme ? readReadme(dir) : undefined,
+    })
+
+    if (packageJson.mavonengine === undefined)
+      return { ...info, problem: 'Not a MavonEngine plugin: its package.json has no "mavonengine" field' }
+
+    let manifest: PluginManifest
+    try {
+      manifest = validateManifest(pkg, packageJson.mavonengine)
+    }
+    catch (err) {
+      return { ...info, problem: (err as Error).message }
+    }
+
+    return {
+      ...info,
+      installed: true,
+      target: manifest.target,
+      engine: text(manifest.engine),
+      declaredPrefabs: Object.keys(manifest.assets?.prefabs ?? {}),
+    }
+  })
 }

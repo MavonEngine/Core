@@ -3,11 +3,12 @@ import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
 import type { FSWatcher } from 'node:fs'
 import type winston from 'winston'
-import type { LoadedPlugin, ServerPlugin, ServerPluginContext } from '../../Plugins/types'
+import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
 import type GameScene from '../../Scene/GameScene'
 import type GameObject from '../../World/GameObject'
+import type { NetDebugSource, SyncSnapshot, SyncStateSummary } from '../Debug/sync'
 import type NetworkedActor from '../NetworkedActor'
-import type { CommandPacket, IncomingClientCommandPacket } from './Commands'
+import type { CommandPacket, IncomingClientCommandPacket, StatePacket } from './Commands'
 import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
@@ -16,21 +17,25 @@ import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
 import { watch } from 'node:fs'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
+import { pluginInfos } from '../../Plugins/ProjectConfig'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
+import NetRecorder from '../Debug/NetRecorder'
+import { rememberJson, tapMessages } from '../Debug/tap'
 import Player from '../Entities/Player'
 import NetworkedGameObject from '../NetworkedGameObject'
 import { ClientCommand, ServerCommand } from './Commands'
-import HttpServer from './Http/HttpServer'
+import HttpServer, { ADMIN_TOKEN_ENV } from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
 import LogBuffer from './Stats/LogBuffer'
 import RequestLog from './Stats/RequestLog'
 import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
-import WorldInspector from './Stats/WorldInspector'
+import WorldInspector, { devEndpointsEnabled } from './Stats/WorldInspector'
 import ServerWorld from './World'
 
 let instance: Server<GameObject>
@@ -46,6 +51,13 @@ export interface ServerOptions {
 
   /** Port the HTTP server listens on. Default 8050 */
   httpPort?: number
+
+  /**
+   * The admin token of this server, also read from `MAVONENGINE_ADMIN_TOKEN`. It is what `server.http.requireAdmin`
+   * and `ctx.requireAdmin` of plugins ask for, as `Authorization: Bearer <token>`, and the metrics endpoints take it too.
+   * Without one, admin routes only answer requests from localhost.
+   */
+  adminToken?: string
 
   /**
    * Serve the game client from the HTTP server: the source through Vite when `dev` is set, the built files otherwise.
@@ -93,7 +105,12 @@ function toLoadedPlugin(plugin: ServerPlugin | LoadedPlugin<ServerPlugin>, index
   return { package: bare.name ?? `plugin-${index}`, options: {}, plugin: bare }
 }
 
-export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource {
+/** How many entity ids a sync_enter / sync_leave event lists before it only counts them */
+const MAX_SYNC_EVENT_IDS = 20
+
+const vec = ({ x, y, z }: { x: number, y: number, z: number }) => ({ x, y, z })
+
+export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource, NetDebugSource {
   game: BaseGame
 
   private commandBuffer: IncomingClientCommandPacket<ClientCommand>[] = []
@@ -105,6 +122,22 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   readonly http: HttpServer
   readonly logs?: LogBuffer
   readonly requests?: RequestLog
+
+  /**
+   * The last packets and network events, for the dev tools (GET /api/game/dev/net/*).
+   * Records outside production only; set `net.enabled` to change that.
+   */
+  readonly net = new NetRecorder({ enabled: devEndpointsEnabled() })
+
+  /** Number of the tick being simulated. Stamped on every sv_state, so clients and tools can tell them apart */
+  tickCount = 0
+
+  /** Tick each entity was last sent in, kept while `net` records */
+  private lastSentTick = new Map<string, number>()
+  /** The last sv_state sent to each channel, kept while `net` records */
+  private lastStates = new Map<string, SyncStateSummary>()
+  /** The transport's byte counters per channel, as they were when bandwidth was last recorded */
+  private transportBytes = new Map<string, { sent: number, received: number }>()
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -160,15 +193,21 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.metrics = new ServerMetrics(this, this.logger, this.options.metrics)
     this.http = new HttpServer(this.logger, this.metrics, {
       port: this.options.httpPort,
+      adminToken: this.options.adminToken ?? process.env[ADMIN_TOKEN_ENV],
       metrics: this.options.metrics,
       logs: this.logs,
       requests: this.requests,
       client: this.options.client,
       inspector: new WorldInspector(this),
+      net: this,
+      plugins: () => this.pluginInfos(),
     })
 
     this.gameSocket.onConnection((channel) => {
       this.logger.info(`Connected: ${channel.id}`)
+
+      // Before anything is sent or listened to, so the game's own messages are recorded too
+      this.tapChannel(channel)
 
       const client = this.onConnection(channel)
       if (client instanceof Player)
@@ -194,6 +233,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
       channel.onDisconnect(() => {
         const playerId = channel.id!
+
+        this.net.event('disconnect', { peer: playerId })
+        this.lastStates.delete(playerId)
+        // Count what it sent and received since the last sample before its counters are gone
+        this.recordTransportBytes(channel)
+        this.transportBytes.delete(playerId)
 
         if (this.editorChannels.delete(playerId)) {
           this.logger.info(`Editor disconnected: ${playerId}`)
@@ -236,12 +281,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         this.logger.info(`${(this.game.world as ServerWorld).players.length - 1} total players connected`)
       })
 
-      channel.on('command', (data) => {
-        const bytes = Buffer.byteLength(JSON.stringify(data))
-        this.bandwidthTracker.recordReceived(SERVER_BANDWIDTH_ID, bytes)
-
-        this.bufferIncomingCommand(channel, data)
-      })
+      channel.on('command', data => this.bufferIncomingCommand(channel, data))
     })
 
     this.game.onUpdate(delta => this.tick(delta))
@@ -259,6 +299,40 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     return this.metrics.bandwidth
   }
 
+  /**
+   * Add the bytes a channel sent and received since it was last looked at to the bandwidth tracker.
+   * Read from the WebRTC connection's own counters, so every message counts and none is serialized just to be measured.
+   */
+  private recordTransportBytes(channel: ServerChannel) {
+    const peer = channel.webrtcConnection?.peerConnection
+    if (!peer)
+      return
+
+    let sent: number
+    let received: number
+    // node-datachannel throws once the peer connection is closed
+    try {
+      sent = peer.bytesSent()
+      received = peer.bytesReceived()
+    }
+    catch {
+      return
+    }
+
+    const before = this.transportBytes.get(channel.id!) ?? { sent: 0, received: 0 }
+    this.transportBytes.set(channel.id!, { sent, received })
+    this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Math.max(0, sent - before.sent))
+    this.bandwidthTracker.recordReceived(SERVER_BANDWIDTH_ID, Math.max(0, received - before.received))
+  }
+
+  /**
+   * Close the current sampling window of the metrics, with the bytes every connection moved in it
+   */
+  private sampleMetrics() {
+    this.gameSocket.connectionsManager.connections.forEach(con => this.recordTransportBytes(con.channel))
+    this.metrics.sample()
+  }
+
   get latencySimulation() {
     return this.latencySimulator?.config
   }
@@ -270,7 +344,29 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     })
   }
 
+  /**
+   * Record what this channel sends and receives, and what the transport drops.
+   * Channels that connected while `net` was off stay unrecorded.
+   */
+  private tapChannel(channel: ServerChannel) {
+    if (!this.net.enabled)
+      return
+
+    const peer = channel.id!
+    tapMessages(channel, '_emit', 'out', this.net, peer)
+    tapMessages((channel as unknown as { eventEmitter?: unknown }).eventEmitter, 'emit', 'in', this.net, peer)
+
+    if (typeof channel.onDrop === 'function') {
+      channel.onDrop((drop) => {
+        this.net.event('dropped', { peer, info: { reason: (drop as { reason?: string }).reason, message: drop.event } })
+      })
+    }
+
+    this.net.event('connect', { peer })
+  }
+
   private tick(delta: number) {
+    this.tickCount++
     this.commandsProcessedThisTick += this.runThroughBuffer()
 
     this.onTick(delta)
@@ -290,7 +386,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.gameSocket.connectionsManager.connections.forEach((con, id) => {
       if (this.editorChannels.has(id!)) {
-        this.sendState(con.channel, [...this.game.world.entities.items.values()].filter(entity => this.isSynced(entity)))
+        this.sendState(con.channel, [...this.game.world.entities.items.values()].filter(entity => this.isSynced(entity)), null)
         return
       }
 
@@ -302,6 +398,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
       // Create a temporary set of entities that should be tracked for this player in this tick
       const currentTickTrackedEntities = new Set<string>()
+      // Copied, because entities out of range are deleted from the player's set below
+      const previouslyTracked = this.net.enabled ? new Set(player.trackedEntities) : undefined
 
       this.game.world.entities.items.forEach((entity) => {
         if (!this.isSynced(entity))
@@ -329,11 +427,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         }
       })
 
+      if (previouslyTracked)
+        this.recordSyncChanges(id!, previouslyTracked, currentTickTrackedEntities)
+
       // Update the player's trackedEntities to reflect the current tick's within-distance entities
       // This is crucial for correctly handling re-entry.
       player.trackedEntities = currentTickTrackedEntities
 
-      this.sendState(con.channel, entitiesToSend)
+      this.sendState(con.channel, entitiesToSend, player.lastProcessedSequenceId)
     })
 
     // Mark entities as synced ONLY if they were actually sent to at least one client
@@ -348,14 +449,42 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     return !this.game.activeScene?.entryOf(entity) || entity instanceof NetworkedGameObject
   }
 
-  private sendState(channel: ServerChannel, entities: GameObject[]) {
-    const state = {
+  /**
+   * Which entities came into a player's sync distance this tick and which left it, as timeline events
+   */
+  private recordSyncChanges(peer: string, before: Set<string>, now: Set<string>) {
+    const entered = [...now].filter(id => !before.has(id))
+    const left = [...before].filter(id => !now.has(id))
+
+    if (entered.length)
+      this.net.event('sync_enter', { peer, tick: this.tickCount, info: { count: entered.length, entities: entered.slice(0, MAX_SYNC_EVENT_IDS) } })
+    if (left.length)
+      this.net.event('sync_leave', { peer, tick: this.tickCount, info: { count: left.length, entities: left.slice(0, MAX_SYNC_EVENT_IDS) } })
+  }
+
+  /**
+   * Send `entities` to one client. `ack` is the sequence id of the last input of this client that was processed,
+   * null for a client without a player (the editor).
+   */
+  private sendState(channel: ServerChannel, entities: GameObject[], ack: number | null) {
+    const state: StatePacket<GameObject> = {
       entities,
       sequenceId: 0,
       type: ServerCommand.SV_STATE,
+      tick: this.tickCount,
+      serverTime: Date.now(),
+      ack,
     }
 
-    this.bandwidthTracker.recordSent(SERVER_BANDWIDTH_ID, Buffer.byteLength(JSON.stringify(state)))
+    // Serialized here for the dev tools only: geckos.io serializes the state itself when it sends it
+    if (this.net.enabled) {
+      const json = JSON.stringify(state)
+      // The tap on the channel records the packet when it is really sent, after any simulated latency
+      rememberJson(state, json)
+      this.lastStates.set(channel.id!, { tick: state.tick, bytes: Buffer.byteLength(json), entities: entities.length })
+      for (const entity of entities)
+        this.lastSentTick.set(entity.id, state.tick)
+    }
 
     const SendState = () => channel.emit(ServerCommand.SV_STATE, state)
 
@@ -368,6 +497,63 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
+   * Who is sent what right now: every synced entity with how many players track it, and each player's last state update
+   */
+  syncSnapshot(): SyncSnapshot {
+    const world = this.game.world as ServerWorld
+    const players = world.players
+    const trackedBy = new Map<string, number>()
+    for (const player of players) {
+      for (const id of player.trackedEntities)
+        trackedBy.set(id, (trackedBy.get(id) ?? 0) + 1)
+    }
+
+    let syncDistance: number | null = null
+    try {
+      syncDistance = this.getStateSyncDistance()
+    }
+    catch {
+      // The game's server doesn't implement it
+    }
+
+    const entities = [...world.entities.items.values()].filter(entity => this.isSynced(entity))
+
+    // Forget entities that left the world
+    const ids = new Set(entities.map(entity => entity.id))
+    for (const id of this.lastSentTick.keys()) {
+      if (!ids.has(id))
+        this.lastSentTick.delete(id)
+    }
+
+    return {
+      tick: this.tickCount,
+      serverTime: Date.now(),
+      tickRate: this.game.tickRate,
+      syncDistance,
+      players: players.map(player => ({
+        id: player.id,
+        displayName: player.displayName,
+        position: vec(player.position),
+        ack: player.lastProcessedSequenceId,
+        tracked: [...player.trackedEntities],
+        lastState: this.lastStates.get(player.id) ?? null,
+      })),
+      editors: [...this.editorChannels],
+      entities: entities.map(entity => ({
+        id: entity.id,
+        type: (entity as { $typeName?: string }).$typeName ?? entity.constructor.name,
+        position: vec(entity.position),
+        rotation: vec(entity.rotation),
+        scale: vec(entity.scale),
+        player: entity instanceof Player,
+        needsSync: (entity as Partial<NetworkedActor>).needsSync === true,
+        trackedBy: trackedBy.get(entity.id) ?? 0,
+        lastSentTick: this.lastSentTick.get(entity.id) ?? null,
+      })),
+    }
+  }
+
+  /**
    * A client booted the editor: take its player out of the world, tell the other players it is gone,
    * and from now on send it the whole world state.
    */
@@ -376,6 +562,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     if (this.editorChannels.has(id))
       return
     this.editorChannels.add(id)
+    this.net.event('editor_attached', { peer: id })
 
     const player = this.game.world.entities.items.get(id)
     if (player) {
@@ -487,12 +674,18 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
       projectRoot: this.projectRoot,
+      requireAdmin: this.http.requireAdmin,
+      adminToken: this.http.adminToken,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
-    this.plugins.run('setup')
+    // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
+    const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
+      this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
+
+    this.plugins.runAround('setup', asPlugin)
 
     this.http.start()
     this.startMetrics()
@@ -504,7 +697,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.onHttpCallback(this.httpServer)
     }
 
-    this.plugins.run('http', this.httpServer)
+    this.plugins.runAround('http', asPlugin, this.httpServer)
 
     // Last, because the client answers every page request the routes above leave
     const servesClient = this.http.serveClient() && !!this.http.server
@@ -525,6 +718,33 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   /** Whether the active scene's file is watched and reloaded on change */
   get sceneWatched(): boolean {
     return !!this.sceneWatcher
+  }
+
+  /**
+   * The plugins of the project, for GET /api/game/plugins: everything in mavonengine.json when the server knows
+   * its project root, and in any case the plugins it runs, also those passed to it directly.
+   */
+  pluginInfos(): ServerPluginInfo[] {
+    const running = new Set(this.plugins?.plugins.map(loaded => loaded.package))
+    let infos: ServerPluginInfo[] = []
+
+    const root = this.projectRoot
+    if (root) {
+      try {
+        infos = pluginInfos(root, { readme: false }).map(({ readme: _readme, ...info }) => ({ ...info, runningOnServer: running.has(info.package) }))
+      }
+      catch (err) {
+        this.logger.warn(`Could not read the project's plugins: ${(err as Error).message}`)
+      }
+    }
+
+    const listed = new Set(infos.map(info => info.package))
+    for (const pkg of running) {
+      if (!listed.has(pkg))
+        infos.push({ package: pkg, enabled: true, installed: true, target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true })
+    }
+
+    return infos
   }
 
   get projectRoot(): string | undefined {
@@ -603,7 +823,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private startMetrics() {
     const logIntervalMs = this.options.metrics?.logIntervalMs ?? 5000
 
-    this.timers.push(setInterval(() => this.metrics.sample(), this.metrics.sampleIntervalMs))
+    this.timers.push(setInterval(() => this.sampleMetrics(), this.metrics.sampleIntervalMs))
 
     this.timers.push(setInterval(() => this.logStats(logIntervalMs), logIntervalMs))
   }

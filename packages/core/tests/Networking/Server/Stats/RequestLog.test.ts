@@ -67,10 +67,14 @@ describe('requestLog', () => {
     await fetch(`http://127.0.0.1:${port}/api/game/metrics`)
     await fetch(`http://127.0.0.1:${port}/api/game/logs?after=3`)
     await fetch(`http://127.0.0.1:${port}/api/game/requests`)
+    // Polled by the dashboard's Network tab and the editor's Network panel
+    await fetch(`http://127.0.0.1:${port}/api/game/dev/net/packets?after=3`)
+    await fetch(`http://127.0.0.1:${port}/api/game/dev/net/sync`)
     await fetch(`http://127.0.0.1:${port}/api/game/health`)
+    await fetch(`http://127.0.0.1:${port}/api/game/dev/scene`)
     await settle()
 
-    expect(log.since().entries.map(e => e.path)).toEqual(['/api/game/health'])
+    expect(log.since().entries.map(e => e.path)).toEqual(['/api/game/health', '/api/game/dev/scene'])
   })
 
   it('skips paths under an ignored prefix', async () => {

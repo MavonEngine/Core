@@ -1,0 +1,66 @@
+{
+  "name": "@mavonengine/chat",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine plugin: in-game text chat with rate limiting, mutes, proximity chat and an admin API",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MavonEngine/Core.git",
+    "directory": "packages/plugins/chat"
+  },
+  "keywords": [
+    "mavonengine",
+    "mavonengine-plugin",
+    "chat",
+    "multiplayer"
+  ],
+  "exports": {
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@mavonengine/core": ">=0.0.22"
+  },
+  "devDependencies": {
+    "@mavonengine/core": "*",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "express": "5.1.0",
+    "jsdom": "^28.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "mavonengine": {
+    "target": "both",
+    "client": "./dist/client.js",
+    "server": "./dist/server.js",
+    "engine": ">=0.0.22"
+  }
+}

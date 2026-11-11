@@ -1,10 +1,12 @@
 import type { DashboardState } from '../src/dashboard/MetricsClient'
+import type { PacketDetail, PacketLine } from '../src/dashboard/snapshot'
 import type { StartupInfo, ViewState } from '../src/dashboard/view'
 import { DEFAULT_COLOR, renderToScreen } from '@profullstack/hqtui'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import AvailablePlugins from '../src/dashboard/available'
 import { simulatedSource } from '../src/dashboard/simulator'
-import { normalizeSnapshot } from '../src/dashboard/snapshot'
-import { handlePlayersKey, renderDashboard, tabForKey, toLogRows } from '../src/dashboard/view'
+import { normalizePackets, normalizeSnapshot, normalizeSync } from '../src/dashboard/snapshot'
+import { describePacket, handleInstallKey, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, messageStats, renderDashboard, selectedPlugin, showsNetwork, tabForKey, toLogRows, visiblePackets } from '../src/dashboard/view'
 
 async function liveState(samples = 30): Promise<DashboardState> {
   const source = simulatedSource()
@@ -30,11 +32,27 @@ async function liveState(samples = 30): Promise<DashboardState> {
       { id: 3, timestamp: 0, method: 'WS', path: '/hmr', status: 101, durationMs: 1.1, bytes: 129, address: '127.0.0.1' },
     ],
     requestsAvailable: true,
+    packets: normalizePackets(await source.fetchPackets!(0)).entries,
+    packetsAvailable: true,
+    sync: normalizeSync(await source.fetchSync!()),
+    packetDetail: null,
+    routes: [
+      { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false, summary: 'Whether the server is up' },
+      { method: 'POST', path: '/api/scores/:player', source: 'game', params: { player: '' }, devOnly: false },
+      { method: 'GET', path: '/monitoring/api/metrics', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
+    ],
+    routesAvailable: true,
+    plugins: [
+      { package: '@mavonengine/http-monitoring', enabled: true, installed: true, runningOnServer: true, version: '0.0.1', description: 'The dashboard in the browser', license: 'MIT', target: 'server', engine: '^0.0.22', declaredPrefabs: [], usedPrefabs: [] },
+      { package: '@acme/forest', enabled: true, installed: true, runningOnServer: false, version: '2.3.1', target: 'client', declaredPrefabs: ['Tree', 'Rock'], usedPrefabs: ['Tree'] },
+      { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+    ],
+    pluginsAvailable: true,
   }
 }
 
 function viewState(overrides: Partial<ViewState> = {}): ViewState {
-  return { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true, ...overrides }
+  return { ...initialViewState(), ...overrides }
 }
 
 function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab }), startup?: StartupInfo) {
@@ -42,7 +60,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null, plugins: [], pluginsAvailable: null }
 }
 
 describe('dashboard view', () => {
@@ -177,7 +195,10 @@ describe('dashboard view', () => {
   it('maps number keys to tabs', () => {
     expect(tabForKey('1')).toBe(0)
     expect(tabForKey('4')).toBe(3)
-    expect(tabForKey('5')).toBeNull()
+    expect(tabForKey('5')).toBe(4)
+    expect(tabForKey('6')).toBe(5)
+    expect(tabForKey('7')).toBe(6)
+    expect(tabForKey('8')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -201,6 +222,14 @@ describe('dashboard view', () => {
       logsAvailable: null,
       requests: [],
       requestsAvailable: null,
+      packets: [],
+      packetsAvailable: null,
+      sync: null,
+      packetDetail: null,
+      routes: [],
+      routesAvailable: null,
+      plugins: [],
+      pluginsAvailable: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)
@@ -337,6 +366,213 @@ describe('dashboard view', () => {
   })
 })
 
+describe('network tab', () => {
+  const packet = (id: number, overrides: Partial<PacketLine> = {}): PacketLine => ({
+    id,
+    timestamp: id * 100,
+    kind: 'packet',
+    direction: 'out',
+    type: 'sv_state',
+    peer: 'p1',
+    bytes: 1000,
+    tick: id,
+    sequenceId: null,
+    reliable: false,
+    info: {},
+    ...overrides,
+  })
+
+  it('shows the state sync, what the traffic is made of and the packets, newest first', async () => {
+    const screen = render(await liveState(), 150, 40, false, 4)
+
+    for (const text of ['5 Network', 'State sync (tick 900)', '151 synced entities', 'out of every player\'s range', 'distance 200', 'By message (last 5 s)', 'sv_state', 'cl_move', 'pings hidden', 'p Show pings', 'e Events only'])
+      expect(screen.contains(text), text).toBe(true)
+    // Pings count in the summary but are left out of the list
+    expect(screen.find('pong')!.y).toBeLessThan(screen.find('Details')!.y)
+    expect(screen.contains('CPU')).toBe(false)
+    expect(screen.find('tick 900 ·')!.y).toBeLessThan(screen.find('tick 894 ·')!.y)
+  })
+
+  it('keeps the details on a narrow terminal', async () => {
+    const screen = render(await liveState(), 80, 44, false, 4)
+    expect(screen.contains('State sync')).toBe(true)
+    expect(screen.contains('By message')).toBe(true)
+    expect(screen.contains('tick 900 · entities')).toBe(true)
+  })
+
+  it('shows pings and only events on request', async () => {
+    const state = await liveState()
+    const view = viewState({ tab: 4, packetTopId: 40 })
+
+    expect(handleNetworkKey(view, 'p')).toBe(true)
+    expect(view).toMatchObject({ showPings: true, packetTopId: null })
+    expect(render(state, 150, 40, false, 4, view).contains('p Hide pings')).toBe(true)
+
+    expect(handleNetworkKey(view, 'e')).toBe(true)
+    const screen = render(state, 150, 40, false, 4, view)
+    expect(screen.contains('Events (')).toBe(true)
+    expect(screen.contains('sync_enter')).toBe(true)
+    expect(screen.contains('cl_move')).toBe(false)
+    expect(screen.contains('e All records')).toBe(true)
+
+    expect(handleNetworkKey(view, 'x')).toBe(false)
+    expect(handleNetworkKey(viewState({ tab: 0 }), 'p')).toBe(false)
+  })
+
+  it('keeps a scrolled table on the same packet as new ones arrive', async () => {
+    const state = await liveState()
+    state.packets = Array.from({ length: 80 }, (_, i) => packet(i + 1))
+    const view = viewState({ tab: 4, packetTopId: 60 })
+
+    state.packets.push(packet(81))
+    const screen = render(state, 150, 40, false, 4, view)
+
+    expect(screen.find('tick 60 ')!.y).toBe(screen.find('Details')!.y + 1)
+    expect(screen.contains('tick 81')).toBe(false)
+    expect(screen.contains('scroll up to follow')).toBe(true)
+    expect(view.packetTopId).toBe(60)
+  })
+
+  it('marks a player whose state updates fell behind', async () => {
+    const state = await liveState()
+    state.sync!.players[0].lastState = null
+    expect(render(state, 150, 40, false, 4).contains('none')).toBe(true)
+  })
+
+  it('waits for the first answer, and explains a server that records nothing', async () => {
+    const state = await liveState()
+    state.packets = []
+    state.sync = null
+    state.packetsAvailable = null
+    expect(render(state, 150, 40, false, 4).contains('Waiting for the server')).toBe(true)
+
+    state.packetsAvailable = false
+    const screen = render(state, 150, 40, false, 4)
+    expect(screen.contains('NODE_ENV=production')).toBe(true)
+    expect(screen.contains('State sync')).toBe(false)
+  })
+
+  it('opens a packet with the arrow keys and shows its content', async () => {
+    const state = await liveState()
+    const view = viewState({ tab: 4 })
+    const newestFirst = visiblePackets(state.packets, view).reverse()
+
+    expect(handleNetworkKey(view, 'down', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBe(newestFirst[0].id)
+    expect(handleNetworkKey(view, 'j', state.packets)).toBe(true)
+    expect(handleNetworkKey(view, 'k', state.packets)).toBe(true)
+    expect(handleNetworkKey(view, 'up', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBe(newestFirst[0].id)
+
+    // Its content is loaded after the selection changed
+    expect(render(state, 150, 40, false, 4, view).contains('Loading…')).toBe(true)
+
+    state.packetDetail = { id: view.selectedPacketId!, status: 'loaded', lines: ['{', '  "tick": 900,', '  "entities": []', '}'] }
+    const screen = render(state, 150, 40, false, 4, view)
+    for (const text of [`${newestFirst[0].type} out ·`, '"tick": 900,', 'esc Close', '↑↓ Open packet', 'By message'])
+      expect(screen.contains(text), text).toBe(true)
+    // The list stays next to it
+    expect(screen.find('"tick": 900,')!.x).toBeGreaterThan(screen.find('Details')!.x)
+
+    // The details of another packet are not shown for this one
+    state.packetDetail = { id: -1, status: 'loaded', lines: ['"other"'] }
+    expect(render(state, 150, 40, false, 4, view).contains('"other"')).toBe(false)
+
+    expect(handleNetworkKey(view, 'escape', state.packets)).toBe(true)
+    expect(view.selectedPacketId).toBeNull()
+    expect(handleNetworkKey(view, 'escape', state.packets)).toBe(false)
+    expect(render(state, 150, 40, false, 4, view).contains('esc Close')).toBe(false)
+  })
+
+  it('opens the first or last packet when none is selected, and stops at the ends', () => {
+    const packets = [packet(1), packet(2), packet(3)]
+    const view = viewState({ tab: 4, payloadOffset: 9 })
+
+    handleNetworkKey(view, 'up', packets)
+    expect(view).toMatchObject({ selectedPacketId: 1, payloadOffset: 0 })
+    handleNetworkKey(view, 'down', packets)
+    expect(view.selectedPacketId).toBe(1)
+
+    expect(handleNetworkKey(viewState({ tab: 4 }), 'down', [])).toBe(false)
+    expect(handleNetworkKey(viewState({ tab: 3 }), 'down', packets)).toBe(false)
+  })
+
+  it('puts the content under the list on a narrow terminal and scrolls long payloads', async () => {
+    const state = await liveState()
+    const id = state.packets.at(-1)!.id
+    state.packetDetail = { id, status: 'loaded', lines: Array.from({ length: 200 }, (_, i) => `line ${i}`) }
+    const view = viewState({ tab: 4, selectedPacketId: id, payloadOffset: 150 })
+
+    const screen = render(state, 80, 44, false, 4, view)
+
+    expect(screen.contains('Packets and events')).toBe(true)
+    expect(screen.contains('line 150')).toBe(true)
+    expect(screen.contains('line 149')).toBe(false)
+    expect(screen.find('line 150')!.y).toBeGreaterThan(screen.find('Details')!.y)
+
+    // A shorter payload than where the last one was scrolled to
+    state.packetDetail = { id, status: 'loaded', lines: ['only line'] }
+    expect(render(state, 80, 44, false, 4, view).contains('only line')).toBe(true)
+    expect(view.payloadOffset).toBe(0)
+  })
+
+  it('explains a packet without content', async () => {
+    const state = await liveState()
+    const id = state.packets.at(-1)!.id
+    const view = viewState({ tab: 4, selectedPacketId: id })
+    const shows = (detail: Partial<PacketDetail>, text: string) => {
+      state.packetDetail = { id, status: 'loaded', lines: [], ...detail }
+      return render(state, 150, 40, false, 4, view).contains(text)
+    }
+
+    expect(shows({ status: 'gone' }, 'no longer keeps this payload')).toBe(true)
+    expect(shows({ status: 'empty' }, 'No payload')).toBe(true)
+    expect(shows({ status: 'error', error: 'Can\'t reach the server' }, 'Can\'t reach the server')).toBe(true)
+
+    // A packet the dashboard no longer lists keeps its panel
+    view.selectedPacketId = 999999
+    state.packetDetail = { id: 999999, status: 'loaded', lines: ['"kept"'] }
+    const screen = render(state, 150, 40, false, 4, view)
+    expect(screen.contains('#999999')).toBe(true)
+    expect(screen.contains('"kept"')).toBe(true)
+  })
+
+  it('only needs the packets while its tab shows', () => {
+    expect(showsNetwork(viewState({ tab: 4 }))).toBe(true)
+    expect(showsNetwork(viewState({ tab: 3 }))).toBe(false)
+  })
+
+  it('sums the traffic per message over the window, largest first', () => {
+    const packets = [
+      packet(1, { timestamp: 0, bytes: 9999 }), // Before the window
+      packet(2, { timestamp: 6000, bytes: 1000 }),
+      packet(3, { timestamp: 8000, bytes: 3000 }),
+      packet(4, { timestamp: 9000, direction: 'in', type: 'command', bytes: 50 }),
+      packet(5, { timestamp: 9500, kind: 'event', direction: null, type: 'sync_leave', bytes: 0 }),
+      packet(6, { timestamp: 10000, direction: 'in', type: 'command', bytes: 50 }),
+    ]
+
+    expect(messageStats(packets, 5000)).toEqual([
+      { direction: 'out', type: 'sv_state', rate: 0.4, bytesPerSecond: 800, avgBytes: 2000 },
+      { direction: 'in', type: 'command', rate: 0.4, bytesPerSecond: 20, avgBytes: 50 },
+    ])
+    expect(messageStats([])).toEqual([])
+    // Half a second of data is not stretched to less than a second
+    expect(messageStats([packet(1, { timestamp: 0 }), packet(2, { timestamp: 500 })])[0]).toMatchObject({ rate: 2, bytesPerSecond: 2000 })
+  })
+
+  it('filters and describes packets', () => {
+    const packets = [packet(1), packet(2, { type: 'ping' }), packet(3, { kind: 'event', type: 'connect' })]
+
+    expect(visiblePackets(packets, { showPings: false, eventsOnly: false }).map(p => p.id)).toEqual([1, 3])
+    expect(visiblePackets(packets, { showPings: true, eventsOnly: false }).map(p => p.id)).toEqual([1, 2, 3])
+    expect(visiblePackets(packets, { showPings: true, eventsOnly: true }).map(p => p.id)).toEqual([3])
+
+    expect(describePacket(packet(1, { tick: 7, info: { entities: 3, ack: null } }))).toBe('tick 7 · entities 3')
+    expect(describePacket(packet(1, { tick: null, sequenceId: 4, reliable: true, info: { entities: ['a', 'b'], drop: { reason: 'x' } } }))).toBe('seq 4 · reliable · entities a, b · drop {"reason":"x"}')
+  })
+})
+
 describe('toLogRows', () => {
   it('splits multi-line messages and trims blank edges', () => {
     const rows = toLogRows([{ id: 1, timestamp: 0, level: 'info', message: '\n\n┌──┐\n│ME│\n└──┘\n' }])
@@ -345,5 +581,314 @@ describe('toLogRows', () => {
     expect(rows[0]).toMatchObject({ level: 'info', message: '┌──┐' })
     expect(rows[1]).not.toHaveProperty('level')
     expect(rows[2].message.trim()).toBe('└──┘')
+  })
+
+  describe('routes tab', () => {
+    it('lists the endpoints with where they come from', async () => {
+      const screen = render(await liveState(), 150, 40, false, 5)
+
+      expect(screen.contains('HTTP endpoints (3: 1 engine, 1 game, 1 from 1 plugin, 0 dev only)')).toBe(true)
+      for (const text of ['/api/game/health', 'Whether the server is up', 'POST', '/api/scores/:player', 'game', '/monitoring/api/metrics', '@mavonengine/http-monitoring'])
+        expect(screen.contains(text), text).toBe(true)
+      expect(screen.contains('CPU')).toBe(false)
+    })
+
+    it('says which endpoints only exist in development', async () => {
+      const state = await liveState()
+      state.routes = [
+        { method: 'GET', path: '/api/game/dev/scene', source: 'engine', params: {}, devOnly: true },
+        { method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false },
+      ]
+      const screen = render(state, 150, 40, false, 5)
+
+      expect(screen.contains('1 dev only)')).toBe(true)
+      expect(screen.line(screen.find('/api/game/dev/scene')!.y)).toContain('dev only')
+      expect(screen.line(screen.find('/api/scores')!.y)).toContain('prod + dev')
+    })
+
+    it('is reached with the 6 key', () => {
+      expect(tabForKey('6')).toBe(5)
+    })
+
+    it('says so when the server doesn\'t list its endpoints', async () => {
+      const screen = render({ ...await liveState(), routes: [], routesAvailable: false }, 150, 40, false, 5)
+
+      expect(screen.contains('without GET /api/game/routes')).toBe(true)
+    })
+
+    it('keeps a scrolled table inside the list', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 5, routeOffset: 50 })
+
+      render(state, 150, 40, false, 5, view)
+
+      expect(view.routeOffset).toBeLessThan(state.routes.length)
+    })
+  })
+
+  describe('plugins tab', () => {
+    it('lists the project\'s plugins and shows the first one with its endpoints', async () => {
+      const screen = render(await liveState(), 150, 40, false, 6)
+
+      expect(tabForKey('7')).toBe(6)
+      expect(screen.contains('Plugins (3)')).toBe(true)
+      const row = (pkg: string) => screen.line(screen.find(pkg)!.y)
+      expect(row('@mavonengine/http-monitoring')).toMatch(/0\.0\.1\s+enabled\s+server\s+1\s+0/)
+      expect(row('@acme/forest')).toMatch(/2\.3\.1\s+enabled\s+client\s+0\s+2/)
+      expect(row('Package')).toMatch(/Version\s+Status\s+Runs on\s+Routes\s+Prefabs/)
+      expect(row('ghost')).toMatch(/—\s+problem/)
+
+      for (const text of ['The dashboard in the browser', '@mavonengine/core ^0.0.22', 'MIT', 'running', 'HTTP endpoints (1)', '/monitoring/api/metrics', 'prod + dev'])
+        expect(screen.contains(text), text).toBe(true)
+      expect(screen.contains('CPU')).toBe(false)
+    })
+
+    it('shows the plugin that is selected with the arrow keys', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 6 })
+
+      expect(handlePluginsKey(view, state.plugins, 'down')).toBe(true)
+      expect(view.selectedPlugin).toBe('@acme/forest')
+
+      const screen = render(state, 150, 40, false, 6, view)
+      expect(screen.contains('Tree (used), Rock')).toBe(true)
+      expect(screen.contains('HTTP endpoints: none')).toBe(true)
+      expect(screen.contains('Select plugin')).toBe(true)
+
+      handlePluginsKey(view, state.plugins, 'j')
+      handlePluginsKey(view, state.plugins, 'down')
+      expect(view.selectedPlugin).toBe('ghost')
+      expect(render(state, 150, 40, false, 6, view).contains('Listed in mavonengine.json but not installed')).toBe(true)
+
+      handlePluginsKey(view, state.plugins, 'up')
+      expect(view.selectedPlugin).toBe('@acme/forest')
+    })
+
+    it('ignores the arrow keys outside the plugins tab', async () => {
+      const state = await liveState()
+      const view = viewState({ tab: 0 })
+
+      expect(handlePluginsKey(view, state.plugins, 'down')).toBe(false)
+      expect(view.selectedPlugin).toBeUndefined()
+    })
+
+    it('marks a server plugin that this server doesn\'t run', async () => {
+      const state = await liveState()
+      state.plugins = [{ ...state.plugins[0], runningOnServer: false }]
+
+      const screen = render(state, 150, 40, false, 6)
+
+      expect(screen.contains('not loaded')).toBe(true)
+      expect(screen.contains('not running')).toBe(true)
+    })
+
+    it('fits a narrow terminal', async () => {
+      const screen = render(await liveState(), 80, 40, false, 6)
+
+      expect(screen.contains('Plugins (3)')).toBe(true)
+      expect(screen.contains('HTTP endpoints (1)')).toBe(true)
+    })
+
+    describe('available to install', () => {
+      const LIST = [
+        { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server' as const },
+        { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const },
+        { package: 'plain', name: 'plain' },
+      ]
+
+      function draw(state: DashboardState, available: AvailablePlugins, tab = 6) {
+        return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, viewState({ tab }), { available }), { width: 150, height: 40 })
+      }
+
+      it('reads the list the first time the tab is drawn, and not before', async () => {
+        const fetchRegistry = vi.fn(async () => ({ plugins: LIST }))
+        const available = new AvailablePlugins('https://example.com/list.json', fetchRegistry)
+        const state = await liveState()
+
+        draw(state, available, 0)
+        expect(fetchRegistry).not.toHaveBeenCalled()
+
+        const loading = draw(state, available)
+        expect(fetchRegistry).toHaveBeenCalledTimes(1)
+        expect(loading.contains('Reading the list of plugins from GitHub')).toBe(true)
+
+        await available.load()
+        draw(state, available)
+        expect(fetchRegistry).toHaveBeenCalledTimes(1)
+      })
+
+      it('lists the plugins the project doesn\'t have yet', async () => {
+        const available = new AvailablePlugins('x', async () => ({ plugins: LIST }))
+        await available.load()
+
+        const screen = draw(await liveState(), available)
+
+        expect(screen.contains('Available to install (2)')).toBe(true)
+        expect(screen.line(screen.find('@acme/weather')!.y)).toMatch(/@acme\/weather\s+both\s+Rain and fog/)
+        expect(screen.contains('plain')).toBe(true)
+        // Already in the project, so only in the list above
+        expect(screen.contains('The dashboard in the browser')).toBe(true)
+        expect(screen.text().split('Available to install')[1]).not.toContain('http-monitoring')
+        // The installed plugins and the details are still there
+        expect(screen.contains('Plugins (3)')).toBe(true)
+        expect(screen.contains('HTTP endpoints (1)')).toBe(true)
+      })
+
+      it('shows the whole list for a project without plugins', async () => {
+        const available = new AvailablePlugins('x', async () => ({ plugins: LIST }))
+        await available.load()
+
+        const screen = draw({ ...await liveState(), plugins: [] }, available)
+
+        expect(screen.contains('The project has no plugins')).toBe(true)
+        expect(screen.contains('Available to install (3)')).toBe(true)
+        expect(screen.contains('@mavonengine/http-monitoring')).toBe(true)
+      })
+
+      it('says so when nothing is left to install, or the list can\'t be read', async () => {
+        const state = await liveState()
+        const all = new AvailablePlugins('x', async () => ({ plugins: [LIST[0]] }))
+        await all.load()
+        expect(draw(state, all).contains('The project has every plugin on the list')).toBe(true)
+
+        const broken = new AvailablePlugins('x', async () => {
+          throw new Error('https://example.com/list.json was not found')
+        })
+        await broken.load()
+        const screen = draw(state, broken)
+        expect(screen.contains('Could not read the list of plugins: https://example.com/list.json was not found')).toBe(true)
+        expect(screen.contains('Plugins (3)')).toBe(true)
+      })
+    })
+
+    describe('installing', () => {
+      const weather = { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const, homepage: 'https://example.com/weather' }
+      const plain = { package: 'plain', name: 'plain' }
+      const idle = { job: null, busy: false }
+
+      async function loaded() {
+        const available = new AvailablePlugins('x', async () => ({ plugins: [weather, plain] }))
+        await available.load()
+        return available
+      }
+
+      function draw(state: DashboardState, view: ViewState, available: AvailablePlugins, installer?: { job: any, busy: boolean }) {
+        return renderToScreen(({ ui, theme }) => renderDashboard(ui, theme, state, view, { available, installer }), { width: 150, height: 46 })
+      }
+
+      it('moves the selection on from the project\'s plugins into the ones to install', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6 })
+        const rest = [weather, plain]
+
+        for (let i = 0; i < 3; i++)
+          handlePluginsKey(view, state.plugins, 'down', rest)
+        expect(view.selectedPlugin).toBe('@acme/weather')
+        expect(selectedPlugin(view, state.plugins, rest)).toEqual({ available: weather })
+
+        handlePluginsKey(view, state.plugins, 'down', rest)
+        handlePluginsKey(view, state.plugins, 'down', rest)
+        expect(view.selectedPlugin).toBe('plain')
+
+        handlePluginsKey(view, state.plugins, 'up', rest)
+        handlePluginsKey(view, state.plugins, 'up', rest)
+        expect(selectedPlugin(view, state.plugins, rest)).toEqual({ installed: state.plugins[2] })
+      })
+
+      it('shows a plugin that can be installed, and offers to install it under mavonengine dev', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        const available = await loaded()
+
+        const withInstaller = draw(state, view, available, idle)
+        for (const text of ['Weather (@acme/weather)', 'Rain and fog', 'not installed', 'https://example.com/weather', 'Press i to install it and restart the dev servers', 'i Install'])
+          expect(withInstaller.contains(text), text).toBe(true)
+
+        // A dashboard that didn't start the dev servers can't restart them
+        const without = draw(state, view, available)
+        expect(without.contains('Install it with: mavonengine install @acme/weather')).toBe(true)
+        expect(without.contains('i Install')).toBe(false)
+      })
+
+      it('asks before installing, pointing out the risk and where the source is', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        const rest = [weather, plain]
+
+        expect(handleInstallKey(view, state.plugins, 'i', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBe('@acme/weather')
+
+        const screen = draw(state, view, await loaded(), idle)
+        for (const text of ['Install @acme/weather?', 'Installing a package runs its code on this machine.', 'Check the source before you install it:', 'https://example.com/weather', 'I checked the source, install it', 'y Install', 'n Cancel'])
+          expect(screen.contains(text), text).toBe(true)
+
+        // The selection stays where it is while the question is open
+        expect(handlePluginsKey(view, state.plugins, 'down', rest)).toBe(false)
+
+        expect(handleInstallKey(view, state.plugins, 'n', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBeNull()
+
+        handleInstallKey(view, state.plugins, 'i', rest, idle)
+        expect(handleInstallKey(view, state.plugins, 'escape', rest, idle)).toBe(true)
+        expect(view.confirmInstall).toBeNull()
+      })
+
+      it('installs only after y', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6, selectedPlugin: 'plain' })
+        const rest = [weather, plain]
+
+        // y without having been asked does nothing
+        expect(handleInstallKey(view, state.plugins, 'y', rest, idle)).toBe(false)
+
+        handleInstallKey(view, state.plugins, 'i', rest, idle)
+        expect(handleInstallKey(view, state.plugins, 'x', rest, idle)).toBe(false)
+        expect(handleInstallKey(view, state.plugins, 'y', rest, idle)).toBe('plain')
+        expect(view.confirmInstall).toBeNull()
+
+        // Without a homepage the question points at npm
+        view.confirmInstall = 'plain'
+        expect(draw(state, view, await loaded(), idle).contains('https://www.npmjs.com/package/plain')).toBe(true)
+      })
+
+      it('offers no install for a plugin the project has, without mavonengine dev, or while one runs', async () => {
+        const state = await liveState()
+        const rest = [weather, plain]
+
+        const installed = viewState({ tab: 6 })
+        expect(handleInstallKey(installed, state.plugins, 'i', rest, idle)).toBe(false)
+
+        const view = viewState({ tab: 6, selectedPlugin: '@acme/weather' })
+        expect(handleInstallKey(view, state.plugins, 'i', rest, undefined)).toBe(false)
+        expect(handleInstallKey(view, state.plugins, 'i', rest, { job: null, busy: true })).toBe(false)
+        expect(handleInstallKey(viewState({ tab: 0, selectedPlugin: '@acme/weather' }), state.plugins, 'i', rest, idle)).toBe(false)
+        expect(view.confirmInstall).toBeUndefined()
+      })
+
+      it('shows how an install goes', async () => {
+        const state = await liveState()
+        const view = viewState({ tab: 6 })
+        const available = await loaded()
+        const job = { id: 1, packages: ['@acme/weather'], status: 'installing', output: 'mavonengine: running npm install\nadded 3 packages in 2s\n' }
+
+        const installing = draw(state, view, available, { job, busy: true })
+        expect(installing.contains('Installing @acme/weather')).toBe(true)
+        expect(installing.contains('added 3 packages in 2s')).toBe(true)
+
+        expect(draw(state, view, available, { job: { ...job, status: 'restarting' }, busy: true }).contains('Installed, restarting the dev servers for @acme/weather')).toBe(true)
+        expect(draw(state, view, available, { job: { ...job, status: 'done' }, busy: false }).contains('The dev servers were restarted with it')).toBe(true)
+
+        const failed = draw(state, view, available, { job: { ...job, status: 'failed', error: '\'npm install @acme/weather\' exited with code 1' }, busy: false })
+        expect(failed.contains('Could not install @acme/weather')).toBe(true)
+        expect(failed.contains('exited with code 1')).toBe(true)
+      })
+    })
+
+    it('says so when there are no plugins, or the server doesn\'t list them', async () => {
+      const state = await liveState()
+
+      expect(render({ ...state, plugins: [] }, 150, 40, false, 6).contains('The project has no plugins')).toBe(true)
+      expect(render({ ...state, plugins: [], pluginsAvailable: false }, 150, 40, false, 6).contains('without GET /api/game/plugins')).toBe(true)
+    })
   })
 })

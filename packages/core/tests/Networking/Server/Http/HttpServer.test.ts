@@ -2,6 +2,7 @@ import type { Server as NodeServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { HttpServerOptions } from '../../../../src/Networking/Server/Http/HttpServer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import NetRecorder from '../../../../src/Networking/Debug/NetRecorder'
 import HttpServer, { METRICS_CLIENT_TIMEOUT_MS, parseEntityQuery } from '../../../../src/Networking/Server/Http/HttpServer'
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 import RequestLog from '../../../../src/Networking/Server/Stats/RequestLog'
@@ -42,6 +43,173 @@ describe('httpServer', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual(health)
+  })
+
+  describe('routes', () => {
+    it('lists its own endpoints with what they do', async () => {
+      const request = await serve()
+
+      const res = await request('/api/game/routes')
+      const { routes } = await res.json() as { routes: any[] }
+
+      expect(res.status).toBe(200)
+      expect(routes.map(route => `${route.method} ${route.path}`)).toEqual([
+        'GET /api/game/health',
+        'GET /api/game/metrics',
+        'GET /api/game/logs',
+        'GET /api/game/requests',
+        'GET /api/game/routes',
+        'GET /api/game/plugins',
+      ])
+      expect(routes.every(route => route.source === 'engine' && route.summary && route.auth)).toBe(true)
+      expect(routes[2].query).toHaveProperty('after')
+      expect(routes.some(route => route.devOnly)).toBe(false)
+    })
+
+    it('lists routes added to the app afterwards as the game\'s', async () => {
+      const request = await serve()
+      http.app.post('/api/scores/:id', (_req, res) => void res.end())
+
+      const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
+
+      expect(routes.at(-1)).toEqual({ method: 'POST', path: '/api/scores/:id', source: 'game', params: { id: '' }, devOnly: false })
+    })
+
+    it('lists the dev endpoints only when they are served', async () => {
+      const inspector = { scene: () => null, entities: () => ({}), entity: () => null } as any
+      const request = await serve({ inspector })
+
+      const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
+      const dev = routes.filter(route => route.path.startsWith('/api/game/dev/'))
+
+      expect(dev.map(route => route.path)).toEqual(['/api/game/dev/scene', '/api/game/dev/entities', '/api/game/dev/entities/:id'])
+      expect(dev[2].params).toEqual({ id: 'Id of the entity' })
+      expect(dev.every(route => route.devOnly)).toBe(true)
+      expect(routes.filter(route => !route.path.startsWith('/api/game/dev/')).some(route => route.devOnly)).toBe(false)
+    })
+
+    it('is protected like the metrics', async () => {
+      const request = await serve({ metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/routes')).status).toBe(401)
+      expect((await request('/api/game/routes?token=secret')).status).toBe(200)
+    })
+  })
+
+  describe('plugins', () => {
+    const plugins = [{ package: 'forest', enabled: true, installed: true, version: '1.0.0', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true }]
+
+    it('lists the plugins it is given, asked anew every time', async () => {
+      const list = vi.fn(() => plugins)
+      const request = await serve({ plugins: list })
+
+      expect(await (await request('/api/game/plugins')).json()).toEqual({ plugins })
+      await request('/api/game/plugins')
+      expect(list).toHaveBeenCalledTimes(2)
+    })
+
+    it('is not found on a server that doesn\'t know its plugins', async () => {
+      const request = await serve()
+
+      expect((await request('/api/game/plugins')).status).toBe(404)
+    })
+
+    it('is protected like the metrics', async () => {
+      const request = await serve({ plugins: () => plugins, metrics: { token: 'secret' } })
+
+      expect((await request('/api/game/plugins')).status).toBe(401)
+      expect((await request('/api/game/plugins?token=secret')).status).toBe(200)
+    })
+  })
+
+  describe('admin token', () => {
+    function adminRoute() {
+      http.app.post('/api/admin/reset', http.requireAdmin, (_req, res) => void res.json({ reset: true }))
+    }
+
+    it('lets localhost through without a token, and nobody else', async () => {
+      const request = await serve()
+      adminRoute()
+
+      expect((await request('/api/admin/reset', { method: 'POST' })).status).toBe(200)
+
+      // What Express would hand the guard for a request from another machine
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() }
+      const next = vi.fn()
+      http.requireAdmin({ headers: {}, socket: { remoteAddress: '203.0.113.9' } } as any, res as any, next)
+      expect(res.status).toHaveBeenCalledWith(403)
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('MAVONENGINE_ADMIN_TOKEN') })
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    it('wants the token as a bearer header when one is set, also from localhost', async () => {
+      const request = await serve({ adminToken: 'secret' })
+      adminRoute()
+      const post = (headers: Record<string, string> = {}, query = '') => request(`/api/admin/reset${query}`, { method: 'POST', headers })
+
+      expect((await post()).status).toBe(401)
+      expect((await post({ Authorization: 'Bearer wrong' })).status).toBe(401)
+      expect((await post({ Authorization: 'secret' })).status).toBe(401)
+      // Not in the URL, where it would end up in logs
+      expect((await post({}, '?token=secret')).status).toBe(401)
+
+      const res = await post({ Authorization: 'Bearer secret' })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ reset: true })
+    })
+
+    it('checks a candidate without giving the token away', async () => {
+      await serve({ adminToken: 'secret' })
+      expect(http.adminToken.configured).toBe(true)
+      expect(http.adminToken.matches('secret')).toBe(true)
+      expect(http.adminToken.matches('wrong')).toBe(false)
+      expect(http.adminToken.matches('')).toBe(false)
+      expect(JSON.stringify(http.adminToken)).not.toContain('secret')
+      listener?.close()
+
+      await serve()
+      expect(http.adminToken.configured).toBe(false)
+      expect(http.adminToken.matches('')).toBe(false)
+    })
+
+    it('also opens the metrics, next to their own token', async () => {
+      const request = await serve({ adminToken: 'admin', metrics: { token: 'metrics' } })
+      adminRoute()
+
+      expect((await request('/api/game/metrics')).status).toBe(401)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer metrics' } })).status).toBe(200)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+      expect((await request('/api/game/metrics?token=admin')).status).toBe(200)
+
+      // The metrics token reads, it doesn't administer
+      expect((await request('/api/admin/reset', { method: 'POST', headers: { Authorization: 'Bearer metrics' } })).status).toBe(401)
+    })
+
+    it('turns the metrics on in production by itself', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const request = await serve({ adminToken: 'admin' })
+
+      expect((await request('/api/game/metrics')).status).toBe(401)
+      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+    })
+
+    it('says on the routes it guards who may call them, unless they say so themselves', async () => {
+      const request = await serve({ adminToken: 'secret' })
+      adminRoute()
+
+      const { routes } = await (await request('/api/game/routes', { headers: { Authorization: 'Bearer secret' } })).json() as { routes: any[] }
+      const reset = routes.find(route => route.path === '/api/admin/reset')
+
+      expect(reset).toMatchObject({ method: 'POST', source: 'game', auth: 'The server\'s admin token as `Authorization: Bearer <token>`' })
+      expect(routes.find(route => route.path === '/api/game/health').auth).toBe('None')
+
+      // Without a token the same route says it is localhost only
+      listener?.close()
+      const local = await serve()
+      adminRoute()
+      const listed = await (await local('/api/game/routes')).json() as { routes: any[] }
+      expect(listed.routes.find(route => route.path === '/api/admin/reset').auth).toContain('Requests from localhost only')
+    })
   })
 
   it('serves metrics to localhost without a token', async () => {
@@ -176,6 +344,37 @@ describe('httpServer', () => {
       const bad = await request('/api/game/dev/entities?near=1,2')
       expect(bad.status).toBe(400)
       expect(await bad.json()).toEqual({ error: 'near must be x,y,z' })
+    })
+
+    it('serves the recorded packets and the state sync', async () => {
+      const net = new NetRecorder({ enabled: true })
+      net.packet('out', 'sv_state', { tick: 1, entities: [] }, { peer: 'p1' })
+      net.packet('in', 'command', { type: 'cl_move', sequenceId: 2 }, { peer: 'p1' })
+      const request = await serve({ net: { net, syncSnapshot: () => ({ tick: 9 }) as any } })
+
+      const all = await (await request('/api/game/dev/net/packets')).json()
+      expect(all).toMatchObject({ enabled: true, latestId: 2, matched: 2, records: [{ type: 'sv_state' }, { type: 'command' }] })
+
+      const filtered = await (await request('/api/game/dev/net/packets?after=1&direction=in&peer=p1&limit=5')).json()
+      expect(filtered.records).toMatchObject([{ id: 2, type: 'command', sequenceId: 2 }])
+
+      expect(await (await request('/api/game/dev/net/packets/1')).json()).toMatchObject({ record: { id: 1, payload: { tick: 1, entities: [] } } })
+      expect(await (await request('/api/game/dev/net/packets/99')).json()).toEqual({ record: null })
+      expect(await (await request('/api/game/dev/net/sync')).json()).toEqual({ tick: 9 })
+
+      const bad = await request('/api/game/dev/net/packets?kind=frame')
+      expect(bad.status).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'kind must be packet or event' })
+    })
+
+    it('does not serve the network debug endpoints in production or without a source', async () => {
+      expect((await (await serve({ inspector: fakeInspector() }))('/api/game/dev/net/sync')).status).toBe(404)
+      listener?.close()
+
+      vi.stubEnv('NODE_ENV', 'production')
+      const request = await serve({ net: { net: new NetRecorder({ enabled: true }), syncSnapshot: () => ({}) as any }, metrics: { token: 'secret' } })
+      expect((await request('/api/game/dev/net/sync?token=secret')).status).toBe(404)
+      expect((await request('/api/game/dev/net/packets?token=secret')).status).toBe(404)
     })
 
     it('are not registered without an inspector', async () => {

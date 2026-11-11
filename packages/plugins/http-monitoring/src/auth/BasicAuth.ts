@@ -15,10 +15,21 @@ export type CredentialSource
   = | { kind: 'htpasswd', path: string }
     | { kind: 'user', user: string, password: string }
 
+/** The game server's admin token, as core hands it to plugins: checked without being told */
+export interface AdminToken {
+  readonly configured: boolean
+  matches(candidate: string): boolean
+}
+
 export interface BasicAuthOptions {
   realm: string
-  /** No source: only requests from this machine are let in */
+  /** Users of the dashboard's own. Without any and without an admin token, only requests from this machine are let in */
   credentials?: CredentialSource
+  /**
+   * The game server's admin token. It logs in as the password, with any user name, and as `Authorization: Bearer <token>`,
+   * so the dashboard needs no secret of its own.
+   */
+  adminToken?: AdminToken
   logger?: Logger
   /** How long a checked login is remembered, so bcrypt doesn't run on every poll. Default 10 minutes */
   cacheMs?: number
@@ -31,6 +42,7 @@ export interface BasicAuthOptions {
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const BASIC_RE = /^Basic ([A-Z0-9+/=]+)$/i
+const BEARER_RE = /^Bearer (\S+)$/i
 /** Don't re-stat the htpasswd file more often than this */
 const RELOAD_CHECK_MS = 2000
 
@@ -91,7 +103,7 @@ export default class BasicAuth {
 
   /** Whether logins are checked at all, rather than only letting this machine in */
   get requiresLogin(): boolean {
-    return !!this.options.credentials
+    return !!this.options.credentials || !!this.options.adminToken?.configured
   }
 
   get userCount(): number {
@@ -122,15 +134,21 @@ export default class BasicAuth {
       return false
     }
 
+    const admin = this.options.adminToken
+    const bearer = BEARER_RE.exec(req.headers.authorization?.trim() ?? '')?.[1]
     const credentials = parseBasicAuth(req.headers.authorization)
-    if (credentials && await this.verify(credentials.user, credentials.password)) {
+
+    // The server's admin token: as a bearer token for tools, as the password (whatever the user name) for the browser
+    const allowed = (bearer !== undefined && !!admin?.matches(bearer))
+      || (!!credentials && (!!admin?.matches(credentials.password) || await this.verify(credentials.user, credentials.password)))
+    if (allowed) {
       this.failures.delete(address)
       return true
     }
 
-    if (credentials) {
+    if (credentials || bearer !== undefined) {
       this.recordFailure(address)
-      this.options.logger?.warn(`Monitoring: failed login for "${credentials.user}" from ${address}`)
+      this.options.logger?.warn(`Monitoring: failed login ${credentials ? `for "${credentials.user}"` : 'with a token'} from ${address}`)
     }
 
     res.setHeader('WWW-Authenticate', `Basic realm="${this.options.realm.replace(/"/g, '')}", charset="UTF-8"`)

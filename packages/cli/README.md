@@ -54,6 +54,36 @@ The project root is the nearest `package.json`, from the current directory upwar
 | `--transparent` | | Let a transparent terminal background show through |
 | `--no-open` | | Don't open the game in the browser once the server is up |
 
+
+### Installing plugins while it runs
+
+`mavonengine dev` can install packages into the project and restart the dev servers afterwards, so a new plugin is loaded without stopping anything yourself:
+
+- from the dashboard's Plugins tab, with `i` on a plugin that is available to install;
+- from the editor's Plugins view, with the Install button of an available plugin, or by typing any package (a name, `name@version`, a `file:` path or a URL) into "Another package".
+
+Both ask first and point at the package's source: installing a package runs its code on your machine, and nothing reviews what you install. The install is the same as [`mavonengine install --yes`](#mavonengine-install), followed by a restart of the dev script.
+
+The editor reaches `mavonengine dev` through the dev server it started (`POST /__mavonengine/plugin-install`), which only takes requests from localhost and from the game's own page, so another site open in the browser can't install anything. Version ranges such as `^1.0.0` and anything with spaces are refused there; use the terminal for those.
+
+## `mavonengine plugins`
+
+Lists the plugins that are available to install.
+
+```sh
+npx @mavonengine/cli plugins
+```
+
+The list is [`plugins.json`](https://github.com/MavonEngine/Core/blob/main/plugins.json) at the root of the MavonEngine repository, read from the `main` branch on GitHub every time the command runs:
+
+```
+https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json
+```
+
+So a plugin shows up as soon as it is added to that file on `main` (GitHub may serve the file a few minutes old). Inside a project the command also says which of the plugins are already in its `mavonengine.json`. `--json` prints the list as JSON, and `--url <url>` or `MAVONENGINE_PLUGINS_URL` reads it from somewhere else, such as a fork or a branch.
+
+To list a plugin, add an entry to `plugins.json`: `package` (the npm name) is required; `name`, `description`, `target` (`client`, `server` or `both`), `engine` (the supported `@mavonengine/core` range), `homepage` and `readme` (the URL of its README as Markdown, such as the raw file on GitHub, which the editor shows) are optional.
+
 ## `mavonengine install`
 
 Installs packages into the project you are in, with its package manager. For each one that is a MavonEngine [plugin](#writing-a-plugin), it shows where the plugin runs (client, server or both) and which prefabs it brings, and asks whether to add it to the `plugins` in `mavonengine.json`. Registered plugins load on the client and/or the game server and are built into the release.
@@ -121,15 +151,25 @@ npx @mavonengine/cli dashboard --sim
 | `--host <host>` | `localhost` | Server host |
 | `--port <port>` | `8050` | Server HTTP port (`ServerOptions.httpPort`) |
 | `--url <url>` | | Full metrics URL, overrides `--host` and `--port` |
-| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN` | Metrics token (`ServerOptions.metrics.token`) |
+| `--token <token>` | `$MAVONENGINE_METRICS_TOKEN`, then `$MAVONENGINE_ADMIN_TOKEN` | Metrics token (`ServerOptions.metrics.token`), or the server's [admin token](#admin-token) |
 | `--interval <ms>` | `1000` | Poll interval |
 | `--theme <name>` | `dark` | `dark`, `dracula`, `nord`, `tokyoNight`, `gruvbox`, `matrix`, `monochrome`, `highContrast`, `light` |
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`4` switch between the Overview, Players, Logs and HTTP tabs. The mouse wheel scrolls the players table, the logs and the requests; scroll the logs back to the bottom, or the requests back to the top, to follow new ones again.
+Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`7` switch between the Overview, Players, Logs, HTTP, Network, Routes and Plugins tabs. The mouse wheel scrolls the players table, the logs, the requests, the packets and the routes; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
 
 The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
+
+The Network tab shows the game socket while developing. State sync lists each player with the entities in its last state update, its last acknowledged input and the size and tick of that update (red when it fell behind the others), and counts the synced entities no player is in range of. By message breaks the traffic of the last 5 seconds down by message name and direction: packets per second, average size and bytes per second, the largest share first. Below, every packet and network event, newest first, with its client, size, tick, input sequence id and a few facts about its payload; `p` shows the pings, `e` only the events (`connect`, `disconnect`, `dropped`, `sync_enter`, `sync_leave`). Click a packet, or move through the list with the arrow keys (or `j` / `k`), to see its content next to the list: the payload as it went over the wire, scrolled with the mouse wheel. `esc`, or a second click on it, closes it. The server drops the payloads of old packets to bound its memory, so only recent ones can be opened. The packets are only fetched while the tab shows, and only a server that is not running in production records them, see the [network tools](#mavonengine-mcp).
+
+The Routes tab lists every HTTP endpoint the server has: the engine's own, the ones your server registered in `onHttp` and those of plugins, each with its method, path, whether it only exists in development or is served in production too, where it comes from and what it does. The list is read from the running server, so a new route shows up without being declared anywhere; say what it does with `describeRoute()` from `@mavonengine/core/Networking/Server/Http/RouteCatalog`, and pass it `devOnly: true` for a route you only register in development, since a route that doesn't say is listed as `prod + dev`. It needs a server on a `@mavonengine/core` release with `GET /api/game/routes`.
+
+The Plugins tab lists the plugins in the project's `mavonengine.json` with their version, whether they are enabled, where they run and how many endpoints and prefabs they have. `↑`/`↓` (or `j`/`k`, or a click) pick one to see its description, supported engine versions, license, prefabs and the HTTP endpoints it registered. A server plugin that is enabled but not running in this server shows as `not loaded`. It needs a server on a `@mavonengine/core` release with `GET /api/game/plugins`.
+
+Below it, "Available to install" lists the plugins from [`mavonengine plugins`](#mavonengine-plugins) that the project doesn't have yet. The dashboard reads that list from GitHub itself, the first time the tab is shown and again on `r`; a dashboard that never opens the tab never asks for it.
+
+Under [`mavonengine dev`](#mavonengine-dev) a plugin from that list can be installed right there: select it with `↓` and press `i`. The dashboard first asks whether you checked its source, because installing a package runs its code on your machine; `y` installs it with the project's package manager, adds it to `mavonengine.json` and restarts the dev servers, `n` cancels. A dashboard started on its own with `mavonengine dashboard` only shows the command, since it can't restart servers it didn't start.
 
 ### Server access
 
@@ -150,8 +190,23 @@ const server = new MyServer(logger, physicsWorld, {
 
 - With no token, the endpoint only answers requests from localhost.
 - With `NODE_ENV=production` and no token, the endpoint is turned off.
+- The server's [admin token](#admin-token) is taken as well, and turns the endpoint on in production by itself.
 - Set `metrics.enabled: false` to turn it off everywhere.
 - The logs endpoint follows the same rules. It serves whatever passes your logger's level.
+
+### Admin token
+
+A game server has one admin token, for everything that changes it or tells what not everyone should know. The engine and every plugin use the same one, so no plugin needs a secret of its own:
+
+```sh
+MAVONENGINE_ADMIN_TOKEN=… npm start
+```
+
+or `adminToken` in the server's options. Requests send it as `Authorization: Bearer <token>`. Without a token, admin routes only answer requests from localhost.
+
+- It also reads the metrics, so the dashboard and `mavonengine mcp` take it for `--token`. The metrics token stays read-only: it administers nothing.
+- [`@mavonengine/chat`](../plugins/chat) guards its admin API with it, and [`@mavonengine/http-monitoring`](../plugins/http-monitoring) takes it as the password of its login.
+- The Routes tab shows which routes ask for it.
 
 ## `mavonengine mcp`
 
@@ -179,6 +234,8 @@ Game server tools:
 | `get_entity` | One entity with the state it sends to clients (dev only) |
 | `recent_logs` | Server log lines, filtered by level and text |
 | `recent_requests` | HTTP requests the server answered, filtered by path and status |
+| `network_packets` / `network_packet` | Packets the server sent and received and its network events, per client: size, tick, input sequence id; and one packet with its payload (dev only) |
+| `network_sync` | Who is sent what: each player's tracked entities and last state update, and by how many players each entity is tracked (dev only) |
 
 Client tools, for the game tabs open while Vite serves the client in dev:
 
@@ -188,11 +245,23 @@ Client tools, for the game tabs open while Vite serves the client in dev:
 | `client_status` | Draw calls and triangles of one frame, GPU geometries / textures / programs, JS heap, canvas, camera |
 | `client_entities` / `client_entity` | The tab's world, in the same shape as the server's, with its local player marked |
 | `client_scene` | The scene loaded in the tab, and which objects the client built |
-| `client_network` | Connection, ping, and inputs sent but not yet acknowledged by the server |
+| `client_network` | Connection, ping, inputs sent but not yet acknowledged by the server, and the last state update: its server tick, ack and age |
+| `client_packets` / `client_packet` | Packets the tab sent and received and its network events, and one packet with its payload |
+| `network_timeline` | The server's records for one tab and the tab's own, merged by time |
 | `client_logs` | Console output, uncaught errors and unhandled rejections, filtered by level and text |
 | `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
 | `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, composer passes, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
 | `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
+
+Plugin tools:
+
+| Tool | |
+| --- | --- |
+| `list_plugins` | The plugins in the project's `mavonengine.json`: version, whether each is enabled and runs on the server, its prefabs and the HTTP endpoints it registered |
+| `available_plugins` | The official plugins from [`mavonengine plugins`](#mavonengine-plugins): what each does, where it runs, the command that installs it, and whether the project already has it |
+| `plugin_readme` | The README of one of them as Markdown: its options, how a game hooks into it and its limits |
+
+With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: every tool is read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
 
 Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
 
@@ -212,6 +281,8 @@ The server scene and entity tools read `GET /api/game/dev/*` on the game server.
 The client tools go through the dev bridge of the Vite plugin in `@mavonengine/core/vite.config` (Vite 8). In dev it adds a small module to the page that answers over Vite's hot-reload WebSocket, and serves `GET /__mavonengine/clients` to localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set for the dev server. Builds never include it. Turn it off with `mavonEnginePlugins({ devBridge: false })`.
 
 `client_trace` patches the tab only while it records and puts everything back afterwards. It times every frame and composer pass, counts the WebGL calls on the context, keeps slow single calls (shader compiles, texture uploads, `readPixels` / `getError` stalls), long animation frames with the scripts that ran, and your own `performance.measure()` spans. GPU time per frame needs `EXT_disjoint_timer_query_webgl2` (Chrome and Edge on most GPUs; the three-perf panel pauses while tracing since it uses the same queries). JS call stacks come from the [JS Self-Profiling API](https://wicg.github.io/js-self-profiling/) in Chromium browsers: the Vite plugin serves dev pages with `Document-Policy: js-profiling` for it, so reload tabs opened before you updated. The trace file is [Chrome Trace Event](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) JSON with tracks for frames, passes, GPU time, ticks, JS samples and slow WebGL calls: open it in [Perfetto](https://ui.perfetto.dev), `chrome://tracing` or [speedscope](https://www.speedscope.app). Keep the tab in the foreground while it records, browsers throttle hidden tabs.
+
+The network tools read what both sides record while developing: every message through the game socket, the engine's and your own, with its size, and events such as `connect`, `disconnect`, `dropped` (the transport dropped a message), `sync_enter` / `sync_leave` (entities coming into or leaving a player's sync distance) and, on a client, `state_gap` (state updates that never arrived) and `state_out_of_order`. Each side keeps its last 2000 records, and 8 MB of their payloads. The server records when `NODE_ENV` is not `production` and serves them on `GET /api/game/dev/net/packets`, `/packets/:id` and `/sync`; a tab records while the dev bridge or the editor runs. Nothing is recorded, and the socket is left untouched, in a production build. `network_timeline` orders the two sides by their own clocks, which line up on one machine.
 
 To let `compare_entity` match your own player with the server's, set `game.localPlayer` to the entity the tab controls, or give it `isLocalPlayer = true`: the server keys players by socket id, which the client often doesn't.
 
@@ -283,6 +354,18 @@ export default defineServerPlugin({
 ```
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+Guard a plugin's admin routes with `ctx.requireAdmin`, which asks for the server's [admin token](#admin-token), instead of giving the plugin a token of its own:
+
+```ts
+export default defineServerPlugin({
+  http(app, ctx) {
+    app.post('/api/my-plugin/reset', ctx.requireAdmin, (_req, res) => res.json({ reset: true }))
+  },
+})
+```
+
+A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
 
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 

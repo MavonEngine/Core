@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { parseArgs } from 'node:util'
+import { PLUGIN_REGISTRY_ENV, PLUGIN_REGISTRY_URL } from '@mavonengine/core/Plugins/registry'
 import { DEFAULT_DOCS_URL } from '../mcp/config'
 import GameServerClient from '../mcp/GameServerClient'
 import { UsageError } from './dashboard'
@@ -9,9 +10,10 @@ export const MCP_HELP = `Usage: mavonengine mcp [options]
 Model Context Protocol (MCP) server over stdio, for any MCP client and model
 (Claude Code, Cursor, VS Code, Codex, Gemini CLI, Zed, local models, …).
 It lets the assistant read a running game: the game server (status, metrics,
-players, scene, entities, logs, HTTP requests) and the game tabs open in a
-browser (renderer stats, entities, network, console, screenshots), and compare
-an entity on both sides. Every tool is read-only. Server scene and entity tools
+players, scene, entities, logs, HTTP requests, plugins) and the game tabs open
+in a browser (renderer stats, entities, network, console, screenshots), compare
+an entity on both sides, and see which official plugins the project could add.
+Every tool is read-only. Server scene and entity tools
 need the game server in development (NODE_ENV is not "production"); client
 tools need the client served by Vite in dev.
 
@@ -27,10 +29,15 @@ Options:
   --url <url>          Server base URL, e.g. http://localhost:8050, overrides --host and --port
   --client-url <url>   Where Vite serves the client in dev (default: the server URL,
                        which serves it in the template), e.g. http://localhost:5173
-  --token <token>      Metrics token (or set MAVONENGINE_METRICS_TOKEN)
+  --token <token>      Metrics or admin token (or set MAVONENGINE_METRICS_TOKEN
+                       or MAVONENGINE_ADMIN_TOKEN)
   --docs-url <url>     MCP server of the documentation for the docs_* tools
                        (default: https://mavonengine.com/mcp)
   --no-docs            Leave out the docs_* tools, e.g. offline
+  --plugins-url <url>  List of plugins that can be installed, for available_plugins and
+                       plugin_readme (default: plugins.json on the main branch of the
+                       MavonEngine repository, or MAVONENGINE_PLUGINS_URL)
+  --no-plugin-list     Leave out available_plugins and plugin_readme, e.g. offline
   -h, --help           Show this help
 `
 
@@ -38,6 +45,8 @@ export interface McpOptions {
   client: GameServerClient
   /** The documentation's MCP server, false without the docs tools */
   docsUrl: string | false
+  /** The list of plugins that can be installed, false without the tools that read it */
+  pluginsUrl: string | false
 }
 
 export function parseMcpArgs(args: string[], env: Record<string, string | undefined> = process.env): McpOptions | 'help' {
@@ -51,6 +60,8 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
       'token': { type: 'string' },
       'docs-url': { type: 'string' },
       'docs': { type: 'boolean', default: true },
+      'plugins-url': { type: 'string' },
+      'plugin-list': { type: 'boolean', default: true },
       'help': { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
@@ -71,7 +82,7 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     url = `http://${host}:${port}`
   }
 
-  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']], ['--docs-url', values['docs-url']]] as const) {
+  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']], ['--docs-url', values['docs-url']], ['--plugins-url', values['plugins-url']]] as const) {
     try {
       if (value !== undefined)
         void new URL(value)
@@ -82,15 +93,16 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
   }
 
   return {
-    client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN }),
+    client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN }),
     docsUrl: values.docs ? (values['docs-url'] ?? DEFAULT_DOCS_URL) : false,
+    pluginsUrl: values['plugin-list'] ? (values['plugins-url'] ?? env[PLUGIN_REGISTRY_ENV] ?? PLUGIN_REGISTRY_URL) : false,
   }
 }
 
 /**
  * Serve MCP on stdin / stdout until the client disconnects. stdout carries the protocol, so nothing else may write to it.
  */
-export async function runMcpCommand({ client, docsUrl }: McpOptions): Promise<number> {
+export async function runMcpCommand({ client, docsUrl, pluginsUrl }: McpOptions): Promise<number> {
   // Loaded lazily so the other commands don't pay for the MCP SDK
   const [{ StdioServerTransport }, { createMcpServer }, { DocsClient }] = await Promise.all([
     import('@modelcontextprotocol/sdk/server/stdio.js'),
@@ -99,7 +111,7 @@ export async function runMcpCommand({ client, docsUrl }: McpOptions): Promise<nu
   ])
 
   const docs = docsUrl ? new DocsClient(docsUrl) : undefined
-  const server = createMcpServer(client, docs)
+  const server = createMcpServer(client, docs, pluginsUrl ? { url: pluginsUrl } : undefined)
   const transport = new StdioServerTransport()
 
   const closed = new Promise<void>((resolve) => {

@@ -22,8 +22,9 @@ export default abstract class NetworkedLivingActor extends NetworkedGameObjectMi
     /**
      * Update the state hash if it is changed
      */
-    if (this.stateHash !== this.previousStateHash) {
-      this.previousStateHash = this.stateHash
+    const stateHash = this.stateHash
+    if (stateHash !== this.previousStateHash) {
+      this.previousStateHash = stateHash
       this.needsSync = true
     }
   }

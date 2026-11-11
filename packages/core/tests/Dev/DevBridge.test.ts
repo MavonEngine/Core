@@ -4,6 +4,7 @@ import { Vector3 } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_HELLO, BRIDGE_REQUEST, BRIDGE_RESPONSE } from '../../src/Dev/bridgeProtocol'
 import { answer, formatArgs, pushLog, resetDevBridgeLogs, startDevBridge } from '../../src/Dev/DevBridge'
+import NetRecorder from '../../src/Networking/Debug/NetRecorder'
 import BaseWorld from '../../src/World/BaseWorld'
 import GameObject from '../../src/World/GameObject'
 
@@ -27,6 +28,10 @@ function fakeGame() {
     other: new Character('other', false, new Vector3(2, 0, 0)),
   })
 
+  const net = new NetRecorder({ enabled: true })
+  net.packet('out', 'command', { type: 'cl_move', sequenceId: 16 })
+  net.packet('in', 'sv_state', { tick: 12, ack: 16, entities: [] })
+
   const info = { autoReset: true, reset: vi.fn(), render: { calls: 12, triangles: 3400, points: 0, lines: 2 }, memory: { geometries: 5, textures: 3 }, programs: [{}, {}] }
   return {
     world,
@@ -44,6 +49,8 @@ function fakeGame() {
       editorMode: false,
       localCommandQueue: [{}, {}, {}],
       currentSequenceId: 17,
+      net,
+      serverView: { tick: 12, serverTime: 5000, ack: 16, receivedAt: performance.now(), missedStates: 1, entities: new Map() },
     },
   }
 }
@@ -100,9 +107,30 @@ describe('answer', () => {
     expect(await ask('entity')).toMatchObject({ ok: false, error: 'id is required' })
   })
 
+  it('lists the recorded packets and shows one with its payload', async () => {
+    const res = await ask('packets', { direction: 'in', limit: '5' }) as any
+    expect(res.data).toMatchObject({ enabled: true, latestId: 2, matched: 1, records: [{ id: 2, type: 'sv_state', tick: 12 }] })
+
+    expect(((await ask('packet', { id: '1' })) as any).data.record).toMatchObject({ type: 'command', payload: { type: 'cl_move', sequenceId: 16 } })
+    expect(((await ask('packet', { id: '9' })) as any).data).toEqual({ record: null })
+    expect(await ask('packets', { kind: 'frame' })).toMatchObject({ ok: false, error: 'kind must be packet or event' })
+
+    delete (window as any).Game.network
+    expect(await ask('packets')).toMatchObject({ ok: false, error: expect.stringContaining('no NetworkManager') })
+  })
+
   it('reports the network state', async () => {
     const res = await ask('network') as any
-    expect(res.data.network).toEqual({ connected: true, playerId: 'socket-1', pingMs: 42, editorMode: false, pendingCommands: 3, nextSequenceId: 17 })
+    expect(res.data.network).toEqual({
+      connected: true,
+      playerId: 'socket-1',
+      pingMs: 42,
+      editorMode: false,
+      pendingCommands: 3,
+      nextSequenceId: 17,
+      lastState: { tick: 12, serverTime: 5000, ack: 16, ageMs: expect.any(Number), missedStates: 1 },
+      recording: true,
+    })
 
     delete (window as any).Game.network
     expect(((await ask('network')) as any).data.network).toBeNull()
