@@ -9,7 +9,7 @@ import AdmZip from 'adm-zip'
 import { formatBytes } from '../dashboard/format'
 import { MCP_CONFIG_FILE, writeMcpConfig } from '../mcp/config'
 
-export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.16-alpha.zip'
+export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.17-alpha.zip'
 export const TEMPLATE_SUBPATH = 'packages/multiplayer-template'
 
 export const PROJECT_NAME_RE = /^[\w@./-][\w@./\- ]*$/
