@@ -74,12 +74,18 @@ jobs:
         npm link
       working-directory: ./packages/cli
 
+    - name: npm link editor locally
+      run: |
+        npm link
+      working-directory: ./packages/editor
+
     # multiplayer-template has its own nested workspaces (client/server) that npm
     # workspaces does not handle recursively, so we need a separate npm ci here.
-    # Both in one call: each `npm link <pkg>` replaces the links of an earlier one
+    # Both in one call: each `npm link <pkg>` replaces the links of an earlier one.
+    # The editor is linked for the editor dist test; the other steps alias it to its src/
     - name: Build multiplayer-template
       run: |
-        npm link @mavonengine/core @mavonengine/cli
+        npm link @mavonengine/core @mavonengine/cli @mavonengine/editor
         npm run typecheck
         npm run build
         npm run lint
@@ -124,4 +130,18 @@ jobs:
       with:
         name: mcp-e2e-screenshots-${{ matrix.os }}
         path: e2e/mcp/screenshots
+        if-no-files-found: ignore
+
+    # The template aliases core and the editor to their src/, so nothing above loads their dist/. This runs
+    # the template against the built packages, like a project that installed them, and opens the editor
+    - name: Editor dist end-to-end test
+      timeout-minutes: 5
+      run: npm run test:editor-dist-e2e
+
+    - name: Upload editor dist end-to-end screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: editor-dist-e2e-screenshots-${{ matrix.os }}
+        path: e2e/editor-dist/screenshots
         if-no-files-found: ignore
