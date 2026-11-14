@@ -30,3 +30,4 @@ packages/core/src/version.ts
 e2e/http-monitoring/screenshots
 e2e/scenes/screenshots
 e2e/mcp/screenshots
+e2e/editor-dist/screenshots
