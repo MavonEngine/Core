@@ -353,6 +353,7 @@ export function normalizePlugins(raw: unknown): PluginLine[] {
       enabled: p.enabled !== false,
       installed: p.installed !== false,
       runningOnServer: p.runningOnServer === true,
+      ...(p.database === true ? { database: true as const } : {}),
       declaredPrefabs: strings(p.declaredPrefabs),
       usedPrefabs: strings(p.usedPrefabs),
       ...(target ? { target } : {}),
@@ -361,4 +362,87 @@ export function normalizePlugins(raw: unknown): PluginLine[] {
         .map(key => [key, p[key] as string])),
     }
   })
+}
+
+export interface DatabaseColumnLine {
+  name: string
+  type: string
+  nullable: boolean
+  autoIncrement: boolean
+  hasDefault: boolean
+}
+
+export interface DatabaseTableLine {
+  name: string
+  /** Package of the plugin the table belongs to, null for the game's own */
+  plugin: string | null
+  /** Null when the server could not count them */
+  rows: number | null
+  columns: DatabaseColumnLine[]
+}
+
+export interface DatabaseMigrationsLine {
+  plugin: string | null
+  table: string
+  applied: { name: string, executedAt: string | null }[]
+}
+
+/** GET /api/game/database */
+export interface DatabaseInfo {
+  /** Package of the database plugin, null when the project has none */
+  provider: string | null
+  tables: DatabaseTableLine[]
+  migrations: DatabaseMigrationsLine[]
+}
+
+/** A page of a table's rows, GET /api/game/database/tables/:name */
+export interface TablePage {
+  table: string
+  columns: DatabaseColumnLine[]
+  rows: Record<string, unknown>[]
+  total: number
+  offset: number
+  limit: number
+}
+
+function columns(value: unknown): DatabaseColumnLine[] {
+  return arr(value, c => ({
+    name: str(c.name, '?'),
+    type: str(c.type),
+    nullable: c.nullable !== false,
+    autoIncrement: c.autoIncrement === true,
+    hasDefault: c.hasDefault === true,
+  }))
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/database response.
+ */
+export function normalizeDatabase(raw: unknown): DatabaseInfo {
+  const data = section(raw)
+  return {
+    provider: strOrNull(data.provider),
+    tables: arr(data.tables, t => ({ name: str(t.name, '?'), plugin: strOrNull(t.plugin), rows: numOrNull(t.rows), columns: columns(t.columns) })),
+    migrations: arr(data.migrations, m => ({
+      plugin: strOrNull(m.plugin),
+      table: str(m.table, '?'),
+      applied: arr(m.applied, a => ({ name: str(a.name, '?'), executedAt: strOrNull(a.executedAt) })),
+    })),
+  }
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/database/tables/:name response.
+ */
+export function normalizeTablePage(raw: unknown): TablePage {
+  const data = section(raw)
+  const rows = arr(data.rows, row => row)
+  return {
+    table: str(data.table, '?'),
+    columns: columns(data.columns),
+    rows,
+    total: num(data.total, rows.length),
+    offset: num(data.offset),
+    limit: num(data.limit, rows.length),
+  }
 }

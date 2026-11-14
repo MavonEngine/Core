@@ -3,6 +3,7 @@ import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
 import type { AdminToken, ServerPluginInfo } from '../../../Plugins/types'
 import type { NetDebugSource } from '../../Debug/sync'
+import type DatabaseInspector from '../Stats/DatabaseInspector'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
 import type ServerMetrics from '../Stats/ServerMetrics'
@@ -15,6 +16,7 @@ import process from 'node:process'
 import express from 'express'
 import { parseEntityQuery } from '../../../Dev/inspect'
 import { parseNetRecordQuery } from '../../Debug/NetRecorder'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../Stats/DatabaseInspector'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
 import RouteCatalog, { describeAuth, describeRoute } from './RouteCatalog'
@@ -66,6 +68,8 @@ export interface HttpServerOptions {
   net?: NetDebugSource
   /** Serves the project's plugins on GET /api/game/plugins when given */
   plugins?(): ServerPluginInfo[]
+  /** Serves the database's tables and rows on GET /api/game/database/* when given, to whoever has the admin token */
+  database?: DatabaseInspector
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -104,6 +108,7 @@ export default class HttpServer {
   private inspector?: WorldInspector
   private net?: NetDebugSource
   private plugins?: () => ServerPluginInfo[]
+  private database?: DatabaseInspector
   private lastMetricsRequestAt?: number
   private listener?: NodeServer
 
@@ -134,6 +139,7 @@ export default class HttpServer {
     this.inspector = options.inspector
     this.net = options.net
     this.plugins = options.plugins
+    this.database = options.database
     this.routes = new RouteCatalog(app)
 
     this.routes.registerAs({ source: 'engine' }, () => {
@@ -143,6 +149,8 @@ export default class HttpServer {
       this.registerRequestsEndpoint()
       this.registerRoutesEndpoint()
       this.registerPluginsEndpoint()
+      if (this.database)
+        this.registerDatabaseEndpoints(this.database)
 
       if (this.devEndpointsEnabled)
         this.registerDevEndpoints()
@@ -290,6 +298,43 @@ export default class HttpServer {
       auth: METRICS_AUTH,
     }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
       res.json({ routes: this.routes.list() })
+    })
+  }
+
+  /**
+   * GET /api/game/database                        the database plugin, the tables with whose they are and their row counts, the migrations that ran
+   * GET /api/game/database/tables/:name?offset=&limit=   a page of a table's rows
+   *
+   * Only read, and only with the admin token: the database has what players did and said.
+   */
+  private registerDatabaseEndpoints(database: DatabaseInspector) {
+    const failed = (res: Response, err: unknown) => {
+      this.logger.error(`Could not read the database: ${(err as Error)?.message ?? err}`)
+      res.status(500).json({ error: `Could not read the database: ${(err as Error)?.message ?? err}` })
+    }
+
+    this.app.get('/api/game/database', describeRoute({
+      summary: 'The database and its tables',
+      description: 'Which plugin gives the database, every table with the plugin it belongs to, its columns and its number of rows, and the migrations each plugin ran. `provider` is null when the project has no database plugin.',
+      response: '`{ provider, tables, migrations }`',
+    }), this.requireAdmin, (_req, res) => {
+      database.overview().then(overview => res.json(overview), err => failed(res, err))
+    })
+
+    this.app.get('/api/game/database/tables/:name', describeRoute({
+      summary: 'Rows of a database table',
+      params: { name: 'The table, as GET /api/game/database lists it' },
+      query: { offset: 'First row, default 0', limit: `Rows, default ${DEFAULT_PAGE_SIZE}, at most ${MAX_PAGE_SIZE}` },
+      response: '`{ table, columns, rows, total, offset, limit }`, or 404 when there is no such table',
+    }), this.requireAdmin, (req, res) => {
+      const offset = Number(req.query.offset ?? 0)
+      const limit = Number(req.query.limit ?? DEFAULT_PAGE_SIZE)
+      database.page(String(req.params.name), offset, limit).then((page) => {
+        if (page)
+          res.json(page)
+        else
+          res.status(404).json({ error: `No table ${req.params.name}` })
+      }, err => failed(res, err))
     })
   }
 

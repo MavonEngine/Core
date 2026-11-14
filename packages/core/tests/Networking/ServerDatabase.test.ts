@@ -103,6 +103,11 @@ describe('server database', () => {
     expect(ctxDb).toBe(db)
     expect(server.databaseProvider).toBe('@mavonengine/sqlite')
     await vi.waitFor(() => expect(rows).toEqual([]))
+
+    // GET /api/game/plugins tells which plugin gives the database
+    const infos = server.pluginInfos()
+    expect(infos.find(info => info.package === '@mavonengine/sqlite')?.database).toBe(true)
+    expect(infos.find(info => info.package === '@mavonengine/chat')).not.toHaveProperty('database')
     await server.stop()
   })
 

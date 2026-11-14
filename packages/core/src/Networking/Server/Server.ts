@@ -13,6 +13,7 @@ import type { CommandPacket, IncomingClientCommandPacket, StatePacket } from './
 import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
 import type { LatencySimulatorOptions } from './LatencySimulator'
+import type { DatabaseSource } from './Stats/DatabaseInspector'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
 import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
@@ -35,6 +36,7 @@ import NetworkedGameObject from '../NetworkedGameObject'
 import { ClientCommand, ServerCommand } from './Commands'
 import HttpServer, { ADMIN_TOKEN_ENV } from './Http/HttpServer'
 import LatencySimulator from './LatencySimulator'
+import DatabaseInspector from './Stats/DatabaseInspector'
 import LogBuffer from './Stats/LogBuffer'
 import RequestLog from './Stats/RequestLog'
 import ServerMetrics, { SERVER_BANDWIDTH_ID } from './Stats/ServerMetrics'
@@ -119,7 +121,7 @@ const MAX_SYNC_EVENT_IDS = 20
 
 const vec = ({ x, y, z }: { x: number, y: number, z: number }) => ({ x, y, z })
 
-export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource, NetDebugSource {
+export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource, NetDebugSource, DatabaseSource {
   game: BaseGame
 
   private commandBuffer: IncomingClientCommandPacket<ClientCommand>[] = []
@@ -212,6 +214,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       inspector: new WorldInspector(this),
       net: this,
       plugins: () => this.pluginInfos(),
+      database: new DatabaseInspector(this),
     })
 
     this.gameSocket.onConnection((channel) => {
@@ -674,6 +677,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     return this.database?.provider
   }
 
+  /** Packages of the project's plugins, to tell whose a table in the database is */
+  databasePlugins(): string[] {
+    return this.pluginInfos().map(info => info.package)
+  }
+
   /**
    * Start the HTTP server and the game socket. With `options.plugins.root` the plugins are imported first, and
    * plugins' database migrations run before their `setup()`, so wait for the returned promise before relying on them.
@@ -863,7 +871,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         infos.push({ package: pkg, enabled: true, installed: true, target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true })
     }
 
-    return infos
+    const provider = this.databaseProvider
+    return provider ? infos.map(info => info.package === provider ? { ...info, database: true } : info) : infos
   }
 
   get projectRoot(): string | undefined {

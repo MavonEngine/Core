@@ -205,6 +205,8 @@ export interface PluginInfo {
 export interface ServerPluginInfo extends Omit<PluginInfo, 'readme'> {
   /** Its server entry was loaded by this server and is running */
   runningOnServer: boolean
+  /** Set on the database plugin the server uses */
+  database?: true
 }
 
 export interface ServerPluginList {
