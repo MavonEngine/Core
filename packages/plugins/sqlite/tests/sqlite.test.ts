@@ -2,7 +2,7 @@ import type { ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Kysely } from 'kysely'
 import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { runPluginMigrations } from '@mavonengine/core/Plugins/Database/migrate'
 import { sql } from 'kysely'
@@ -96,11 +96,16 @@ describe('openSqlite', () => {
 
 describe('databasePath', () => {
   it('is relative to the project root, with the environment first', () => {
-    expect(databasePath({}, '/game', {})).toBe(join('/game', DEFAULT_PATH))
-    expect(databasePath({ path: 'db/x.sqlite' }, '/game', {})).toBe('/game/db/x.sqlite')
-    expect(databasePath({ path: '/var/lib/x.sqlite' }, '/game', {})).toBe('/var/lib/x.sqlite')
-    expect(databasePath({ path: 'db/x.sqlite' }, '/game', { [PATH_ENV]: '/data/live.sqlite' })).toBe('/data/live.sqlite')
-    expect(databasePath({ path: ':memory:' }, '/game', {})).toBe(':memory:')
+    // Absolute on every platform: on Windows resolve() adds the current drive
+    const root = resolve('/game')
+    const elsewhere = resolve('/var/lib/x.sqlite')
+    const live = resolve('/data/live.sqlite')
+
+    expect(databasePath({}, root, {})).toBe(resolve(root, DEFAULT_PATH))
+    expect(databasePath({ path: 'db/x.sqlite' }, root, {})).toBe(resolve(root, 'db', 'x.sqlite'))
+    expect(databasePath({ path: elsewhere }, root, {})).toBe(elsewhere)
+    expect(databasePath({ path: 'db/x.sqlite' }, root, { [PATH_ENV]: live })).toBe(live)
+    expect(databasePath({ path: ':memory:' }, root, {})).toBe(':memory:')
   })
 })
 
