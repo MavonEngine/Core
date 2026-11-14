@@ -18,6 +18,15 @@
       "engine": ">=0.0.22",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/chat",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/chat/README.md"
+    },
+    {
+      "package": "@mavonengine/sqlite",
+      "name": "SQLite",
+      "description": "A SQLite database for the game server and its plugins, on Node's built-in node:sqlite",
+      "target": "server",
+      "engine": ">=0.0.24",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/sqlite/README.md"
     }
   ]
 }
