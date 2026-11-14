@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely'
 import { readFileSync, rmSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
+import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { sql } from 'kysely'
 import { build } from 'tsup'
@@ -16,7 +17,10 @@ afterAll(() => {
 
 describe('the built plugin', () => {
   it('imports node:sqlite by its full name and runs queries', async () => {
-    await build({ ...(config as object), entry: [resolve(import.meta.dirname, '../src/index.ts')], outDir, clean: true, silent: true })
+    // tsup takes entries as globs, where a backslash escapes: on Windows a resolved path matches nothing
+    const entry = relative(process.cwd(), resolve(import.meta.dirname, '../src/index.ts')).split(sep).join('/')
+    // tsup picks .js or .mjs by the package.json where it runs, so from the repo root it would be .mjs
+    await build({ ...(config as object), entry: [entry], outDir, outExtension: () => ({ js: '.js' }), clean: true, silent: true })
     const file = join(outDir, 'index.js')
 
     // node:sqlite has no name without the prefix: a bundler that drops it breaks the plugin
