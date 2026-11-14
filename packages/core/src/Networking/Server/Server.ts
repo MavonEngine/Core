@@ -88,6 +88,14 @@ export interface ServerOptions {
   plugins?: (ServerPlugin | LoadedPlugin<ServerPlugin>)[] | { root: string }
 
   /**
+   * Stop gracefully when the process gets SIGINT (Ctrl+C) or SIGTERM (a deploy, `docker stop`, `mavonengine dev`
+   * restarting it), then exit: plugins' `destroy()` runs and the database is closed. Default true. Turn it off
+   * when the game handles these signals itself, and call `stop()` there.
+   * Windows has no SIGTERM: a process killed there stops without this.
+   */
+  stopOnSignals?: boolean
+
+  /**
    * Package of the database plugin to use, when more than one is enabled. Defaults to `database` in mavonengine.json,
    * else the first database plugin
    */
@@ -115,6 +123,11 @@ function toLoadedPlugin(plugin: ServerPlugin | LoadedPlugin<ServerPlugin>, index
   const bare = plugin as ServerPlugin
   return { package: bare.name ?? `plugin-${index}`, options: {}, plugin: bare }
 }
+
+/** How long the servers get to stop after SIGINT or SIGTERM before the process exits anyway. Below the 3s `mavonengine dev` waits */
+export const SIGNAL_STOP_TIMEOUT_MS = 2500
+
+const STOP_SIGNALS = ['SIGINT', 'SIGTERM'] as const
 
 /** How many entity ids a sync_enter / sync_leave event lists before it only counts them */
 const MAX_SYNC_EVENT_IDS = 20
@@ -840,6 +853,52 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       this.logger.info('Starting @mavon/engine - Socket Server')
       this.gameSocket.listen(socketPort)
     }
+
+    if (this.options.stopOnSignals !== false)
+      Server.watchSignals(this as unknown as Server<GameObject>)
+  }
+
+  /** The servers that stop on SIGINT and SIGTERM, with one listener for all of them, so many servers add no more */
+  private static stopOnSignal = new Set<Server<GameObject>>()
+  private static signalListener?: (signal: NodeJS.Signals) => void
+
+  private static watchSignals(server: Server<GameObject>) {
+    Server.stopOnSignal.add(server)
+    if (Server.signalListener)
+      return
+
+    // stop() removes this listener right away, so a second Ctrl+C while stopping gets Node's default: exit now
+    const listener = (signal: NodeJS.Signals) => {
+      const servers = [...Server.stopOnSignal]
+      servers.forEach((s) => {
+        s.logger.info(`${signal}: stopping the server`)
+        // Free the port first: a dev watcher starts the next server without waiting for this one to exit
+        s.http.server?.close()
+      })
+      const timeout = setTimeout(() => {
+        servers.forEach(s => s.logger.warn(`The server did not stop within ${SIGNAL_STOP_TIMEOUT_MS} ms, exiting anyway`))
+        process.exit(1)
+      }, SIGNAL_STOP_TIMEOUT_MS)
+      timeout.unref()
+
+      void Promise.all(servers.map(s => s.stop())).then(() => {
+        clearTimeout(timeout)
+        process.exit(0)
+      })
+    }
+
+    Server.signalListener = listener
+    STOP_SIGNALS.forEach(signal => process.on(signal, listener))
+  }
+
+  private static unwatchSignals(server: Server<GameObject>) {
+    Server.stopOnSignal.delete(server)
+    const listener = Server.signalListener
+    if (Server.stopOnSignal.size > 0 || !listener)
+      return
+
+    STOP_SIGNALS.forEach(signal => process.off(signal, listener))
+    Server.signalListener = undefined
   }
 
   /** Whether the active scene's file is watched and reloaded on change */
@@ -939,6 +998,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    * The returned promise settles once the database is closed, and never rejects.
    */
   stop(): Promise<void> {
+    Server.unwatchSignals(this as unknown as Server<GameObject>)
     this.timers.forEach(timer => clearInterval(timer))
     this.timers = []
 

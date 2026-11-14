@@ -1,10 +1,11 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type { Kysely } from 'kysely'
 import type { ServerPlugin, ServerPluginContext } from '../../src/Plugins/types'
+import process from 'node:process'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
 import Player from '../../src/Networking/Entities/Player'
-import Server from '../../src/Networking/Server/Server'
+import Server, { SIGNAL_STOP_TIMEOUT_MS } from '../../src/Networking/Server/Server'
 import { memoryDb } from '../Plugins/Database/memoryDb'
 import { installPlugin, tempProject, writeConfig } from '../Plugins/fixtures'
 
@@ -29,6 +30,10 @@ class TestServer extends Server<TestClient> {
   }
 }
 
+function provider(db: Kysely<any>, extra: Partial<ServerPlugin> = {}): ServerPlugin {
+  return { name: 'sqlite', database: () => db, ...extra }
+}
+
 describe('server database', () => {
   let logger: winston.Logger
 
@@ -39,10 +44,6 @@ describe('server database', () => {
   function startable(server: TestServer) {
     vi.spyOn(server.http, 'start').mockImplementation(() => {})
     return server
-  }
-
-  function provider(db: Kysely<any>, extra: Partial<ServerPlugin> = {}): ServerPlugin {
-    return { name: 'sqlite', database: () => db, ...extra }
   }
 
   const mutes: ServerPlugin['migrations'] = {
@@ -147,25 +148,25 @@ describe('server database', () => {
     ]
 
     const warn = vi.spyOn(logger, 'warn')
-    const first = startable(new TestServer(logger, undefined, { plugins }))
+    const first = startable(new TestServer(logger, undefined, { plugins, stopOnSignals: false }))
     await first.start()
     expect(first.db).toBe(a)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('More than one database plugin is enabled (db-a, db-b), using db-a'))
-    // Stopping would destroy them, which the next servers still use
+    // Stopping would destroy them, which the next servers still use, so these servers aren't stopped (nor stop on signals)
     first.plugins = undefined
 
-    const picked = startable(new TestServer(logger, undefined, { plugins, database: 'db-b' }))
+    const picked = startable(new TestServer(logger, undefined, { plugins, database: 'db-b', stopOnSignals: false }))
     await picked.start()
     expect(picked.db).toBe(b)
 
     const root = tempProject()
     writeConfig(root, { plugins: {}, database: 'db-b' })
-    const fromConfig = startable(new TestServer(logger, undefined, { plugins, root }))
+    const fromConfig = startable(new TestServer(logger, undefined, { plugins, root, stopOnSignals: false }))
     await fromConfig.start()
     expect(fromConfig.db).toBe(b)
 
     const error = vi.spyOn(logger, 'error')
-    const missing = startable(new TestServer(logger, undefined, { plugins, database: 'db-c' }))
+    const missing = startable(new TestServer(logger, undefined, { plugins, database: 'db-c', stopOnSignals: false }))
     await missing.start()
     expect(missing.db).toBeUndefined()
     expect(error).toHaveBeenCalledWith(expect.stringContaining('Database plugin db-c is not running'))
@@ -242,5 +243,82 @@ describe('server database', () => {
     expect(server.db).toEqual(expect.objectContaining({ marker: 'db' }))
     expect(server.databaseProvider).toBe('fake-sqlite')
     await server.stop()
+  })
+})
+
+describe('stopping on signals', () => {
+  let logger: winston.Logger
+
+  beforeEach(() => {
+    logger = winston.createLogger({ transports: [], silent: true })
+  })
+
+  function startable(server: TestServer) {
+    vi.spyOn(server.http, 'start').mockImplementation(() => {})
+    return server
+  }
+
+  const listeners = () => process.listenerCount('SIGTERM')
+
+  it('stops every running server on SIGTERM, letting plugins save, then exits', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never)
+    const db = memoryDb()
+    const destroyDb = vi.spyOn(db, 'destroy')
+    const order: string[] = []
+    const before = listeners()
+
+    const a = startable(new TestServer(logger, undefined, {
+      plugins: [provider(db), { name: 'saver', destroy: async () => void order.push('a saved') }],
+    }))
+    const b = startable(new TestServer(logger, undefined, { plugins: [{ name: 'other', destroy: () => void order.push('b stopped') }] }))
+    await a.start()
+    await b.start()
+    // One listener for both
+    expect(listeners()).toBe(before + 1)
+
+    process.emit('SIGTERM', 'SIGTERM')
+    // Gone at once, so a second signal gets Node's default and exits right away
+    expect(listeners()).toBe(before)
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+
+    expect(order).toEqual(['a saved', 'b stopped'])
+    expect(destroyDb).toHaveBeenCalled()
+    exit.mockRestore()
+  })
+
+  it('removes its listener when the last server stops by itself', async () => {
+    const before = listeners()
+    const server = startable(new TestServer(logger, undefined, { plugins: [] }))
+    await server.start()
+    expect(process.listenerCount('SIGINT')).toBeGreaterThan(0)
+    expect(listeners()).toBe(before + 1)
+
+    await server.stop()
+
+    expect(listeners()).toBe(before)
+  })
+
+  it('leaves the signals alone when told to', async () => {
+    const before = listeners()
+    const server = startable(new TestServer(logger, undefined, { plugins: [], stopOnSignals: false }))
+    await server.start()
+
+    expect(listeners()).toBe(before)
+    await server.stop()
+  })
+
+  it('exits anyway when stopping takes too long', async () => {
+    vi.useFakeTimers()
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never)
+    const server = startable(new TestServer(logger, undefined, { plugins: [{ name: 'stuck', destroy: () => new Promise<void>(() => {}) }] }))
+    await server.start()
+
+    process.emit('SIGINT', 'SIGINT')
+    await vi.advanceTimersByTimeAsync(SIGNAL_STOP_TIMEOUT_MS)
+
+    expect(exit).toHaveBeenCalledWith(1)
+    expect(exit).not.toHaveBeenCalledWith(0)
+    exit.mockRestore()
+    vi.useRealTimers()
   })
 })

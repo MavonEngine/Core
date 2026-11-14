@@ -4,7 +4,8 @@
  * 1. with the sqlite plugin and e2e/sqlite/visits-plugin, a plugin with a migration that adds a row on every start:
  *    the server opens the database file, runs the migration, and the plugin reads and writes through ctx.db.
  *    GET /api/game/plugins marks the database plugin, GET /api/game/database lists the plugin's table
- * 2. killed and started again: the row is still there, and the migration doesn't run a second time
+ * 2. stopped with SIGTERM and started again: the plugin saved on the way out (not on Windows, which has no SIGTERM),
+ *    the rows are still there, and the migration doesn't run a second time
  * 3. without the sqlite plugin: the server warns, runs the plugin without a database and has none to show
  *
  * Needs core and the sqlite plugin built and the template's dependencies installed.
@@ -18,7 +19,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { base, check, linkIntoTemplate, log, repo, run, snapshotFiles, startServer, template } from '../helpers.mjs'
+import { base, check, isWindows, linkIntoTemplate, log, repo, run, snapshotFiles, startServer, template } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const SQLITE = '@mavonengine/sqlite'
@@ -78,13 +79,18 @@ async function main() {
     check(table?.plugin === VISITS && table.rows === 1, 'it lists the plugin\'s table with its rows')
     check(database.migrations.some(m => m.plugin === VISITS && m.applied.some(a => a.name === '001_init')), 'and the migration that ran')
     check((await json(`/api/game/database/tables/${TABLE}`)).total === 1, 'GET /api/game/database/tables/:name pages the rows')
+    // SIGTERM, except on Windows, where killing a process ends it without a signal
     await server.stop()
+    if (!isWindows)
+      check(server.output().includes('SIGTERM: stopping the server'), 'SIGTERM stops the server gracefully')
     server = undefined
 
-    log('\n== killed and started again')
+    log('\n== stopped and started again')
     server = await startServer({ LOG_LEVEL: 'debug' })
     check(!server.output().includes('ran migrations'), 'the migration doesn\'t run again')
-    check((await visitsReach(2)).count === 2, 'the row from before the restart is still there')
+    // The row of the first start, the one its destroy() saved on the way out, and the one of this start
+    const expected = isWindows ? 2 : 3
+    check((await visitsReach(expected)).count === expected, isWindows ? 'the row from before the restart is still there' : 'the rows from before the restart are there, also the one saved on shutdown')
     await server.stop()
     server = undefined
 
