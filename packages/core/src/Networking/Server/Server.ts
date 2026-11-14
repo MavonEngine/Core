@@ -1,6 +1,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
+import type { Kysely } from 'kysely'
 import type { FSWatcher } from 'node:fs'
 import type winston from 'winston'
 import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
@@ -20,9 +21,11 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
+import { tableName } from '../../Plugins/Database/tables'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
-import { pluginInfos } from '../../Plugins/ProjectConfig'
+import { pluginInfos, readConfig } from '../../Plugins/ProjectConfig'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
@@ -81,6 +84,12 @@ export interface ServerOptions {
    * when the server starts; or pass plugin objects directly.
    */
   plugins?: (ServerPlugin | LoadedPlugin<ServerPlugin>)[] | { root: string }
+
+  /**
+   * Package of the database plugin to use, when more than one is enabled. Defaults to `database` in mavonengine.json,
+   * else the first database plugin
+   */
+  database?: string
 
   /**
    * Project root, the directory with mavonengine.json and `scenes/`. Scene names given to `openScene()` are looked up there.
@@ -161,6 +170,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   /** The running plugins, once `start()` has loaded them */
   plugins?: PluginHost<ServerPlugin, ServerPluginContext>
+
+  private database?: { db: Kysely<any>, provider: string }
 
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
@@ -650,24 +661,58 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
-   * Start the HTTP server and the game socket. With `options.plugins.root` the plugins are imported first,
-   * so wait for the returned promise before relying on them; otherwise everything starts synchronously.
+   * The database, a Kysely instance (https://kysely.dev) from the project's database plugin, such as `@mavonengine/sqlite`.
+   * Undefined without one, and until `start()` picked it. The game's own tables should not start with a plugin's prefix
+   * (`chat_`, …): name them e.g. `game_scores`.
+   */
+  get db(): Kysely<any> | undefined {
+    return this.database?.db
+  }
+
+  /** Package of the database plugin in use */
+  get databaseProvider(): string | undefined {
+    return this.database?.provider
+  }
+
+  /**
+   * Start the HTTP server and the game socket. With `options.plugins.root` the plugins are imported first, and
+   * plugins' database migrations run before their `setup()`, so wait for the returned promise before relying on them.
+   * Without either, everything starts synchronously.
    */
   start(): Promise<void> {
     const plugins = this.options.plugins
     if (plugins && !Array.isArray(plugins)) {
       return loadServerPlugins(plugins.root).then(({ plugins: loaded, warnings }) => {
         warnings.forEach(warning => this.logger.warn(`Plugin skipped: ${warning}`))
-        this.startServer(loaded)
+        return this.boot(loaded)
       })
     }
 
-    this.startServer((plugins ?? []).map(toLoadedPlugin))
-    return Promise.resolve()
+    return this.boot((plugins ?? []).map(toLoadedPlugin))
   }
 
-  private startServer(plugins: LoadedPlugin<ServerPlugin>[]) {
-    this.plugins = new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
+  private boot(loaded: LoadedPlugin<ServerPlugin>[]): Promise<void> {
+    const host = this.createPluginHost(loaded)
+    this.openDatabase(host)
+
+    const migrating = host.plugins.filter(plugin => hasMigrations(plugin.plugin))
+    if (!this.database) {
+      for (const plugin of migrating)
+        this.logger.warn(`Plugin ${PluginHost.label(plugin)} has database migrations, but the project has no database plugin such as @mavonengine/sqlite: it runs without a database`)
+    }
+
+    if (!this.database || migrating.length === 0) {
+      this.startServer(host)
+      return Promise.resolve()
+    }
+
+    return this.migrate(host, migrating, this.database.db).then(() => this.startServer(host))
+  }
+
+  private createPluginHost(plugins: LoadedPlugin<ServerPlugin>[]) {
+    // eslint-disable-next-line ts/no-this-alias
+    const server = this
+    return new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
       package: loaded.package,
       options: loaded.options,
       game: this.game,
@@ -676,11 +721,85 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       projectRoot: this.projectRoot,
       requireAdmin: this.http.requireAdmin,
       adminToken: this.http.adminToken,
+      get db() {
+        return server.db
+      },
+      table: name => tableName(loaded.package, name),
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
+  }
+
+  /**
+   * Ask the project's database plugin for the database. Which one: `options.database`, else `database` in mavonengine.json,
+   * else the first that is enabled.
+   */
+  private openDatabase(host: PluginHost<ServerPlugin, ServerPluginContext>) {
+    const providers = host.plugins.filter(plugin => typeof plugin.plugin.database === 'function')
+    if (providers.length === 0)
+      return
+
+    const wanted = this.options.database ?? this.configuredDatabase()
+    let provider = providers[0]
+    if (wanted) {
+      const match = providers.find(plugin => plugin.package === wanted)
+      if (!match) {
+        this.logger.error(`Database plugin ${wanted} is not running, so the server has no database. Database plugins running: ${providers.map(plugin => plugin.package).join(', ')}`)
+        return
+      }
+      provider = match
+    }
+    else if (providers.length > 1) {
+      this.logger.warn(`More than one database plugin is enabled (${providers.map(plugin => plugin.package).join(', ')}), using ${provider.package}. Set "database" in mavonengine.json to pick one`)
+    }
+
+    const db = host.callOn(provider.package, 'database')
+    if (!db) {
+      this.logger.error(`Database plugin ${PluginHost.label(provider)} gave no database, so the server has none`)
+      return
+    }
+
+    this.database = { db, provider: provider.package }
+    this.logger.info(`Database: ${PluginHost.label(provider)}`)
+  }
+
+  private configuredDatabase(): string | undefined {
+    const root = this.projectRoot
+    if (!root)
+      return undefined
+
+    try {
+      const database = readConfig(root).database
+      return typeof database === 'string' && database ? database : undefined
+    }
+    catch {
+      // An unreadable mavonengine.json was already reported when the plugins were loaded
+      return undefined
+    }
+  }
+
+  /**
+   * Run the plugins' migrations one plugin after the other. A plugin whose migration fails is turned off, so its
+   * `setup()` doesn't run against tables that aren't what it expects.
+   */
+  private async migrate(host: PluginHost<ServerPlugin, ServerPluginContext>, plugins: LoadedPlugin<ServerPlugin>[], db: Kysely<any>) {
+    for (const plugin of plugins) {
+      try {
+        const applied = await runPluginMigrations(db, plugin.package, plugin.plugin.migrations!)
+        if (applied.length)
+          this.logger.info(`Plugin ${PluginHost.label(plugin)}: ran migrations ${applied.join(', ')}`)
+      }
+      catch (err) {
+        host.remove(plugin.package)
+        this.logger.error(`Plugin ${PluginHost.label(plugin)} turned off: ${(err as Error).message}`)
+      }
+    }
+  }
+
+  private startServer(host: PluginHost<ServerPlugin, ServerPluginContext>) {
+    this.plugins = host
     // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
     const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
       this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
@@ -807,17 +926,33 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
-   * Stop the metric sampling and logging timers, the scene watcher and the plugins
+   * Stop the metric sampling and logging timers, the scene watcher and the plugins, then close the database.
+   * The returned promise settles once the database is closed, and never rejects.
    */
-  stop() {
+  stop(): Promise<void> {
     this.timers.forEach(timer => clearInterval(timer))
     this.timers = []
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
 
-    this.plugins?.run('destroy')
+    // Plugins may still be saving in destroy(), so the database is closed after they finished
+    const saving = (this.plugins?.collect('destroy') ?? []).map(({ plugin, result }) =>
+      Promise.resolve(result).catch((err: Error) => {
+        this.logger.error(`Plugin ${PluginHost.label(plugin)} failed in destroy(): ${err?.stack ?? err}`)
+      }))
     this.plugins = undefined
+
+    const database = this.database
+    this.database = undefined
+    if (!database)
+      return Promise.all(saving).then(() => {})
+
+    return Promise.all(saving)
+      .then(() => database.db.destroy())
+      .catch((err: Error) => {
+        this.logger.error(`Could not close the database: ${err?.message ?? err}`)
+      })
   }
 
   private startMetrics() {
