@@ -3,9 +3,11 @@ import type { AuthorizeResult, Identity, ServerPlugin, ServerPluginContext } fro
 import type { Express, Request, RequestHandler, Response } from 'express'
 import type { AccountInfo, SessionResponse } from './protocol'
 import type { Account } from './store'
+import { randomInt } from 'node:crypto'
 import process from 'node:process'
 import { decoyHash, hashPassword, verifyPassword } from './password'
 import { DEFAULT_PATH, PASSWORD_PROVIDER, passwordProblem, usernameProblem } from './protocol'
+import RateLimit from './rateLimit'
 import AuthStore, { migrations } from './store'
 
 export type { AccountInfo, SessionResponse } from './protocol'
@@ -18,7 +20,19 @@ export interface AuthOptions {
   registration: boolean
   /** How long a session lasts without being used, in days. Every use moves it on. Default 30 */
   sessionDays: number
-  /** Let clients without a token in as guests, outside production only, e.g. to open the editor without logging in. Default false */
+  /**
+   * Let players play as guests: `POST /guest` makes a guest account with a session, which connects as that account
+   * and can be registered later without losing what the game kept for it. Default false
+   */
+  guests: boolean
+  /** How long a guest session lasts without being used, in days. Once it ran out the guest account is deleted. Default 30 */
+  guestDays: number
+  /** Guest accounts one address may make per hour. Default 20 */
+  guestsPerHour: number
+  /**
+   * Let clients without any session in, without an identity, outside production only, e.g. to open the editor without
+   * logging in. Default false
+   */
   devGuests: boolean
   /** Failed logins per address and username before they are refused for a while. Default 10 */
   loginAttempts: number
@@ -30,6 +44,9 @@ export const DEFAULT_OPTIONS: AuthOptions = {
   path: DEFAULT_PATH,
   registration: true,
   sessionDays: 30,
+  guests: false,
+  guestDays: 30,
+  guestsPerHour: 20,
   devGuests: false,
   loginAttempts: 10,
   loginWindowMinutes: 15,
@@ -42,8 +59,7 @@ const BEARER_RE = /^Bearer\s+(\S+)$/i
 const TRAILING_SLASHES_RE = /\/+$/
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F]/g
-/** Most failed-login counters kept at once, so a flood of usernames can't fill the memory */
-const MAX_LOGIN_COUNTERS = 10_000
+const HOUR_MS = 60 * 60 * 1000
 
 /** A request the plugin turns down, with the HTTP status that says why */
 export class AuthError extends Error {
@@ -58,6 +74,9 @@ export function parseOptions(raw: Record<string, unknown> = {}): AuthOptions {
     path: typeof raw.path === 'string' && raw.path.startsWith('/') ? raw.path.replace(TRAILING_SLASHES_RE, '') : DEFAULT_OPTIONS.path,
     registration: typeof raw.registration === 'boolean' ? raw.registration : DEFAULT_OPTIONS.registration,
     sessionDays: positive(raw.sessionDays, DEFAULT_OPTIONS.sessionDays),
+    guests: raw.guests === true,
+    guestDays: positive(raw.guestDays, DEFAULT_OPTIONS.guestDays),
+    guestsPerHour: Math.floor(positive(raw.guestsPerHour, DEFAULT_OPTIONS.guestsPerHour)),
     devGuests: raw.devGuests === true,
     loginAttempts: Math.floor(positive(raw.loginAttempts, DEFAULT_OPTIONS.loginAttempts)),
     loginWindowMinutes: positive(raw.loginWindowMinutes, DEFAULT_OPTIONS.loginWindowMinutes),
@@ -70,7 +89,12 @@ interface AuthState {
   options: AuthOptions
   /** Open channels per account, to close them when it is disabled or logged out everywhere */
   channels: Map<string, Set<ServerChannel>>
-  failedLogins: Map<string, { count: number, resetAt: number }>
+  /** Failed logins per address and username */
+  failedLogins: RateLimit
+  /** Guest accounts made per address */
+  guestsMade: RateLimit
+  /** Deletes the guest accounts nobody can reach any more */
+  sweeper?: ReturnType<typeof setInterval>
   warnedNoDatabase?: boolean
   hooks?: AuthHooks
 }
@@ -82,10 +106,27 @@ function stateOf(server: object): AuthState {
   const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, AuthState>
   let state = registry.get(server)
   if (!state) {
-    state = { options: DEFAULT_OPTIONS, channels: new Map(), failedLogins: new Map() }
+    state = { options: DEFAULT_OPTIONS, channels: new Map(), ...limits(DEFAULT_OPTIONS) }
     registry.set(server, state)
   }
   return state
+}
+
+function limits(options: AuthOptions) {
+  return {
+    failedLogins: new RateLimit(options.loginAttempts, options.loginWindowMinutes * 60_000),
+    guestsMade: new RateLimit(options.guestsPerHour, HOUR_MS),
+  }
+}
+
+/** How long a session of `account` lasts without being used: shorter or longer for guests, by `guestDays` */
+function lifetimeOf(state: AuthState) {
+  return (account: Account) => (account.guest ? state.options.guestDays : state.options.sessionDays) * DAY_MS
+}
+
+/** The address a request came from, as Express sees it (behind a proxy, set `trust proxy`) */
+function addressOf(req: Request): string {
+  return req.ip ?? req.socket.remoteAddress ?? ''
 }
 
 function running(state: AuthState): AuthStore {
@@ -95,7 +136,7 @@ function running(state: AuthState): AuthStore {
 }
 
 function publicAccount(account: Account): AccountInfo {
-  return { id: account.id, name: account.name }
+  return account.guest ? { id: account.id, name: account.name, guest: true } : { id: account.id, name: account.name }
 }
 
 /** A name from a provider made safe to show: no control characters, not too long, never empty */
@@ -105,7 +146,7 @@ function cleanName(name: string | undefined): string {
 }
 
 async function startSession(state: AuthState, store: AuthStore, account: Account): Promise<SessionResponse> {
-  const { token, expiresAt } = await store.createSession(account.id, state.options.sessionDays * DAY_MS)
+  const { token, expiresAt } = await store.createSession(account.id, lifetimeOf(state)(account))
   return { token, account: publicAccount(account), expiresAt }
 }
 
@@ -128,7 +169,8 @@ export interface AuthHooks {
   /**
    * Log in through another provider, e.g. from a Discord login plugin once Discord said who the user is:
    * the account linked to `externalId` gets a new session, and a new account is made for a user seen the first time.
-   * With `linkTo`, a new user is linked to that account instead, so one player logs in either way.
+   * With `linkTo`, a new user is linked to that account instead, so one player logs in either way. A guest account
+   * linked that way becomes a full one, named after the profile, and keeps its id.
    * Rejects with 403 for a disabled account and 409 when `linkTo` asks to link a user another account already has.
    */
   signIn(provider: string, externalId: string, profile?: { name?: string }, options?: { linkTo?: string }): Promise<SessionResponse>
@@ -168,6 +210,11 @@ export function auth(server: object): AuthHooks {
           if (!account)
             throw new AuthError(404, 'There is no account to link to')
           await tx.addIdentity({ provider, externalId, accountId: account.id, secret: null })
+          if (account.guest) {
+            const name = cleanName(profile.name)
+            await tx.upgradeGuest(account.id, name)
+            account = { ...account, name, guest: false }
+          }
         }
         else {
           account = await tx.createAccount(cleanName(profile.name))
@@ -181,7 +228,7 @@ export function auth(server: object): AuthHooks {
         return startSession(state, tx, account)
       })
     },
-    accountOf: token => running(state).useSession(token, state.options.sessionDays * DAY_MS),
+    accountOf: token => running(state).useSession(token, lifetimeOf(state)),
     account: id => running(state).account(id),
     async disable(accountId) {
       const store = running(state)
@@ -208,33 +255,6 @@ export function auth(server: object): AuthHooks {
 
 function bearer(header: string | undefined): string | undefined {
   return header?.match(BEARER_RE)?.[1]
-}
-
-/** Count a failed login, and say how many seconds to wait when there were too many */
-function loginBlocked(state: AuthState, key: string, now = Date.now()): number | undefined {
-  const entry = state.failedLogins.get(key)
-  if (!entry || entry.resetAt <= now)
-    return undefined
-  return entry.count >= state.options.loginAttempts ? Math.ceil((entry.resetAt - now) / 1000) : undefined
-}
-
-function loginFailed(state: AuthState, key: string, now = Date.now()) {
-  const entry = state.failedLogins.get(key)
-  if (entry && entry.resetAt > now) {
-    entry.count++
-    return
-  }
-
-  if (state.failedLogins.size >= MAX_LOGIN_COUNTERS) {
-    for (const [k, e] of state.failedLogins) {
-      if (e.resetAt <= now)
-        state.failedLogins.delete(k)
-    }
-    // Still full: drop the oldest, Maps keep insertion order
-    if (state.failedLogins.size >= MAX_LOGIN_COUNTERS)
-      state.failedLogins.delete(state.failedLogins.keys().next().value!)
-  }
-  state.failedLogins.set(key, { count: 1, resetAt: now + state.options.loginWindowMinutes * 60_000 })
 }
 
 /** Registered symbol core reads a route's description from */
@@ -289,7 +309,7 @@ function route(state: AuthState, handle: (req: Request, res: Response) => Promis
 /** The account the request's bearer token is logged in as, or a 401 */
 async function requireSession(state: AuthState, req: Request): Promise<{ token: string, account: Account }> {
   const token = bearer(req.headers.authorization)
-  const account = token && await running(state).useSession(token, state.options.sessionDays * DAY_MS)
+  const account = token && await running(state).useSession(token, lifetimeOf(state))
   if (!token || !account)
     throw new AuthError(401, 'Not logged in, or the session ran out')
   if (account.disabledAt)
@@ -303,7 +323,7 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
 
   app.post(`${path}/register`, describe({
     summary: 'Make an account with a username and password',
-    description: 'Send `{ "username": "...", "password": "..." }`. The username is 3 to 32 letters, digits, `_`, `.` or `-` and unique regardless of case; the password at least 8 characters.',
+    description: 'Send `{ "username": "...", "password": "..." }`. The username is 3 to 32 letters, digits, `_`, `.` or `-` and unique regardless of case; the password at least 8 characters. Sent with the session of a guest (`Authorization: Bearer <token>`), the guest account becomes this one, with the same id.',
     response: '201 with `{ token, account, expiresAt }`, logged in. 400 for a name or password that can\'t be used, 409 for a taken name, 403 when registration is off',
   }), route(state, async (req, res) => {
     if (!state.options.registration)
@@ -317,10 +337,22 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     const store = running(state)
     const key = (username as string).toLowerCase()
     const secret = await hashPassword(password as string)
+    // A guest who registers keeps its account, and so what the game kept for it
+    const token = bearer(req.headers.authorization)
+    const current = token ? await store.useSession(token, lifetimeOf(state)) : undefined
+    const guest = current?.guest && !current.disabledAt ? current : undefined
+
     const session = await store.transaction(async (tx) => {
       if (await tx.identity(PASSWORD_PROVIDER, key))
         throw new AuthError(409, 'That username is taken')
-      const account = await tx.createAccount(username as string)
+      let account: Account
+      if (guest) {
+        await tx.upgradeGuest(guest.id, username as string)
+        account = { ...guest, name: username as string, guest: false }
+      }
+      else {
+        account = await tx.createAccount(username as string)
+      }
       await tx.addIdentity({ provider: PASSWORD_PROVIDER, externalId: key, accountId: account.id, secret })
       return startSession(state, tx, account)
     }).catch(async (err: unknown) => {
@@ -330,7 +362,29 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
       throw err
     })
 
-    ctx.logger?.info(`Auth: ${session.account.name} registered`)
+    ctx.logger?.info(`Auth: ${session.account.name} registered${guest ? `, was guest ${guest.name}` : ''}`)
+    res.status(201).json(session)
+  }))
+
+  app.post(`${path}/guest`, describe({
+    summary: 'Play as a guest',
+    description: `Makes a guest account, named like \`Guest-4821\`, and logs it in. It connects like any account, with \`guest: true\` in its identity, and becomes a full account when the player registers with its session. Its session lasts ${state.options.guestDays} days without being used, after which the account is deleted. One address may make ${state.options.guestsPerHour} an hour.`,
+    response: '201 with `{ token, account, expiresAt }`. 403 when guests are off, 429 after too many from one address',
+  }), route(state, async (req, res) => {
+    if (!state.options.guests)
+      throw new AuthError(403, 'Guests are turned off on this server')
+
+    const address = addressOf(req)
+    const wait = state.guestsMade.blocked(address)
+    if (wait !== undefined) {
+      res.setHeader('Retry-After', String(wait))
+      throw new AuthError(429, `Too many guests from this address, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`)
+    }
+
+    const store = running(state)
+    state.guestsMade.hit(address)
+    const session = await store.transaction(async tx =>
+      startSession(state, tx, await tx.createAccount(`Guest-${randomInt(1000, 10000)}`, { guest: true })))
     res.status(201).json(session)
   }))
 
@@ -344,8 +398,8 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
       throw new AuthError(400, 'Expected { username, password }')
 
     const key = username.toLowerCase()
-    const limitKey = `${req.ip ?? req.socket.remoteAddress ?? ''}|${key}`
-    const wait = loginBlocked(state, limitKey)
+    const limitKey = `${addressOf(req)}|${key}`
+    const wait = state.failedLogins.blocked(limitKey)
     if (wait !== undefined) {
       res.setHeader('Retry-After', String(wait))
       throw new AuthError(429, `Too many failed logins, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`)
@@ -356,11 +410,11 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     // Checked against a decoy without the user, so an unknown name takes as long as a wrong password
     const valid = await verifyPassword(password, identity?.secret ?? await decoyHash())
     if (!identity || !valid) {
-      loginFailed(state, limitKey)
+      state.failedLogins.hit(limitKey)
       throw new AuthError(401, 'Wrong username or password')
     }
 
-    state.failedLogins.delete(limitKey)
+    state.failedLogins.reset(limitKey)
     const account = await store.account(identity.accountId)
     if (!account)
       throw new AuthError(500, 'The login belongs to an account that doesn\'t exist')
@@ -371,12 +425,17 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
 
   app.post(`${path}/logout`, describe({
     summary: 'End this session',
-    description: 'With `Authorization: Bearer <token>`. The game connection it is in stays open until it closes.',
+    description: 'With `Authorization: Bearer <token>`. The game connection it is in stays open until it closes. A guest that logs out loses its account: nothing else logs in to it.',
     response: '204, also when the session had already ended',
   }), route(state, async (req, res) => {
     const token = bearer(req.headers.authorization)
-    if (token)
-      await running(state).deleteSession(token)
+    if (token) {
+      const store = running(state)
+      const account = await store.useSession(token, 0)
+      await store.deleteSession(token)
+      if (account?.guest)
+        await store.deleteAbandonedGuests()
+    }
     res.status(204).end()
   }))
 
@@ -480,12 +539,28 @@ async function authorizeConnection(state: AuthState, authorization: string | und
   if (!token)
     return state.options.devGuests && process.env.NODE_ENV !== 'production'
 
-  const account = await state.store.useSession(token, state.options.sessionDays * DAY_MS)
+  const account = await state.store.useSession(token, lifetimeOf(state))
   if (!account)
     return 401
   if (account.disabledAt)
     return 403
-  return { id: account.id, name: account.name } satisfies Identity
+  return { ...publicAccount(account) } satisfies Identity
+}
+
+/** Forget sessions that ran out and the guest accounts nobody can reach any more */
+async function sweep(state: AuthState) {
+  const store = state.store
+  if (!store)
+    return
+  try {
+    const expired = await store.deleteExpiredSessions()
+    const guests = await store.deleteAbandonedGuests()
+    if (expired || guests)
+      state.ctx?.logger?.info(`Auth: forgot ${expired} expired session${expired === 1 ? '' : 's'} and ${guests} guest account${guests === 1 ? '' : 's'}`)
+  }
+  catch (err) {
+    state.ctx?.logger?.error(`Auth: could not clean up sessions: ${(err as Error)?.message ?? err}`)
+  }
 }
 
 export default {
@@ -495,6 +570,7 @@ export default {
     const state = stateOf(ctx.server)
     state.ctx = ctx
     state.options = parseOptions(ctx.options)
+    Object.assign(state, limits(state.options))
     if (!ctx.db) {
       ctx.logger?.error('Auth: no database, so nobody can log in and every client is turned away. Install a database plugin such as @mavonengine/sqlite')
       state.warnedNoDatabase = true
@@ -504,9 +580,11 @@ export default {
     state.store = new AuthStore(ctx.db, name => ctx.table(name))
     if (state.options.devGuests && process.env.NODE_ENV !== 'production')
       ctx.logger?.info('Auth: clients without a session get in as guests (devGuests), which a production server doesn\'t allow')
-    const expired = await state.store.deleteExpiredSessions()
-    if (expired)
-      ctx.logger?.info(`Auth: forgot ${expired} expired session${expired === 1 ? '' : 's'}`)
+    if (state.options.guests)
+      ctx.logger?.info(`Auth: players can play as guests (POST ${state.options.path}/guest)`)
+    await sweep(state)
+    state.sweeper = setInterval(() => void sweep(state), HOUR_MS)
+    state.sweeper.unref?.()
   },
   http(app: Express, ctx: ServerPluginContext) {
     mountAuthApi(app, ctx, stateOf(ctx.server))
@@ -536,9 +614,12 @@ export default {
   },
   destroy(ctx: ServerPluginContext) {
     const state = stateOf(ctx.server)
+    clearInterval(state.sweeper)
+    state.sweeper = undefined
     state.store = undefined
     state.ctx = undefined
     state.channels.clear()
     state.failedLogins.clear()
+    state.guestsMade.clear()
   },
 } satisfies ServerPlugin

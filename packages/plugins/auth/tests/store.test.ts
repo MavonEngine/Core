@@ -107,6 +107,44 @@ describe('auth store', () => {
     expect(await store.setDisabled('nobody', true)).toBe(false)
   })
 
+  it('makes guest accounts and turns them into full ones with the same id', async () => {
+    const guest = await store.createAccount('Guest-1234', { guest: true })
+    expect(guest.guest).toBe(true)
+    expect((await store.account(guest.id))?.guest).toBe(true)
+
+    await store.upgradeGuest(guest.id, 'Ada')
+    expect(await store.account(guest.id)).toMatchObject({ id: guest.id, name: 'Ada', guest: false })
+    expect((await store.createAccount('Bob')).guest).toBe(false)
+  })
+
+  it('gives a guest session its own lifetime', async () => {
+    const guest = await store.createAccount('Guest-1', { guest: true })
+    const { token } = await store.createSession(guest.id, DAY)
+    const lifetime = (account: { guest: boolean }) => account.guest ? 2 * DAY : 30 * DAY
+
+    await store.useSession(token, lifetime)
+    const [row] = await store.db.selectFrom('auth_sessions').select('expires_at').execute()
+    expect(row.expires_at).toBe('2026-11-17T12:00:00.000Z')
+  })
+
+  it('deletes guest accounts without a session that works, and nothing else', async () => {
+    const live = await store.createAccount('Guest-1', { guest: true })
+    await store.createSession(live.id, 10 * DAY)
+    const expired = await store.createAccount('Guest-2', { guest: true })
+    await store.createSession(expired.id, DAY)
+    const loggedOut = await store.createAccount('Guest-3', { guest: true })
+    const ada = await store.createAccount('Ada')
+
+    now = new Date(now.getTime() + 2 * DAY)
+    expect(await store.deleteAbandonedGuests()).toBe(2)
+
+    expect(await store.account(live.id)).toBeDefined()
+    expect(await store.account(expired.id)).toBeUndefined()
+    expect(await store.account(loggedOut.id)).toBeUndefined()
+    expect(await store.account(ada.id)).toBeDefined()
+    expect(await store.db.selectFrom('auth_sessions').select('account_id').execute()).toEqual([{ account_id: live.id }])
+  })
+
   it('rolls a transaction back when it throws', async () => {
     await expect(store.transaction(async (tx) => {
       await tx.createAccount('Ada')

@@ -20,6 +20,8 @@ export const MAX_PASSWORD_LENGTH = 256
 export interface AccountInfo {
   id: string
   name: string
+  /** Set on a guest account, which keeps its progress only while the browser keeps its session: register to keep it for good */
+  guest?: true
 }
 
 /** What register and login answer with */

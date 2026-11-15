@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import plugin, { AUTH_EVENT, AuthRequestError, checkSession, currentAccount, login, logout, register, STORAGE_KEY } from '../src/client'
+import plugin, { AUTH_EVENT, AuthRequestError, checkSession, currentAccount, login, logout, playAsGuest, register, STORAGE_KEY } from '../src/client'
 
 const ada = { id: 'acc-1', name: 'Ada' }
 const session = { token: 'tok-1', account: ada, expiresAt: '2026-12-15T00:00:00.000Z' }
@@ -33,6 +33,20 @@ describe('auth client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ method: 'POST', body: JSON.stringify({ username: 'Ada', password: 'correct horse' }) }))
     expect(plugin.authorization()).toBe('Bearer tok-1')
     expect(currentAccount()).toEqual(ada)
+  })
+
+  it('plays as a guest, and registers that guest with its session so it keeps its account', async () => {
+    const guest = { id: 'acc-9', name: 'Guest-4821', guest: true }
+    answer(201, { token: 'guest-tok', account: guest, expiresAt: '2026-12-15T00:00:00.000Z' })
+    answer(201, { token: 'tok-2', account: { id: 'acc-9', name: 'Ada' }, expiresAt: '2026-12-15T00:00:00.000Z' })
+
+    expect(await playAsGuest()).toEqual(guest)
+    expect(currentAccount()?.guest).toBe(true)
+    expect(plugin.authorization()).toBe('Bearer guest-tok')
+
+    await register('Ada', 'correct horse')
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer guest-tok')
+    expect(currentAccount()).toEqual({ id: 'acc-9', name: 'Ada' })
   })
 
   it('tells the page when the player logs in and out', async () => {

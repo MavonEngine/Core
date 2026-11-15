@@ -8,7 +8,8 @@
  * 2. mavonengine.json names an auth plugin that isn't there: every client gets 503 instead of being let in
  * 3. without an auth plugin: everyone gets in, as before
  * 4. with the built @mavonengine/auth on @mavonengine/sqlite: a player registers over HTTP and connects with the
- *    session as that account, the session outlasts a restart, and a disabled account is turned away
+ *    session as that account, a guest plays and registers without losing its account, the session outlasts a
+ *    restart, and a disabled account is turned away
  *
  * Needs core and the auth and sqlite plugins built and the template's dependencies installed. The database goes to a
  * temporary directory. The template is restored afterwards, also on failure.
@@ -45,8 +46,11 @@ async function connect(authorization) {
 
 const json = async path => (await fetch(`${base}${path}`)).json()
 
-async function post(path, body) {
-  const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
+async function post(path, body, token) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (token)
+    headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${base}${path}`, { method: 'POST', headers, body: body && JSON.stringify(body) })
   return { status: res.status, json: await res.json().catch(() => undefined) }
 }
 
@@ -103,7 +107,7 @@ async function main() {
     log('\n== @mavonengine/auth on @mavonengine/sqlite')
     links.push(linkIntoTemplate(REAL_AUTH, join(repo, 'packages/plugins/auth')))
     links.push(linkIntoTemplate(SQLITE, join(repo, 'packages/plugins/sqlite')))
-    configure({ plugins: { [SQLITE]: { options: { path: join(dataDir, 'e2e.sqlite') } }, [REAL_AUTH]: {} } })
+    configure({ plugins: { [SQLITE]: { options: { path: join(dataDir, 'e2e.sqlite') } }, [REAL_AUTH]: { options: { guests: true } } } })
     server = await startServer({ LOG_LEVEL: 'debug' })
     check(server.output().includes(`Auth: Auth (${REAL_AUTH})`), 'the server uses the auth plugin')
     check(server.output().includes(`Plugin Auth (${REAL_AUTH}): ran migrations 001_init`), 'its tables are made')
@@ -114,6 +118,13 @@ async function main() {
     const ada = await connect(`Bearer ${signup.json.token}`)
     check(ada.status === 200 && ada.userData?.id === signup.json.account.id && ada.userData?.name === 'Ada', 'and connects as that account')
     check((await post('/api/auth/register', { username: 'ada', password: 'another one' })).status === 409, 'the name is taken, in any case')
+
+    const guest = await post('/api/auth/guest')
+    check(guest.status === 201 && guest.json?.account?.guest === true, 'a player starts as a guest')
+    const asGuest = await connect(`Bearer ${guest.json.token}`)
+    check(asGuest.status === 200 && asGuest.userData?.id === guest.json.account.id && asGuest.userData?.guest === true, 'and connects as that guest account')
+    const claimed = await post('/api/auth/register', { username: 'Bob', password: 'correct horse' }, guest.json.token)
+    check(claimed.status === 201 && claimed.json.account.id === guest.json.account.id && !claimed.json.account.guest, 'registering keeps the guest\'s account id')
     await server.stop()
     server = undefined
 

@@ -5,7 +5,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 
 /**
  * The plugin's tables:
- * - `auth_accounts`: one per player, with the id everything else keys on
+ * - `auth_accounts`: one per player, with the id everything else keys on. A guest account has no way to log in
+ *   but its sessions, so it is deleted once they ran out
  * - `auth_identities`: the ways an account logs in, by provider: `password` with the username, `discord` with the
  *   Discord user id, … One account can have several, a provider's user belongs to one account
  * - `auth_sessions`: logged in clients, by the hash of their token, never the token itself
@@ -13,10 +14,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
  * Times are ISO strings, which sort like the times they are on every database.
  */
 
-export interface Account extends AccountInfo {
+export interface Account extends Omit<AccountInfo, 'guest'> {
   createdAt: string
   /** When an admin disabled it, null while it may log in */
   disabledAt: string | null
+  /** Made with `POST /guest`: no password nor linked login until the player registers */
+  guest: boolean
 }
 
 export interface IdentityRow {
@@ -42,6 +45,8 @@ export const migrations: Record<string, PluginMigration> = {
       await db.schema.createTable(table('accounts'))
         .addColumn('id', 'varchar(36)', c => c.primaryKey())
         .addColumn('name', 'varchar(64)', c => c.notNull())
+        // 0 or 1 rather than a boolean, which not every database driver binds
+        .addColumn('guest', 'integer', c => c.notNull().defaultTo(0))
         .addColumn('created_at', 'varchar(32)', c => c.notNull())
         .addColumn('disabled_at', 'varchar(32)')
         .execute()
@@ -75,7 +80,7 @@ export function hashToken(token: string): string {
 }
 
 function toAccount(row: Record<string, any>): Account {
-  return { id: row.id, name: row.name, createdAt: row.created_at, disabledAt: row.disabled_at ?? null }
+  return { id: row.id, name: row.name, createdAt: row.created_at, disabledAt: row.disabled_at ?? null, guest: Number(row.guest) === 1 }
 }
 
 export default class AuthStore {
@@ -86,8 +91,8 @@ export default class AuthStore {
     return this.db.transaction().execute(trx => work(new AuthStore(trx, this.table, this.now)))
   }
 
-  async createAccount(name: string): Promise<Account> {
-    const account = { id: randomUUID(), name, created_at: this.now().toISOString(), disabled_at: null }
+  async createAccount(name: string, { guest = false } = {}): Promise<Account> {
+    const account = { id: randomUUID(), name, guest: guest ? 1 : 0, created_at: this.now().toISOString(), disabled_at: null }
     await this.db.insertInto(this.table('accounts')).values(account).execute()
     return toAccount(account)
   }
@@ -99,6 +104,11 @@ export default class AuthStore {
 
   async rename(id: string, name: string): Promise<void> {
     await this.db.updateTable(this.table('accounts')).set({ name }).where('id', '=', id).execute()
+  }
+
+  /** A guest account becomes a full one, under a name of its own: same id, so what the game kept for it stays */
+  async upgradeGuest(id: string, name: string): Promise<void> {
+    await this.db.updateTable(this.table('accounts')).set({ name, guest: 0 }).where('id', '=', id).execute()
   }
 
   /** Disable or enable it again. Returns whether there is such an account */
@@ -159,15 +169,16 @@ export default class AuthStore {
   }
 
   /**
-   * The account a token is logged in as, while its session hasn't run out, and the session moved on by `lifetimeMs`
-   * from now. Undefined for an unknown or expired token. Disabled accounts are returned too: the caller says why it refuses
+   * The account a token is logged in as, while its session hasn't run out, and the session moved on by `lifetime`
+   * from now (in ms, or as the account's lifetime). Undefined for an unknown or expired token. Disabled accounts are
+   * returned too: the caller says why it refuses
    */
-  async useSession(token: string, lifetimeMs: number): Promise<Account | undefined> {
+  async useSession(token: string, lifetime: number | ((account: Account) => number)): Promise<Account | undefined> {
     const hash = hashToken(token)
     const now = this.now()
     const row = await this.db.selectFrom(`${this.table('sessions')} as s`)
       .innerJoin(`${this.table('accounts')} as a`, 'a.id', 's.account_id')
-      .select(['a.id', 'a.name', 'a.created_at', 'a.disabled_at', 's.expires_at'])
+      .select(['a.id', 'a.name', 'a.guest', 'a.created_at', 'a.disabled_at', 's.expires_at'])
       .where('s.token_hash', '=', hash)
       .executeTakeFirst()
     if (!row)
@@ -178,11 +189,13 @@ export default class AuthStore {
       return undefined
     }
 
+    const account = toAccount(row)
+    const lifetimeMs = typeof lifetime === 'number' ? lifetime : lifetime(account)
     await this.db.updateTable(this.table('sessions'))
       .set({ last_seen_at: now.toISOString(), expires_at: new Date(now.getTime() + lifetimeMs).toISOString() })
       .where('token_hash', '=', hash)
       .execute()
-    return toAccount(row)
+    return account
   }
 
   /** Returns whether there was such a session */
@@ -204,6 +217,25 @@ export default class AuthStore {
   async deleteExpiredSessions(): Promise<number> {
     const result = await this.db.deleteFrom(this.table('sessions')).where('expires_at', '<=', this.now().toISOString()).executeTakeFirst()
     return Number(result.numDeletedRows)
+  }
+
+  /**
+   * Delete the guest accounts without a session that still works: with no password nor linked login, nobody can
+   * reach them again. Returns how many
+   */
+  async deleteAbandonedGuests(): Promise<number> {
+    const live = this.db.selectFrom(this.table('sessions')).select('account_id').where('expires_at', '>', this.now().toISOString())
+    const ids = (await this.db.selectFrom(this.table('accounts')).select('id').where('guest', '=', 1).where('id', 'not in', live).execute())
+      .map(row => row.id as string)
+
+    // In chunks, below the bound parameters a statement may have
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      await this.db.deleteFrom(this.table('sessions')).where('account_id', 'in', chunk).execute()
+      await this.db.deleteFrom(this.table('identities')).where('account_id', 'in', chunk).execute()
+      await this.db.deleteFrom(this.table('accounts')).where('id', 'in', chunk).execute()
+    }
+    return ids.length
   }
 
   /** A page of accounts, newest first, with how they log in and how many sessions they have */

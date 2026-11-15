@@ -235,6 +235,101 @@ describe('auth plugin', () => {
     await expect(server.hooks.signIn('discord', '1')).rejects.toMatchObject({ status: 503 })
   })
 
+  describe('guests', () => {
+    const asGuest = async (server: Awaited<ReturnType<typeof started>>) => {
+      const res = await server.request('POST', '/guest')
+      expect(res.status).toBe(201)
+      return res.json as { token: string, account: { id: string, name: string, guest?: true }, expiresAt: string }
+    }
+
+    it('are off unless the options turn them on', async () => {
+      const server = await started()
+      expect((await server.request('POST', '/guest')).status).toBe(403)
+    })
+
+    it('get an account of their own and connect as it, marked as guests', async () => {
+      const server = await started({ guests: true })
+      const guest = await asGuest(server)
+
+      expect(guest.account.name).toMatch(/^Guest-\d{4}$/)
+      expect(guest.account.guest).toBe(true)
+      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: guest.account.name, guest: true })
+      expect((await server.request('GET', '/me', { token: guest.token })).json.account.guest).toBe(true)
+      // A registered player has no guest flag at all
+      const { token } = await registered(server)
+      expect(await server.authorize(`Bearer ${token}`)).not.toHaveProperty('guest')
+    })
+
+    it('keep their account when they register, so the game keeps their progress', async () => {
+      const server = await started({ guests: true })
+      const guest = await asGuest(server)
+
+      const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse' } })
+      expect(res.status).toBe(201)
+      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada' })
+      // Both the new session and the guest's own now connect as the full account
+      expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada' })
+      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada' })
+      expect((await server.request('POST', '/login', { body: { username: 'ada', password: 'correct horse' } })).json.account.id).toBe(guest.account.id)
+    })
+
+    it('stay guests when the name they register is taken', async () => {
+      const server = await started({ guests: true })
+      await registered(server, 'Ada')
+      const guest = await asGuest(server)
+
+      expect((await server.request('POST', '/register', { token: guest.token, body: { username: 'ADA', password: 'correct horse' } })).status).toBe(409)
+      expect(await server.authorize(`Bearer ${guest.token}`)).toMatchObject({ guest: true })
+    })
+
+    it('don\'t turn a registered player\'s account into another one', async () => {
+      const server = await started({ guests: true })
+      const ada = await registered(server, 'Ada')
+
+      const bob = await server.request('POST', '/register', { token: ada.token, body: { username: 'Bob', password: 'correct horse' } })
+      expect(bob.json.account.id).not.toBe(ada.account.id)
+    })
+
+    it('keep their account when they link a login of another provider', async () => {
+      const server = await started({ guests: true })
+      const guest = await asGuest(server)
+
+      const linked = await server.hooks.signIn('discord', '123', { name: 'ada_discord' }, { linkTo: guest.account.id })
+      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord' })
+      expect((await server.hooks.signIn('discord', '123')).account.id).toBe(guest.account.id)
+    })
+
+    it('have sessions as long as guestDays, and lose their account when they log out', async () => {
+      const server = await started({ guests: true, guestDays: 2 })
+      const guest = await asGuest(server)
+
+      const days = (Date.parse(guest.expiresAt) - Date.now()) / (24 * 60 * 60 * 1000)
+      expect(days).toBeGreaterThan(1.9)
+      expect(days).toBeLessThan(2.1)
+
+      expect((await server.request('POST', '/logout', { token: guest.token })).status).toBe(204)
+      expect(await server.hooks.account(guest.account.id)).toBeUndefined()
+    })
+
+    it('are limited per address', async () => {
+      const server = await started({ guests: true, guestsPerHour: 2 })
+      await asGuest(server)
+      await asGuest(server)
+
+      const third = await server.request('POST', '/guest')
+      expect(third.status).toBe(429)
+      expect(Number(third.headers.get('retry-after'))).toBeGreaterThan(0)
+    })
+
+    it('show up as guests for an admin', async () => {
+      const server = await started({ guests: true })
+      await asGuest(server)
+
+      const list = await server.request('GET', '/accounts', { token: 'admin-token' })
+      expect(list.json.accounts[0]).toMatchObject({ guest: true, providers: [], sessions: 1 })
+    })
+  })
+
   describe('signIn() for login plugins', () => {
     it('makes an account for a provider user seen the first time, and logs the same one in after', async () => {
       const server = await started()
@@ -274,12 +369,16 @@ describe('auth plugin', () => {
   })
 
   it('reads its options, falling back on what it can\'t use', () => {
-    expect(parseOptions({ path: '/auth/', sessionDays: 7, registration: false, devGuests: 'yes', loginAttempts: -1 })).toMatchObject({
+    expect(parseOptions({ path: '/auth/', sessionDays: 7, registration: false, devGuests: 'yes', loginAttempts: -1, guests: true, guestDays: 3 })).toMatchObject({
       path: '/auth',
       sessionDays: 7,
       registration: false,
       devGuests: false,
       loginAttempts: 10,
+      guests: true,
+      guestDays: 3,
+      guestsPerHour: 20,
     })
+    expect(parseOptions({}).guests).toBe(false)
   })
 })

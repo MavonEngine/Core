@@ -73,9 +73,21 @@ function keep(session: SessionResponse): AccountInfo {
   return session.account
 }
 
-/** Make an account and log in with it. Rejects with an `AuthRequestError`, e.g. 409 for a taken name */
+/**
+ * Make an account and log in with it. Logged in as a guest, the guest account becomes this one. Rejects with an
+ * `AuthRequestError`, e.g. 409 for a taken name
+ */
 export async function register(username: string, password: string): Promise<AccountInfo> {
   return keep((await call<SessionResponse>('POST', '/register', { username, password }))!)
+}
+
+/**
+ * Play as a guest: the server makes a guest account (`account.guest` is true) and logs it in. It stays the same account
+ * while this browser keeps the session; `register()` from it keeps the account, and so the player's progress.
+ * Rejects with an `AuthRequestError`, 403 when the server takes no guests
+ */
+export async function playAsGuest(): Promise<AccountInfo> {
+  return keep((await call<SessionResponse>('POST', '/guest'))!)
 }
 
 /** Log in. Rejects with an `AuthRequestError`: 401 for a wrong username or password, 429 after too many tries */
@@ -83,7 +95,7 @@ export async function login(username: string, password: string): Promise<Account
   return keep((await call<SessionResponse>('POST', '/login', { username, password }))!)
 }
 
-/** End the session, on the server too when it can be reached */
+/** End the session, on the server too when it can be reached. A guest that logs out loses its account */
 export async function logout(): Promise<void> {
   const token = read()?.token
   write(undefined)
