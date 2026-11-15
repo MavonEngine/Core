@@ -8,6 +8,7 @@ import type Game from '../Game'
 import type { AuthorizeResult, Identity } from '../Networking/identity'
 import type Server from '../Networking/Server/Server'
 import type { PrefabDefinition } from '../Prefab/PrefabRegistry'
+import type Queue from '../Queue/Queue'
 import type { SceneObjectDefinition } from '../Scene/SceneObjectRegistry'
 import type { Asset } from '../Types/Asset'
 import type IEditor from '../Types/IEditor'
@@ -84,6 +85,12 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame> {
   readonly db: Kysely<any> | undefined
   /** The plugin's name for one of its tables, e.g. `table('mutes')` → `chat_mutes`, so plugins' tables don't clash */
   table(name: string): string
+  /**
+   * The server's job queue: `ctx.queue.dispatch(new MyJob(data))`. Register the plugin's job classes in `setup()` with
+   * `ctx.queue.register(MyJob)`, so jobs queued before a restart run too, and give them a `jobName` with the plugin's
+   * name in it. Kept in the database when the project has a database plugin, else in memory.
+   */
+  readonly queue: Queue
   /**
    * Who is on the other end of `channel`, as the project's auth plugin said when it connected. Undefined without an
    * auth plugin, and for a client it let in without one. Key what lasts beyond a connection on `identity.id`, not
