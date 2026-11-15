@@ -1,7 +1,11 @@
 import type { AddressInfo } from 'node:net'
+import { identityOf } from '@mavonengine/core/Networking/identity'
+import { runPluginMigrations } from '@mavonengine/core/Plugins/Database/migrate'
+import { tableName } from '@mavonengine/core/Plugins/Database/tables'
 import express from 'express'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import plugin, { announce, chat, chatRoom, JOIN_NAME_WAIT_MS } from '../src/server'
+import plugin, { announce, chat, chatRoom, JOIN_NAME_WAIT_MS, migrations, mutesSaved } from '../src/server'
+import { memoryDb } from './memoryDb'
 
 class Position {
   constructor(public x = 0) {}
@@ -12,6 +16,7 @@ class Position {
 
 interface FakeChannel {
   id: string
+  userData: unknown
   emit: ReturnType<typeof vi.fn>
   on(event: string, callback: (data: unknown) => void): void
   /** What the client sends */
@@ -21,19 +26,21 @@ interface FakeChannel {
 }
 
 /** A game server as far as the chat sees it: connections, the entities of the players, a logger */
-function world(options: object = {}) {
+function world(options: object = {}, extra: { server?: object, ctx?: object } = {}) {
   const connections = new Map<string, { channel: FakeChannel }>()
   const entities = new Map<string, any>()
-  const server = { gameSocket: { connectionsManager: { connections } } }
-  const ctx = { server, game: { world: { entities: { items: entities } } }, logger: { info: vi.fn() }, options, package: '@mavonengine/chat' } as any
+  const server = { gameSocket: { connectionsManager: { connections } }, ...extra.server }
+  const ctx = { server, game: { world: { entities: { items: entities } } }, logger: { info: vi.fn(), error: vi.fn() }, options, package: '@mavonengine/chat', ...extra.ctx } as any
 
   plugin.setup!(ctx)
 
-  function connect(id: string, { name, x = 0, player = true }: { name?: string, x?: number, player?: boolean } = {}) {
+  function connect(id: string, { name, x = 0, player = true, account }: { name?: string, x?: number, player?: boolean, account?: string } = {}) {
     const handlers = new Map<string, (data: unknown) => void>()
     const emit = vi.fn()
     const channel: FakeChannel = {
       id,
+      // What core keeps from the auth plugin, read back with ctx.identity()
+      userData: account ? { id: account, name } : {},
       emit,
       on: (event, callback) => void handlers.set(event, callback),
       receive: (event, data) => handlers.get(event)?.(data),
@@ -276,7 +283,7 @@ describe('chat server plugin', () => {
       const ada = connect('a1', { name: 'Ada' })
       const hooks = chat(ctx.server)
 
-      expect(hooks.mute('a1', 5)).toEqual({ playerId: 'a1', until: expect.any(Number) })
+      expect(hooks.mute('a1', 5)).toEqual({ playerId: 'a1', kind: 'connection', until: expect.any(Number) })
       ada.receive('chat:send', { text: 'hello?' })
       expect(ada.got('chat:notice')).toHaveLength(1)
 
@@ -487,19 +494,19 @@ describe('chat server plugin', () => {
       const ada = connect('a1', { name: 'Ada' })
 
       const muted = await post('/api/chat/mutes', { playerId: 'a1', minutes: 5 })
-      expect(await muted.json()).toEqual({ mute: { playerId: 'a1', until: expect.any(Number) } })
-      expect(ctx.logger.info).toHaveBeenCalledWith(expect.stringContaining('Chat: muted a1 until '))
+      expect(await muted.json()).toEqual({ mute: { playerId: 'a1', kind: 'connection', until: expect.any(Number) } })
+      expect(ctx.logger.info).toHaveBeenCalledWith(expect.stringContaining('Chat: muted connection a1 until '))
 
       ada.receive('chat:send', { text: 'hello?' })
       expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted for another 5 min' }])
-      expect(await (await request('/api/chat/mutes')).json()).toEqual({ mutes: [{ playerId: 'a1', until: expect.any(Number) }] })
+      expect(await (await request('/api/chat/mutes')).json()).toEqual({ mutes: [{ playerId: 'a1', kind: 'connection', until: expect.any(Number) }] })
 
       expect(await (await request('/api/chat/mutes/a1', { method: 'DELETE' })).json()).toEqual({ unmuted: true })
       expect(await (await request('/api/chat/mutes/a1', { method: 'DELETE' })).json()).toEqual({ unmuted: false })
       ada.receive('chat:send', { text: 'back' })
       expect(texts(ada.got('chat:message'))).toEqual(['back'])
 
-      expect(await (await post('/api/chat/mutes', { playerId: 'a1' })).json()).toEqual({ mute: { playerId: 'a1', until: null } })
+      expect(await (await post('/api/chat/mutes', { playerId: 'a1' })).json()).toEqual({ mute: { playerId: 'a1', kind: 'connection', until: null } })
       expect((await post('/api/chat/mutes', { minutes: 5 })).status).toBe(400)
     })
 
@@ -565,5 +572,115 @@ describe('chat server plugin', () => {
         ['delete', '/admin/talk/mutes/:playerId', 'Unmute a player'],
       ])
     })
+  })
+})
+
+describe('mutes on accounts', () => {
+  const PKG = '@mavonengine/chat'
+
+  async function database() {
+    const db = memoryDb()
+    await runPluginMigrations(db, PKG, migrations)
+    return db
+  }
+
+  /** A server with an auth plugin, so players have accounts, and with a database when given one */
+  function withAuth(db?: Awaited<ReturnType<typeof database>>) {
+    return world({ announce: false }, {
+      server: { authProvider: '@mavonengine/auth' },
+      ctx: { identity: identityOf, db, table: db && ((name: string) => tableName(PKG, name)) },
+    })
+  }
+
+  it('mutes a player with an account on the account, so reconnecting doesn\'t lift it', () => {
+    const { ctx, connect, disconnect } = withAuth()
+    const ada = connect('a1', { name: 'Ada', account: 'acc-ada' })
+    const bob = connect('b1', { name: 'Bob', account: 'acc-bob' })
+
+    expect(chat(ctx.server).mute('a1')).toEqual({ playerId: 'acc-ada', kind: 'account', until: null })
+    disconnect(ada)
+    const again = connect('a2', { name: 'Ada', account: 'acc-ada' })
+
+    again.receive('chat:send', { text: 'I\'m back' })
+    expect(again.got('chat:notice')).toEqual([{ text: 'You are muted' }])
+    bob.receive('chat:send', { text: 'hi' })
+    expect(texts(bob.got('chat:message'))).toEqual(['hi'])
+
+    // Lifted by the connection id or the account id alike
+    expect(chat(ctx.server).unmute('a2')).toBe(true)
+    again.receive('chat:send', { text: 'free' })
+    expect(texts(again.got('chat:message'))).toContain('free')
+  })
+
+  it('takes an account id for a player that isn\'t connected', () => {
+    const { ctx, connect } = withAuth()
+
+    expect(chat(ctx.server).mute('acc-ada', 10)).toMatchObject({ playerId: 'acc-ada', kind: 'account' })
+    const ada = connect('a1', { name: 'Ada', account: 'acc-ada' })
+    ada.receive('chat:send', { text: 'hello?' })
+    expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted for another 10 min' }])
+  })
+
+  it('mutes a player let in without an account on its connection', () => {
+    const { ctx, connect } = withAuth()
+    connect('g1', { name: 'Guest' })
+
+    expect(chat(ctx.server).mute('g1')).toMatchObject({ playerId: 'g1', kind: 'connection' })
+  })
+
+  it('keeps account mutes in the database, so they outlast a restart', async () => {
+    const db = await database()
+    const first = withAuth(db)
+    first.connect('a1', { name: 'Ada', account: 'acc-ada' })
+    chat(first.ctx.server).mute('a1')
+    first.connect('g1', { name: 'Guest' })
+    chat(first.ctx.server).mute('g1')
+    await mutesSaved(first.ctx.server)
+
+    expect(await db.selectFrom('chat_mutes').select(['account_id', 'until']).execute()).toEqual([{ account_id: 'acc-ada', until: null }])
+
+    // A new server on the same database
+    const second = withAuth(db)
+    await mutesSaved(second.ctx.server)
+    expect(second.ctx.logger.info).toHaveBeenCalledWith('Chat: 1 player is still muted')
+    const ada = second.connect('a9', { name: 'Ada', account: 'acc-ada' })
+    ada.receive('chat:send', { text: 'new server, who dis' })
+    expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted' }])
+
+    chat(second.ctx.server).unmute('a9')
+    await mutesSaved(second.ctx.server)
+    expect(await db.selectFrom('chat_mutes').selectAll().execute()).toEqual([])
+  })
+
+  it('forgets saved mutes that ended', async () => {
+    const db = await database()
+    await db.insertInto('chat_mutes').values([
+      { account_id: 'acc-old', until: Date.now() - 1000, created_at: '2026-01-01T00:00:00.000Z' },
+      { account_id: 'acc-on', until: Date.now() + 60_000, created_at: '2026-01-01T00:00:00.000Z' },
+    ]).execute()
+
+    const { ctx } = withAuth(db)
+    await mutesSaved(ctx.server)
+
+    expect(chatRoom(ctx)!.listMutes().map(mute => mute.playerId)).toEqual(['acc-on'])
+    expect((await db.selectFrom('chat_mutes').select('account_id').execute()).map(row => row.account_id)).toEqual(['acc-on'])
+  })
+
+  it('says when mutes end on reconnect, because the server has no auth plugin', () => {
+    const { ctx } = world()
+    expect(ctx.logger.info).toHaveBeenCalledWith(expect.stringContaining('no auth plugin, so players are known by their connection'))
+
+    const { ctx: authed } = withAuth()
+    expect(authed.logger.info).not.toHaveBeenCalledWith(expect.stringContaining('no auth plugin'))
+  })
+
+  it('lets the server wait for the last mutes before the database closes', async () => {
+    const db = await database()
+    const { ctx, connect } = withAuth(db)
+    connect('a1', { name: 'Ada', account: 'acc-ada' })
+    chat(ctx.server).mute('a1')
+
+    await plugin.destroy!(ctx)
+    expect(await db.selectFrom('chat_mutes').select('account_id').execute()).toEqual([{ account_id: 'acc-ada' }])
   })
 })
