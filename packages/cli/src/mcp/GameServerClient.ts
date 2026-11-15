@@ -42,6 +42,11 @@ export function packetParams(query: PacketQuery): Record<string, string> {
   return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]))
 }
 
+const DATABASE_UNAVAILABLE = 'The game server doesn\'t show its database: it runs a @mavonengine/core release without GET /api/game/database'
+
+const DATABASE_DENIED = 'The database is only shown with the server\'s admin token, since it holds what players did: pass it with --token '
+  + '(or MAVONENGINE_METRICS_TOKEN), or run the server on this machine without one'
+
 const DEV_UNAVAILABLE = 'The dev endpoints are not available: the game server runs with NODE_ENV=production '
   + '(they are never served there), or it uses a @mavonengine/core release without them'
 
@@ -116,6 +121,16 @@ export default class GameServerClient {
     return this.get('api/game/routes', {}, 'The game server doesn\'t list its endpoints: it runs a @mavonengine/core release without GET /api/game/routes, or its metrics endpoints are off')
   }
 
+  /** The database plugin, the tables with whose they are, their columns and row counts, and the migrations that ran */
+  database() {
+    return this.get('api/game/database', {}, DATABASE_UNAVAILABLE, DATABASE_DENIED)
+  }
+
+  /** A page of a table's rows */
+  tableRows(table: string, offset = 0, limit = 50) {
+    return this.get(`api/game/database/tables/${encodeURIComponent(table)}`, { offset: String(offset), limit: String(limit) }, `There is no table "${table}". database_overview lists them`, DATABASE_DENIED)
+  }
+
   /** Packets and network events the server recorded, oldest first */
   packets(query: PacketQuery = {}) {
     return this.get('api/game/dev/net/packets', packetParams(query), NET_UNAVAILABLE)
@@ -180,7 +195,7 @@ export default class GameServerClient {
     return body
   }
 
-  private async get(path: string, params: Record<string, string> = {}, notFound?: string): Promise<any> {
+  private async get(path: string, params: Record<string, string> = {}, notFound?: string, denied?: string): Promise<any> {
     const target = new URL(path, this.base)
     for (const [key, value] of Object.entries(params))
       target.searchParams.set(key, value)
@@ -196,10 +211,16 @@ export default class GameServerClient {
       throw new GameServerError(`Can't reach the game server at ${this.url}: ${(err as Error).message}. Is it running?`)
     }
 
+    if (denied && (res.status === 401 || res.status === 403))
+      throw new GameServerError(denied)
     if (res.status === 401)
       throw new GameServerError('Metrics token missing or wrong: pass --token or set MAVONENGINE_METRICS_TOKEN')
     if (res.status === 403)
       throw new GameServerError('The game server only answers localhost without a token: pass --token or set MAVONENGINE_METRICS_TOKEN')
+    if (res.status === 500 && denied) {
+      const body = await res.json().catch(() => null) as { error?: string } | null
+      throw new GameServerError(body?.error ?? 'The game server could not read its database')
+    }
     if (res.status === 404)
       throw new GameServerError(notFound ?? 'Metrics endpoints not found: they are turned off in the server options, or it runs in production without a metrics token')
     if (res.status === 400)

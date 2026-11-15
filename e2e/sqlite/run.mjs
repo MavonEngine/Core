@@ -6,9 +6,10 @@
  *    GET /api/game/plugins marks the database plugin, GET /api/game/database lists the plugin's table
  * 2. stopped with SIGTERM and started again: the plugin saved on the way out (not on Windows, which has no SIGTERM),
  *    the rows are still there, and the migration doesn't run a second time
+ *    `mavonengine mcp` reads the same through database_overview and database_rows, as an AI assistant would
  * 3. without the sqlite plugin: the server warns, runs the plugin without a database and has none to show
  *
- * Needs core and the sqlite plugin built and the template's dependencies installed.
+ * Needs core, the CLI and the sqlite plugin built and the template's dependencies installed.
  * The database goes to a temporary directory. The template is restored afterwards, also on failure.
  *
  *   node e2e/sqlite/run.mjs
@@ -19,7 +20,9 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { base, check, isWindows, linkIntoTemplate, log, repo, run, snapshotFiles, startServer, template } from '../helpers.mjs'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { base, check, cli, isWindows, linkIntoTemplate, log, PORT, repo, run, snapshotFiles, startServer, template } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const SQLITE = '@mavonengine/sqlite'
@@ -79,6 +82,20 @@ async function main() {
     check(table?.plugin === VISITS && table.rows === 1, 'it lists the plugin\'s table with its rows')
     check(database.migrations.some(m => m.plugin === VISITS && m.applied.some(a => a.name === '001_init')), 'and the migration that ran')
     check((await json(`/api/game/database/tables/${TABLE}`)).total === 1, 'GET /api/game/database/tables/:name pages the rows')
+
+    // What an AI assistant sees: the CLI's MCP server reading the same database
+    const mcp = new Client({ name: 'e2e', version: '0' })
+    await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--port', String(PORT), '--no-docs', '--no-plugin-list'], stderr: 'ignore' }))
+    try {
+      const tool = async (name, args = {}) => JSON.parse((await mcp.callTool({ name, arguments: args })).content[0].text)
+      const overview = await tool('database_overview')
+      check(overview.provider === SQLITE && overview.tables.some(t => t.name === TABLE && t.plugin === VISITS), 'mcp database_overview lists the plugin\'s table')
+      const rows = await tool('database_rows', { table: TABLE })
+      check(rows.total === 1 && rows.rows.length === 1 && typeof rows.rows[0].at === 'string', 'mcp database_rows reads its rows')
+    }
+    finally {
+      await mcp.close()
+    }
     // SIGTERM, except on Windows, where killing a process ends it without a signal
     await server.stop()
     if (!isWindows)

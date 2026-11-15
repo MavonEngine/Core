@@ -75,6 +75,8 @@ describe('mcp server', () => {
       'client_status',
       'client_trace',
       'compare_entity',
+      'database_overview',
+      'database_rows',
       'get_entity',
       'get_scene',
       'list_clients',
@@ -560,6 +562,94 @@ describe('plugin tools', () => {
     expect(names).toContain('list_plugins')
     expect(names).not.toContain('available_plugins')
     expect(names).not.toContain('plugin_readme')
+  })
+})
+
+describe('database tools', () => {
+  const overview = {
+    provider: '@mavonengine/sqlite',
+    tables: [
+      { name: 'auth_accounts', plugin: '@mavonengine/auth', rows: 2, columns: [{ name: 'id', type: 'varchar', nullable: false }] },
+      { name: 'chat_mutes', plugin: '@mavonengine/chat', rows: 1, columns: [{ name: 'account_id', type: 'varchar', nullable: false }] },
+    ],
+    migrations: [{ plugin: '@mavonengine/chat', table: 'chat__migrations', applied: [{ name: '001_init', executedAt: '2026-11-15T00:00:00.000Z' }] }],
+  }
+
+  it('lists the tables of the database plugin, filtered by name', async () => {
+    const { call } = await connect({ '/api/game/database': overview })
+
+    const all = (await call('database_overview')).data
+    expect(all.provider).toBe('@mavonengine/sqlite')
+    expect(all.tables.map((t: { name: string }) => t.name)).toEqual(['auth_accounts', 'chat_mutes'])
+    expect(all.migrations).toHaveLength(1)
+
+    expect((await call('database_overview', { table: 'CHAT' })).data.tables.map((t: { name: string }) => t.name)).toEqual(['chat_mutes'])
+  })
+
+  it('says how to get a database when the project has no database plugin', async () => {
+    const { call } = await connect({ '/api/game/database': { provider: null, tables: [], migrations: [] } })
+
+    expect((await call('database_overview')).data.note).toMatch(/install @mavonengine\/sqlite/)
+  })
+
+  it('reads a page of a table, without the values of secret columns', async () => {
+    const { call, calls } = await connect({
+      '/api/game/database/tables/auth_identities': {
+        table: 'auth_identities',
+        columns: [{ name: 'provider' }, { name: 'external_id' }, { name: 'secret' }],
+        rows: [
+          { provider: 'password', external_id: 'ada', secret: 'scrypt$16384$8$1$salt$key' },
+          { provider: 'discord', external_id: '123', secret: null },
+        ],
+        total: 2,
+        offset: 0,
+        limit: 10,
+      },
+      '/api/game/database/tables/auth_sessions': {
+        table: 'auth_sessions',
+        columns: [{ name: 'token_hash' }, { name: 'account_id' }],
+        rows: [{ token_hash: 'abc', account_id: 'acc-1' }],
+        total: 1,
+        offset: 0,
+        limit: 50,
+      },
+    })
+
+    const identities = (await call('database_rows', { table: 'auth_identities', limit: 10 })).data
+    expect(String(calls.at(-1))).toBe('http://localhost:8050/api/game/database/tables/auth_identities?offset=0&limit=10')
+    expect(identities.redacted).toEqual(['secret'])
+    expect(identities.rows).toEqual([
+      { provider: 'password', external_id: 'ada', secret: '[redacted]' },
+      // Nothing to hide in an empty value: null says there is no password
+      { provider: 'discord', external_id: '123', secret: null },
+    ])
+    expect(JSON.stringify(identities)).not.toContain('scrypt')
+
+    const sessions = (await call('database_rows', { table: 'auth_sessions' })).data
+    expect(sessions.rows).toEqual([{ token_hash: '[redacted]', account_id: 'acc-1' }])
+  })
+
+  it('leaves rows of ordinary tables as they are', async () => {
+    const { call } = await connect({
+      '/api/game/database/tables/chat_mutes': { table: 'chat_mutes', columns: [{ name: 'account_id' }, { name: 'until' }], rows: [{ account_id: 'acc-1', until: null }], total: 1, offset: 0, limit: 50 },
+    })
+
+    const page = (await call('database_rows', { table: 'chat_mutes' })).data
+    expect(page).not.toHaveProperty('redacted')
+    expect(page.rows).toEqual([{ account_id: 'acc-1', until: null }])
+  })
+
+  it('explains a missing table, a missing admin token and an older server', async () => {
+    const { call } = await connect({
+      '/api/game/database/tables/nope': () => new Response('', { status: 404 }),
+      '/api/game/database': () => new Response('', { status: 401 }),
+    })
+
+    expect((await call('database_rows', { table: 'nope' })).text).toBe('There is no table "nope". database_overview lists them')
+    expect((await call('database_overview')).text).toMatch(/admin token/)
+
+    const older = await connect({})
+    expect((await older.call('database_overview')).text).toMatch(/without GET \/api\/game\/database/)
   })
 })
 

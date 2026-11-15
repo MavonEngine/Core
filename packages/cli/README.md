@@ -265,6 +265,15 @@ Plugin tools:
 
 With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: every tool is read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
 
+Database tools, for the project's database plugin such as [`@mavonengine/sqlite`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite):
+
+| Tool | |
+| --- | --- |
+| `database_overview` | Which plugin gives the database, every table with the plugin it belongs to, its columns and row count, and the migrations each plugin ran |
+| `database_rows` | A page of one table's rows, with the total |
+
+They read through the server's `GET /api/game/database` endpoints, so they work with any database plugin and only read. Like the dashboard's Database tab they need the server's [admin token](#admin-token) as `--token`, unless the server runs on the same machine without one. What a tool returns goes to the assistant's model, so `database_rows` replaces the values of columns that look secret, such as password and session token hashes, with `[redacted]` and lists them in `redacted`.
+
 Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
 
 | Tool | |
