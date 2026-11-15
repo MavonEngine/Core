@@ -1,5 +1,5 @@
-import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncInfo } from './snapshot'
-import { normalizeLogs, normalizePacketDetail, normalizePackets, normalizePlugins, normalizeRequests, normalizeRoutes, normalizeSnapshot, normalizeSync } from './snapshot'
+import type { DatabaseInfo, LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncInfo, TablePage } from './snapshot'
+import { normalizeDatabase, normalizeLogs, normalizePacketDetail, normalizePackets, normalizePlugins, normalizeRequests, normalizeRoutes, normalizeSnapshot, normalizeSync, normalizeTablePage } from './snapshot'
 
 export type ConnectionStatus = 'connecting' | 'live' | 'unreachable' | 'unauthorized' | 'forbidden' | 'disabled'
 
@@ -37,6 +37,23 @@ export interface DashboardState {
   plugins: PluginLine[]
   /** false once the server turned out not to list its plugins, null until known */
   pluginsAvailable: boolean | null
+  /** The server's database and its tables, null until fetched. Only followed while `watchDatabase` is on */
+  database: DatabaseInfo | null
+  /** false once the server turned out not to serve it (an older server), null until known */
+  databaseAvailable: boolean | null
+  /** Why the database can't be shown right now, like a missing admin token */
+  databaseError: string | null
+  /** The rows opened with `inspectTable()`, null when none are */
+  tableDetail: TableDetail | null
+}
+
+export interface TableDetail {
+  table: string
+  offset: number
+  status: 'loading' | 'ready' | 'error'
+  /** The last page that loaded, kept while the next one loads */
+  page?: TablePage
+  error?: string
 }
 
 /** Log lines kept in memory by the dashboard */
@@ -47,6 +64,18 @@ export const MAX_REQUEST_LINES = 1000
 
 /** Packets kept in memory by the dashboard: as many as the server keeps, a few seconds of a busy server */
 export const MAX_PACKET_LINES = 2000
+
+/** Rows of a database table the Database tab asks for at a time */
+export const TABLE_PAGE_ROWS = 50
+
+/** What to tell about a database request that failed. The admin token is what the database needs, not the metrics token */
+function tableError(err: unknown): string {
+  if (err instanceof MetricsSourceError && err.status === 'unauthorized')
+    return 'The database needs the server\'s admin token: start the dashboard with --token <admin token>'
+  if (err instanceof MetricsSourceError && err.status === 'forbidden')
+    return 'The database is only shown on the server\'s own machine unless the server has an admin token'
+  return (err as Error).message
+}
 
 export class MetricsSourceError extends Error {
   constructor(message: string, readonly status: ConnectionStatus) {
@@ -71,6 +100,10 @@ export interface MetricsSource {
   fetchPacket?(id: number): Promise<unknown>
   fetchRoutes?(): Promise<unknown>
   fetchPlugins?(): Promise<unknown>
+  /** The database's tables, GET /api/game/database. Needs the admin token */
+  fetchDatabase?(): Promise<unknown>
+  /** A page of a table's rows */
+  fetchTable?(name: string, offset: number, limit: number): Promise<unknown>
 }
 
 export interface HttpSourceOptions {
@@ -90,6 +123,7 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
   const syncUrl = new URL('dev/net/sync', url)
   const routesUrl = new URL('routes', url)
   const pluginsUrl = new URL('plugins', url)
+  const databaseUrl = new URL('database', url)
 
   async function request(target: string) {
     let res: Response
@@ -135,6 +169,13 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
     fetchPacket: id => request(new URL(`dev/net/packets/${id}`, url).toString()),
     fetchRoutes: () => request(routesUrl.toString()),
     fetchPlugins: () => request(pluginsUrl.toString()),
+    fetchDatabase: () => request(databaseUrl.toString()),
+    fetchTable: (name, offset, limit) => {
+      const tableUrl = new URL(`database/tables/${encodeURIComponent(name)}`, url)
+      tableUrl.searchParams.set('offset', String(offset))
+      tableUrl.searchParams.set('limit', String(limit))
+      return request(tableUrl.toString())
+    },
   }
 }
 
@@ -218,6 +259,10 @@ export default class MetricsClient {
    * so the dashboard only turns it on while its Network tab is shown.
    */
   watchNetwork = false
+
+  /** Follow the database too. Off by default, as counting every table's rows isn't free: only while the Database tab is shown */
+  watchDatabase = false
+  private databaseFetchedAt: number | null = null
   private routesIntervalMs: number
   /** Date.now() the endpoints and plugins were last fetched, null to fetch them with the next poll */
   private projectFetchedAt: number | null = null
@@ -250,7 +295,49 @@ export default class MetricsClient {
       routesAvailable: source.fetchRoutes ? null : false,
       plugins: [],
       pluginsAvailable: source.fetchPlugins ? null : false,
+      database: null,
+      databaseAvailable: source.fetchDatabase ? null : false,
+      databaseError: null,
+      tableDetail: null,
     }
+  }
+
+  /**
+   * Load a page of a table's rows into `state.tableDetail`, or close it with null.
+   */
+  async inspectTable(table: string | null, offset = 0, limit = TABLE_PAGE_ROWS) {
+    if (table === null) {
+      this.state.tableDetail = null
+      this.notify()
+      return
+    }
+
+    const previous = this.state.tableDetail?.table === table ? this.state.tableDetail.page : undefined
+    if (!this.source.fetchTable) {
+      this.state.tableDetail = { table, offset, status: 'error', error: 'This source does not serve database tables' }
+      this.notify()
+      return
+    }
+
+    this.state.tableDetail = { table, offset, status: 'loading', page: previous }
+    this.notify()
+
+    let detail: TableDetail
+    try {
+      detail = { table, offset, status: 'ready', page: normalizeTablePage(await this.source.fetchTable(table, offset, limit)) }
+    }
+    catch (err) {
+      const gone = err instanceof MetricsSourceError && err.status === 'disabled'
+      detail = { table, offset, status: 'error', page: previous, error: gone ? `The database has no table ${table} (any more)` : tableError(err) }
+    }
+
+    // Another table or page was opened, or it was closed, while it loaded
+    const current = this.state.tableDetail
+    if (current?.table !== table || current.offset !== offset)
+      return
+
+    this.state.tableDetail = detail
+    this.notify()
   }
 
   /**
@@ -321,6 +408,7 @@ export default class MetricsClient {
       clearTimeout(this.timer)
     this.timer = null
     this.projectFetchedAt = null
+    this.databaseFetchedAt = null
 
     await this.loop()
   }
@@ -349,6 +437,9 @@ export default class MetricsClient {
         this.state.packets = this.packets.entries
         this.state.packetsAvailable = this.packets.available
       }
+
+      if (this.watchDatabase)
+        await this.pollDatabase()
     }
     catch (err) {
       this.state.status = err instanceof MetricsSourceError ? err.status : 'unreachable'
@@ -373,6 +464,40 @@ export default class MetricsClient {
         this.state.sync = null
       }
     }
+  }
+
+  /**
+   * Fetch the database's tables, and the rows that are open again, unless they were fetched a moment ago.
+   * Its own errors stay its own: a dashboard without the admin token still shows everything else.
+   */
+  private async pollDatabase(now = Date.now()) {
+    const { source, state } = this
+    if (!source.fetchDatabase || state.databaseAvailable === false)
+      return
+    if (this.databaseFetchedAt !== null && now - this.databaseFetchedAt < this.routesIntervalMs)
+      return
+
+    try {
+      state.database = normalizeDatabase(await source.fetchDatabase())
+      state.databaseAvailable = true
+      state.databaseError = null
+      this.databaseFetchedAt = now
+    }
+    catch (err) {
+      if (err instanceof MetricsSourceError && err.status === 'disabled') {
+        state.databaseAvailable = false
+        return
+      }
+      state.databaseError = tableError(err)
+      // Tried again with the next poll, except when only a token helps
+      if (err instanceof MetricsSourceError && (err.status === 'unauthorized' || err.status === 'forbidden'))
+        this.databaseFetchedAt = now
+      return
+    }
+
+    const open = state.tableDetail
+    if (open)
+      void this.inspectTable(open.table, open.offset)
   }
 
   /**

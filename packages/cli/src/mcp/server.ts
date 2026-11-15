@@ -5,6 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { version } from '../../package.json'
 import { registerClientTools } from './clientTools'
+import { registerDatabaseTools } from './databaseTools'
 import { registerDocsTools } from './docs'
 import { registerNetworkTools } from './networkTools'
 import { registerPluginTools } from './pluginTools'
@@ -20,6 +21,8 @@ network_packets / client_packets list the packets each side sent and received, n
 client, and network_sync tells which entities each player is sent: use them when something does not arrive or arrives late.
 client_trace records a few seconds of a tab for frame drops, stutter and slow rendering: the bottleneck, hitches with
 their causes, hot JS functions, WebGL load, and a trace file for flame charts.
+database_overview lists the tables of the project's database plugin (e.g. @mavonengine/sqlite) and database_rows reads
+one, to check what the game and its plugins stored.
 list_plugins shows the plugins the project has, available_plugins the official ones it could add and plugin_readme how
 one is set up and used: look there before building something a plugin already does, like chat.
 docs_list_pages / docs_get_page read the MavonEngine documentation: check it before guessing how an engine API works.`
@@ -173,6 +176,7 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
   registerClientTools(server, client)
   registerNetworkTools(server, client)
   registerPluginTools(server, client, pluginList)
+  registerDatabaseTools(server, client)
   if (docs)
     registerDocsTools(server, docs)
 

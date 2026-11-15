@@ -1,4 +1,6 @@
 import type { ServerChannel } from '@geckos.io/server'
+import type { Identity } from '../identity'
+import { identityOf } from '../identity'
 import NetworkedLivingActor from '../NetworkedLivingActor'
 
 /**
@@ -30,6 +32,14 @@ export default abstract class Player extends NetworkedLivingActor {
    * The client's channel. Set by the server on connection, undefined for bots and on the client.
    */
   channel?: ServerChannel
+
+  /**
+   * Who the player is, as the project's auth plugin said when it connected. Undefined without an auth plugin, for a
+   * client it let in without one, for bots and on the client (see `NetworkManager.identity` there).
+   */
+  get identity(): Identity | undefined {
+    return identityOf(this.channel)
+  }
 
   private _lastProcessedSequenceId = 0
 

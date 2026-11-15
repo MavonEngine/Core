@@ -21,6 +21,10 @@ export interface PluginConfigEntry {
 
 export interface MavonEngineConfig {
   plugins: Record<string, PluginConfigEntry>
+  /** Package of the database plugin to use, when more than one is enabled */
+  database?: string
+  /** Package of the auth plugin to use, when more than one is enabled */
+  auth?: string
   [key: string]: unknown
 }
 

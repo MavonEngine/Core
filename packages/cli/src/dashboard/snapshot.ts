@@ -1,10 +1,11 @@
+import type { PlayerAccount } from '@mavonengine/core/Networking/identity'
 import type { HttpRouteInfo } from '@mavonengine/core/Networking/Server/Http/RouteInfo'
 import type { LogEntry } from '@mavonengine/core/Networking/Server/Stats/LogBuffer'
 import type { RequestLogEntry } from '@mavonengine/core/Networking/Server/Stats/RequestLog'
 import type { ServerMetricsSnapshot } from '@mavonengine/core/Networking/Server/Stats/ServerMetrics'
 import type { ServerPluginInfo } from '@mavonengine/core/Plugins/types'
 
-export type { ServerMetricsSnapshot }
+export type { PlayerAccount, ServerMetricsSnapshot }
 export type LogLine = LogEntry
 export type RequestLine = RequestLogEntry
 export type RouteLine = HttpRouteInfo
@@ -60,6 +61,8 @@ export interface SyncPlayerLine {
   /** Sequence id of its last input the server processed */
   ack: number
   lastState: { tick: number, bytes: number, entities: number } | null
+  /** The account the server's auth plugin let it in as, null without one */
+  account: PlayerAccount | null
 }
 
 /**
@@ -116,6 +119,12 @@ function tickSample(t: AnyRecord) {
  * (older server) or unknown (newer server). Missing fields fall back to empty
  * values so the dashboard keeps rendering instead of crashing.
  */
+function accountFrom(value: unknown): PlayerAccount | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id)
+    return null
+  return { id: value.id, name: strOrNull(value.name), guest: value.guest === true }
+}
+
 export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
   const s = section(raw)
   const world = section(s.world)
@@ -153,6 +162,8 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
               bytesReceived: num(connection.bytesReceived),
             }
           : null,
+        // Older servers, and servers without an auth plugin, have none
+        account: accountFrom(p.account),
       }
     }),
     world: {
@@ -268,6 +279,7 @@ export function normalizeSync(raw: unknown): SyncInfo {
       tracked: Array.isArray(p.tracked) ? p.tracked.length : 0,
       ack: num(p.ack),
       lastState: lastState && { tick: num(lastState.tick), bytes: num(lastState.bytes), entities: num(lastState.entities) },
+      account: accountFrom(p.account),
     }
   })
   const entities = arr(r.entities, e => ({ player: e.player === true, trackedBy: num(e.trackedBy) }))
@@ -353,6 +365,7 @@ export function normalizePlugins(raw: unknown): PluginLine[] {
       enabled: p.enabled !== false,
       installed: p.installed !== false,
       runningOnServer: p.runningOnServer === true,
+      ...(p.database === true ? { database: true as const } : {}),
       declaredPrefabs: strings(p.declaredPrefabs),
       usedPrefabs: strings(p.usedPrefabs),
       ...(target ? { target } : {}),
@@ -361,4 +374,87 @@ export function normalizePlugins(raw: unknown): PluginLine[] {
         .map(key => [key, p[key] as string])),
     }
   })
+}
+
+export interface DatabaseColumnLine {
+  name: string
+  type: string
+  nullable: boolean
+  autoIncrement: boolean
+  hasDefault: boolean
+}
+
+export interface DatabaseTableLine {
+  name: string
+  /** Package of the plugin the table belongs to, null for the game's own */
+  plugin: string | null
+  /** Null when the server could not count them */
+  rows: number | null
+  columns: DatabaseColumnLine[]
+}
+
+export interface DatabaseMigrationsLine {
+  plugin: string | null
+  table: string
+  applied: { name: string, executedAt: string | null }[]
+}
+
+/** GET /api/game/database */
+export interface DatabaseInfo {
+  /** Package of the database plugin, null when the project has none */
+  provider: string | null
+  tables: DatabaseTableLine[]
+  migrations: DatabaseMigrationsLine[]
+}
+
+/** A page of a table's rows, GET /api/game/database/tables/:name */
+export interface TablePage {
+  table: string
+  columns: DatabaseColumnLine[]
+  rows: Record<string, unknown>[]
+  total: number
+  offset: number
+  limit: number
+}
+
+function columns(value: unknown): DatabaseColumnLine[] {
+  return arr(value, c => ({
+    name: str(c.name, '?'),
+    type: str(c.type),
+    nullable: c.nullable !== false,
+    autoIncrement: c.autoIncrement === true,
+    hasDefault: c.hasDefault === true,
+  }))
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/database response.
+ */
+export function normalizeDatabase(raw: unknown): DatabaseInfo {
+  const data = section(raw)
+  return {
+    provider: strOrNull(data.provider),
+    tables: arr(data.tables, t => ({ name: str(t.name, '?'), plugin: strOrNull(t.plugin), rows: numOrNull(t.rows), columns: columns(t.columns) })),
+    migrations: arr(data.migrations, m => ({
+      plugin: strOrNull(m.plugin),
+      table: str(m.table, '?'),
+      applied: arr(m.applied, a => ({ name: str(a.name, '?'), executedAt: strOrNull(a.executedAt) })),
+    })),
+  }
+}
+
+/**
+ * Same as normalizeSnapshot, for a GET /api/game/database/tables/:name response.
+ */
+export function normalizeTablePage(raw: unknown): TablePage {
+  const data = section(raw)
+  const rows = arr(data.rows, row => row)
+  return {
+    table: str(data.table, '?'),
+    columns: columns(data.columns),
+    rows,
+    total: num(data.total, rows.length),
+    offset: num(data.offset),
+    limit: num(data.limit, rows.length),
+  }
 }

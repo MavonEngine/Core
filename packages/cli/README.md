@@ -157,7 +157,7 @@ npx @mavonengine/cli dashboard --sim
 | `--transparent` | | Let a transparent terminal background show through. Text can be hard to read over a light wallpaper |
 | `--sim` | | Simulated data instead of a server |
 
-Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`7` switch between the Overview, Players, Logs, HTTP, Network, Routes and Plugins tabs. The mouse wheel scrolls the players table, the logs, the requests, the packets and the routes; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
+Keys: `q` quits, `r` refreshes now, `o` opens the game the server serves in the browser, `1`–`7` switch between the Overview, Players, Logs, HTTP, Network, Routes and Plugins tabs, and `8` to the Database tab when the server has a database plugin. The mouse wheel scrolls the players table, the logs, the requests, the packets and the routes; scroll the logs back to the bottom, or the requests and packets back to the top, to follow new ones again.
 
 The HTTP tab lists every request the game server's HTTP server received, newest first: the client (static files or Vite in dev), your own `onHttp` routes, the geckos.io signaling requests and WebSocket upgrades such as Vite's HMR socket, each with status, duration, size and client address. Query strings are left out since they can hold tokens, and the dashboard's own polling is not recorded. The game traffic itself is WebRTC, not HTTP, so it shows on the Players tab instead; with a separate `socketPort` the signaling requests go to that port and don't show up either.
 
@@ -168,6 +168,8 @@ The Routes tab lists every HTTP endpoint the server has: the engine's own, the o
 The Plugins tab lists the plugins in the project's `mavonengine.json` with their version, whether they are enabled, where they run and how many endpoints and prefabs they have. `↑`/`↓` (or `j`/`k`, or a click) pick one to see its description, supported engine versions, license, prefabs and the HTTP endpoints it registered. A server plugin that is enabled but not running in this server shows as `not loaded`. It needs a server on a `@mavonengine/core` release with `GET /api/game/plugins`.
 
 Below it, "Available to install" lists the plugins from [`mavonengine plugins`](#mavonengine-plugins) that the project doesn't have yet. The dashboard reads that list from GitHub itself, the first time the tab is shown and again on `r`; a dashboard that never opens the tab never asks for it.
+
+The Database tab looks into the server's database. It only shows up when the server runs a database plugin such as [`@mavonengine/sqlite`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite), which it marks in `GET /api/game/plugins`. It lists the tables with the plugin each belongs to (by its table prefix, `game` for the rest) and their number of rows, shows the rows of the selected table and, below, the migrations each plugin ran. `↑`/`↓` (or `j`/`k`, or a click) pick a table, `←`/`→` (or page up / page down) page through its rows. It only reads, and only while the tab shows, every 5 seconds. The database holds what players did, so the server only shows it with its admin token: start the dashboard with `--token <admin token>` for a server that has one; without one it only answers on the server's own machine. It needs a server on a `@mavonengine/core` release with `GET /api/game/database`.
 
 Under [`mavonengine dev`](#mavonengine-dev) a plugin from that list can be installed right there: select it with `↓` and press `i`. The dashboard first asks whether you checked its source, because installing a package runs its code on your machine; `y` installs it with the project's package manager, adds it to `mavonengine.json` and restarts the dev servers, `n` cancels. A dashboard started on its own with `mavonengine dashboard` only shows the command, since it can't restart servers it didn't start.
 
@@ -262,6 +264,15 @@ Plugin tools:
 | `plugin_readme` | The README of one of them as Markdown: its options, how a game hooks into it and its limits |
 
 With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: every tool is read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
+
+Database tools, for the project's database plugin such as [`@mavonengine/sqlite`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite):
+
+| Tool | |
+| --- | --- |
+| `database_overview` | Which plugin gives the database, every table with the plugin it belongs to, its columns and row count, and the migrations each plugin ran |
+| `database_rows` | A page of one table's rows, with the total |
+
+They read through the server's `GET /api/game/database` endpoints, so they work with any database plugin and only read. Like the dashboard's Database tab they need the server's [admin token](#admin-token) as `--token`, unless the server runs on the same machine without one. What a tool returns goes to the assistant's model, so `database_rows` replaces the values of columns that look secret, such as password and session token hashes, with `[redacted]` and lists them in `redacted`.
 
 Documentation tools, passed through to the MCP server of [mavonengine.com](https://mavonengine.com) (`https://mavonengine.com/mcp`), so answers come from the current docs:
 
@@ -366,6 +377,42 @@ export default defineServerPlugin({
 ```
 
 A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
+
+### Authenticating players
+
+An auth plugin decides who may connect, before a client gets a player. [`@mavonengine/auth`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth) is one, with accounts, passwords and sessions; write your own for anything else. Its client entry gives the token the game connects with, and its server entry's `authorize()` checks it:
+
+```ts
+// client.ts: sent as the Authorization header of the connection request
+export default defineClientPlugin({
+  authorization: () => {
+    const token = localStorage.getItem('session')
+    return token ? `Bearer ${token}` : undefined
+  },
+})
+```
+
+```ts
+// server.ts
+export default defineServerPlugin({
+  async authorize(authorization, request, ctx) {
+    const account = await findSession(ctx.db, authorization)
+    if (!account)
+      return false // 401
+    if (account.banned)
+      return 403
+    return { id: account.id, name: account.username }
+  },
+})
+```
+
+`authorize()` returns an identity (`{ id, name?, … }`) to let the client in as that account, `true` to let it in without one (a guest), or `false` or an HTTP status from 400 to 599 to turn it away. The identity is also sent to the client, so keep it to what the player may see. A throw or any other result turns that one client away with 500, and the next client is still asked.
+
+Other plugins read the identity with `ctx.identity(channel)`, and the game with `player.identity` on the server or `network.identity` on the client. Key anything that should outlast a connection, such as a mute or a score, on `identity.id`: `channel.id` changes every time the player reconnects.
+
+On the client, a refusal arrives as the `connectError` event of the `NetworkManager` (and its `onConnectError()`), with the `status` the server answered. The token is read when a `NetworkManager` is made, so to connect again after logging in, make a new one. A game that handles the token itself passes `authorization` to the `NetworkManager` instead.
+
+Only one auth plugin is asked: with more than one enabled, set `"auth": "<package>"` in mavonengine.json. When the project has an auth plugin that doesn't run, for example because one of its migrations failed or the package named in `auth` isn't enabled, the server turns every client away with 503 instead of letting them in unchecked. The editor connects like a client too, so with an auth plugin it needs a token as well: when the server turns it away, the editor's status bar and Network panel say why. A server in production (`NODE_ENV=production`) ignores clients that ask to attach the editor, since the editor is sent every entity in the world.
 
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 

@@ -66,7 +66,14 @@ export type SayResult = { message: ChatMessage } | { notice: string } | { ignore
 export type CheckResult = { text: string } | { notice: string } | { ignored: true }
 
 export interface Mute {
+  /** What the mute is on: the player's account id, or the id of its connection for a player without an account */
   playerId: string
+  /**
+   * `account`: on the player's account, from the server's auth plugin, so it holds when the player connects again.
+   * `connection`: on a connection, for a server without an auth plugin or a player let in without an account. It ends
+   * with that connection, since the player gets a new id when it connects again
+   */
+  kind: 'account' | 'connection'
   /** Epoch ms the mute ends, null for one that doesn't */
   until: number | null
 }
@@ -78,8 +85,8 @@ export interface Mute {
 export default class ChatRoom {
   private messages: ChatMessage[] = []
   private nextId = 1
-  /** Until when a player is muted, Infinity for good */
-  private mutes = new Map<string, number>()
+  /** Until when a player is muted, Infinity for good, by account or connection id */
+  private mutes = new Map<string, { until: number, kind: Mute['kind'] }>()
   /** When each player sent its recent messages, for the rate limit */
   private sent = new Map<string, number[]>()
 
@@ -106,15 +113,16 @@ export default class ChatRoom {
   /**
    * Whether a player may say `text` right now: cleans it up and applies the mute, the length limit and the
    * rate limit. What passes counts against the rate limit, whatever becomes of it afterwards.
+   * `muteKey` is what a mute of the sender is on: its account id when it has one, else its id.
    */
-  check(sender: ChatSender, text: unknown): CheckResult {
+  check(sender: ChatSender, text: unknown, muteKey: string = sender.id): CheckResult {
     const clean = ChatRoom.clean(text)
     if (!clean)
       return { ignored: true }
 
     const now = this.now()
 
-    const mutedUntil = this.mutedUntil(sender.id)
+    const mutedUntil = this.mutedUntil(muteKey)
     if (mutedUntil !== undefined) {
       return {
         notice: mutedUntil === null
@@ -172,13 +180,26 @@ export default class ChatRoom {
   }
 
   /**
-   * Stop passing on what a player says, for `minutes` or until it is unmuted.
-   * A player is known by the id of its connection, so the mute lasts as long as that connection does.
+   * Stop passing on what a player says, for `minutes` or until it is unmuted. `playerId` is its account id for a
+   * mute of `kind` account, which holds when it connects again, or the id of its connection, which doesn't.
    */
-  mute(playerId: string, minutes?: number): Mute {
+  mute(playerId: string, minutes?: number, kind: Mute['kind'] = 'connection'): Mute {
     const until = typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0 ? this.now() + minutes * 60_000 : Infinity
-    this.mutes.set(playerId, until)
-    return { playerId, until: until === Infinity ? null : until }
+    this.mutes.set(playerId, { until, kind })
+    return { playerId, kind, until: until === Infinity ? null : until }
+  }
+
+  /**
+   * Put back mutes that were saved, e.g. when the server starts again. Those that ended are left out, and a player
+   * muted again since keeps the new mute
+   */
+  restore(mutes: Mute[]): void {
+    const now = this.now()
+    for (const mute of mutes) {
+      const until = mute.until ?? Infinity
+      if (until > now && !this.mutes.has(mute.playerId))
+        this.mutes.set(mute.playerId, { until, kind: mute.kind })
+    }
   }
 
   /** Returns whether the player was muted */
@@ -188,7 +209,7 @@ export default class ChatRoom {
 
   /** Epoch ms the player's mute ends, null for one that doesn't end, undefined when it isn't muted */
   mutedUntil(playerId: string): number | null | undefined {
-    const until = this.mutes.get(playerId)
+    const until = this.mutes.get(playerId)?.until
     if (until === undefined)
       return undefined
 
@@ -202,15 +223,15 @@ export default class ChatRoom {
 
   /** The mutes that are still on */
   listMutes(): Mute[] {
-    return [...this.mutes.keys()].flatMap((playerId) => {
+    return [...this.mutes].flatMap(([playerId, { kind }]) => {
       const until = this.mutedUntil(playerId)
-      return until === undefined ? [] : [{ playerId, until }]
+      return until === undefined ? [] : [{ playerId, kind, until }]
     })
   }
 
   /**
-   * A player left: what it sent no longer counts against anyone. Its mute is kept, though a player gets a new
-   * id when it connects again, so that only matters to tools that still list it.
+   * A player left: what it sent no longer counts against anyone. Its mute is kept: one on its account applies when
+   * it connects again, one on its connection only to tools that still list it.
    */
   forget(playerId: string): void {
     this.sent.delete(playerId)

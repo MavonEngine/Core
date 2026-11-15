@@ -167,9 +167,9 @@ The same three arrive as events on the game, for code that would rather listen t
 |---|---|
 | `GET /api/chat/messages` | The recent messages |
 | `POST /api/chat/messages` | Announce something: `{ "text": "Server restarts in 5 minutes" }` |
-| `GET /api/chat/mutes` | The players that are muted |
-| `POST /api/chat/mutes` | Mute a player: `{ "playerId": "…", "minutes": 10 }`. Without `minutes` until it is lifted |
-| `DELETE /api/chat/mutes/:playerId` | Unmute a player |
+| `GET /api/chat/mutes` | The players that are muted, each with its `kind`: `account` or `connection`, see [How long a mute lasts](#how-long-a-mute-lasts) |
+| `POST /api/chat/mutes` | Mute a player: `{ "playerId": "…", "minutes": 10 }`, with the id of a connected player or an account id. Without `minutes` until it is lifted |
+| `DELETE /api/chat/mutes/:playerId` | Unmute a player, by the id of its connection or its account |
 
 The API is guarded by the game server's admin token, the same one as every other admin route of the server: set `MAVONENGINE_ADMIN_TOKEN` (or `adminToken` in the server's options) and send it as `Authorization: Bearer <token>`. Without one the API only answers requests from localhost. The chat has no token of its own.
 
@@ -180,9 +180,23 @@ curl -X POST https://game.example.com/api/chat/mutes -H "Authorization: Bearer $
 
 Player ids are the ones `mavonengine dashboard` lists on its Players tab.
 
+### How long a mute lasts
+
+That depends on whether the server knows who its players are:
+
+| The server has | A mute is on | Lifted by reconnecting | Kept over a restart |
+| --- | --- | --- | --- |
+| No auth plugin | The connection | Yes | No |
+| An auth plugin, such as [`@mavonengine/auth`](../auth) | The player's account | No | Only with a database plugin, such as [`@mavonengine/sqlite`](../sqlite) |
+
+- With an auth plugin, muting a connected player by the id of its connection mutes its account, so connecting again doesn't help. An id that isn't connected is taken for an account id. Players the auth plugin let in without an account (guests of its `devGuests`) are muted on their connection.
+- With a database too, mutes on accounts are kept in the `chat_mutes` table and are back when the server starts again. Mutes that ended are deleted. Mutes on connections aren't kept, since the connection is gone after a restart anyway.
+- Without an auth plugin, the chat says so in the server log when it starts.
+
 ## Limits
 
-- A player is known by the id of its connection. A muted player that connects again has a new id and is no longer muted. Lasting mutes need accounts, which the engine doesn't have yet.
+- Without an auth plugin, a player is known by the id of its connection: a muted player that connects again has a new id and is no longer muted. See [How long a mute lasts](#how-long-a-mute-lasts).
 - There is one conversation, with no built-in channels or private messages. A game can add them with `intercept`, which can send a message to some players only, but the chat box has no tabs to show them apart.
 - Interceptors are synchronous: a check that has to wait for something, like a moderation service, isn't supported.
-- Nothing is stored. The history and the mutes are gone when the server restarts. `onMessage` on the server is the place to save messages yourself.
+- The history isn't stored: it is gone when the server restarts. `onMessage` on the server is the place to save messages yourself. Of the mutes, those on accounts are kept when the server has a database.
+- The chat has a database migration, so a server without a database plugin warns that the chat runs without one. It works the same, without keeping mutes.

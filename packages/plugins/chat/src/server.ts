@@ -1,4 +1,4 @@
-import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
+import type { PluginMigration, ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Express, Request, RequestHandler, Response } from 'express'
 import type { ChatOptions, Mute } from './ChatRoom.js'
 import type { ChatHistory, ChatMessage, ChatNotice, ChatSend, ChatSender } from './protocol.js'
@@ -9,12 +9,17 @@ export { default as ChatRoom, resolveChatOptions } from './ChatRoom.js'
 export type { ChatOptions, Mute, ResolvedChatOptions } from './ChatRoom.js'
 export * from './protocol.js'
 
-/** `requireAdmin` is missing on a @mavonengine/core from before the server had an admin token */
-type Context = Pick<ServerPluginContext, 'server' | 'game' | 'logger' | 'options'> & Partial<Pick<ServerPluginContext, 'requireAdmin'>>
+/**
+ * `requireAdmin` is missing on a @mavonengine/core from before the server had an admin token, `db` and `table` on one
+ * from before plugins had a database, `identity` on one from before auth plugins
+ */
+type Context = Pick<ServerPluginContext, 'server' | 'game' | 'logger' | 'options'> & Partial<Pick<ServerPluginContext, 'requireAdmin' | 'db' | 'table' | 'identity'>>
 
 /** The parts of a connection the chat uses, which is what geckos.io's ServerChannel has */
 interface Channel {
   id?: string
+  /** Who the server's auth plugin let it in as, read through `ctx.identity()` */
+  userData?: unknown
   emit(event: string, data: unknown, options?: { reliable?: boolean }): void
   on(event: string, callback: (data: unknown) => void): void
 }
@@ -71,6 +76,8 @@ interface ChatState {
   interceptors: Set<ChatInterceptor>
   listeners: Set<ChatListener>
   hooks?: ChatHooks
+  /** Mutes being loaded or saved, one after the other. Waited for before the database closes */
+  writes: Promise<void>
 }
 
 /**
@@ -83,7 +90,7 @@ function stateOf(server: object): ChatState {
   const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, ChatState>
   let state = registry.get(server)
   if (!state) {
-    state = { names: new Map(), joining: new Map(), interceptors: new Set(), listeners: new Set() }
+    state = { names: new Map(), joining: new Map(), interceptors: new Set(), listeners: new Set(), writes: Promise.resolve() }
     registry.set(server, state)
   }
   return state
@@ -111,9 +118,14 @@ export interface ChatHooks {
   onMessage(listener: ChatListener): () => void
   /** Say something to everyone as the server. Undefined while the plugin isn't running */
   announce(text: string): ChatMessage | undefined
-  /** Stop passing on what a player says, for `minutes` or until it is unmuted. Undefined while the plugin isn't running */
+  /**
+   * Stop passing on what a player says, for `minutes` or until it is unmuted. `playerId` is the id of a connected
+   * player, or an account id. A player with an account, from the server's auth plugin, is muted on the account: that
+   * holds when it connects again, and is kept in the database when the server has one. Without, the mute is on the
+   * connection and ends with it. Undefined while the plugin isn't running
+   */
   mute(playerId: string, minutes?: number): Mute | undefined
-  /** Returns whether the player was muted */
+  /** Returns whether the player was muted. Takes the id of a connected player or an account id, like `mute()` */
   unmute(playerId: string): boolean
   /** The chat itself, while the plugin runs: its history, mutes and options */
   readonly room: ChatRoom | undefined
@@ -139,8 +151,8 @@ export function chat(server: object): ChatHooks {
       return () => void state.listeners.delete(listener)
     },
     announce: text => state.ctx && announce(state.ctx, text),
-    mute: (playerId, minutes) => state.room?.mute(playerId, minutes),
-    unmute: playerId => state.room?.unmute(playerId) ?? false,
+    mute: (playerId, minutes) => state.ctx && muteAs(state.ctx, playerId, minutes),
+    unmute: playerId => !!state.ctx && unmuteAs(state.ctx, playerId),
     get room() {
       return state.room
     },
@@ -157,6 +169,113 @@ export function chatRoom(ctx: Pick<ServerPluginContext, 'server'>): ChatRoom | u
 function connections(ctx: Context): Channel[] {
   const all = (ctx.server as unknown as { gameSocket: { connectionsManager: { connections: Map<string, { channel: Channel }> } } }).gameSocket.connectionsManager.connections
   return Array.from(all.values(), connection => connection.channel)
+}
+
+/** Whether the server checks who connects with an auth plugin, so that players have accounts */
+function hasAuth(ctx: Context): boolean {
+  return typeof (ctx.server as { authProvider?: unknown }).authProvider === 'string'
+}
+
+/** The account of a connection, from the server's auth plugin. Undefined without one, or on a core without identities */
+function accountOf(ctx: Context, channel: Channel): string | undefined {
+  return ctx.identity?.(channel as unknown as Parameters<NonNullable<Context['identity']>>[0])?.id
+}
+
+/**
+ * What a mute of `playerId` is on: the account of a connected player that has one, else its connection. An id that
+ * isn't connected is taken for an account id when the server has an auth plugin
+ */
+function muteTarget(ctx: Context, playerId: string): { key: string, kind: Mute['kind'] } {
+  const channel = connections(ctx).find(connection => connection.id === playerId)
+  const account = channel && accountOf(ctx, channel)
+  if (account)
+    return { key: account, kind: 'account' }
+  return { key: playerId, kind: channel || !hasAuth(ctx) ? 'connection' : 'account' }
+}
+
+const MUTES_TABLE = 'mutes'
+
+/** The chat's tables: `chat_mutes`, the mutes on accounts, which outlast a restart */
+export const migrations: Record<string, PluginMigration> = {
+  '001_init': {
+    async up(db, { table }) {
+      await db.schema.createTable(table(MUTES_TABLE))
+        .addColumn('account_id', 'varchar(255)', c => c.primaryKey())
+        // Epoch ms, null for a mute that doesn't end
+        .addColumn('until', 'bigint')
+        .addColumn('created_at', 'varchar(32)', c => c.notNull())
+        .execute()
+    },
+  },
+}
+
+/** Run `write` after the ones before it, logging rather than throwing when it fails */
+function queue(ctx: Context, write: () => Promise<void>) {
+  const state = stateOf(ctx.server)
+  state.writes = state.writes.then(write).catch((err: unknown) => {
+    ctx.logger?.error(`Chat: could not save the mutes: ${(err as Error)?.message ?? err}`)
+  })
+}
+
+/** Keep a mute on an account in the database, when the server has one: connection mutes end with it anyway */
+function saveMute(ctx: Context, mute: Mute) {
+  const { db, table } = ctx
+  if (!db || !table || mute.kind !== 'account')
+    return
+  queue(ctx, () => db.transaction().execute(async (trx) => {
+    await trx.deleteFrom(table(MUTES_TABLE)).where('account_id', '=', mute.playerId).execute()
+    await trx.insertInto(table(MUTES_TABLE)).values({ account_id: mute.playerId, until: mute.until, created_at: new Date().toISOString() }).execute()
+  }))
+}
+
+function dropMute(ctx: Context, key: string) {
+  const { db, table } = ctx
+  if (!db || !table)
+    return
+  queue(ctx, async () => {
+    await db.deleteFrom(table(MUTES_TABLE)).where('account_id', '=', key).execute()
+  })
+}
+
+/** Put the saved mutes back into the room, and forget those that ended */
+function loadMutes(ctx: Context, room: ChatRoom) {
+  const { db, table } = ctx
+  if (!db || !table)
+    return
+  queue(ctx, async () => {
+    const now = Date.now()
+    await db.deleteFrom(table(MUTES_TABLE)).where('until', 'is not', null).where('until', '<=', now).execute()
+    const rows = await db.selectFrom(table(MUTES_TABLE)).select(['account_id', 'until']).execute()
+    room.restore(rows.map(row => ({ playerId: String(row.account_id), kind: 'account', until: row.until === null ? null : Number(row.until) })))
+    if (rows.length)
+      ctx.logger?.info(`Chat: ${rows.length} player${rows.length === 1 ? ' is' : 's are'} still muted`)
+  })
+}
+
+function muteAs(ctx: Context, playerId: string, minutes?: number): Mute | undefined {
+  const room = stateOf(ctx.server).room
+  if (!room)
+    return undefined
+  const { key, kind } = muteTarget(ctx, playerId)
+  const mute = room.mute(key, minutes, kind)
+  saveMute(ctx, mute)
+  return mute
+}
+
+function unmuteAs(ctx: Context, playerId: string): boolean {
+  const room = stateOf(ctx.server).room
+  if (!room)
+    return false
+  const { key } = muteTarget(ctx, playerId)
+  // Also the id as given, for a connection mute of a player that has since been let in with an account
+  const unmuted = room.unmute(key) || (key !== playerId && room.unmute(playerId))
+  dropMute(ctx, key)
+  return unmuted
+}
+
+/** Wait until the mutes are loaded and saved, e.g. in a test or before stopping the server some other way */
+export function mutesSaved(server: object): Promise<void> {
+  return stateOf(server).writes
 }
 
 function entityOf(ctx: Context, id: string | undefined) {
@@ -234,7 +353,8 @@ function receive(ctx: Context, connection: Channel, id: string, data: unknown) {
 
   const notice = (text: string) => connection.emit(CHAT_NOTICE, { text } satisfies ChatNotice, RELIABLE)
 
-  const checked = state.room.check(sender, (data as Partial<ChatSend> | null)?.text)
+  // A mute is on the player's account when it has one, so connecting again doesn't lift it
+  const checked = state.room.check(sender, (data as Partial<ChatSend> | null)?.text, accountOf(ctx, connection) ?? id)
   if ('notice' in checked)
     notice(checked.notice)
   if (!('text' in checked))
@@ -355,14 +475,14 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
 
   app.get(`${path}/mutes`, describe({
     summary: 'The players that are muted',
-    response: '`{ mutes }`, each with `playerId` and `until` (epoch ms, null for a mute that doesn\'t end)',
+    response: '`{ mutes }`, each with `playerId`, `kind` (`account`, which holds when the player connects again, or `connection`, which ends with it) and `until` (epoch ms, null for a mute that doesn\'t end)',
   }), admin, (_req, res) => {
     res.json({ mutes: room.listMutes() })
   })
 
   app.post(`${path}/mutes`, describe({
     summary: 'Mute a player',
-    description: 'Send `{ "playerId": "...", "minutes": 10 }`. Without `minutes` the mute lasts until it is lifted. A player is known by the id of its connection, so it is unmuted when it connects again.',
+    description: 'Send `{ "playerId": "...", "minutes": 10 }` with the id of a connected player or an account id. Without `minutes` the mute lasts until it is lifted. A player with an account, from the server\'s auth plugin, is muted on the account: it stays muted when it connects again, and after a restart when the server has a database. Without an auth plugin, a player is known by the id of its connection, so it is unmuted when it connects again.',
     response: '`{ mute }`, or 400 without a player id',
   }), admin, body((parsed, _req, res) => {
     if (typeof parsed.playerId !== 'string' || !parsed.playerId) {
@@ -370,17 +490,17 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
       return
     }
 
-    const mute = room.mute(parsed.playerId, typeof parsed.minutes === 'number' ? parsed.minutes : undefined)
-    ctx.logger?.info(`Chat: muted ${parsed.playerId}${mute.until === null ? '' : ` until ${new Date(mute.until).toISOString()}`}`)
+    const mute = muteAs(ctx, parsed.playerId, typeof parsed.minutes === 'number' ? parsed.minutes : undefined)!
+    ctx.logger?.info(`Chat: muted ${mute.kind === 'account' ? 'account' : 'connection'} ${mute.playerId}${mute.until === null ? '' : ` until ${new Date(mute.until).toISOString()}`}`)
     res.json({ mute })
   }))
 
   app.delete(`${path}/mutes/:playerId`, describe({
     summary: 'Unmute a player',
-    params: { playerId: 'Id of the player' },
+    params: { playerId: 'Id of a connected player, or an account id' },
     response: '`{ unmuted }`, false when the player was not muted',
   }), admin, (req, res) => {
-    res.json({ unmuted: room.unmute(String(req.params.playerId)) })
+    res.json({ unmuted: unmuteAs(ctx, String(req.params.playerId)) })
   })
 }
 
@@ -393,11 +513,15 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
  */
 const plugin: ServerPlugin = {
   name: 'Chat',
+  migrations,
 
   setup(ctx) {
     const state = stateOf(ctx.server)
     state.room = new ChatRoom(resolveChatOptions(ctx.options as ChatOptions))
     state.ctx = ctx
+    if (!hasAuth(ctx))
+      ctx.logger?.info('Chat: the server has no auth plugin, so players are known by their connection and a mute ends when the player connects again')
+    loadMutes(ctx, state.room)
   },
 
   http(app, ctx) {
@@ -468,10 +592,13 @@ const plugin: ServerPlugin = {
   /** The game's interceptors and listeners stay: they belong to the game, not to this run of the plugin */
   destroy(ctx) {
     const state = stateOf(ctx.server)
+    // The server closes the database once this settled, so the last mutes are still saved
+    const writes = state.writes
     state.room = undefined
     state.ctx = undefined
     state.names.clear()
     state.joining.clear()
+    return writes
   },
 }
 

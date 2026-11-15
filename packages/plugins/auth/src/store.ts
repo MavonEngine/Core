@@ -1,0 +1,321 @@
+import type { PluginMigration } from '@mavonengine/core/Plugins/types'
+import type { Kysely } from 'kysely'
+import type { AccountInfo } from './protocol'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+
+/**
+ * The plugin's tables:
+ * - `auth_accounts`: one per player, with the id everything else keys on. A guest account has no way to log in
+ *   but its sessions, so it is deleted once they ran out
+ * - `auth_identities`: the ways an account logs in, by provider: `password` with the username, `discord` with the
+ *   Discord user id, … One account can have several, a provider's user belongs to one account
+ * - `auth_sessions`: logged in clients, by the hash of their token, never the token itself
+ *
+ * Times are ISO strings, which sort like the times they are on every database.
+ */
+
+export interface Account extends Omit<AccountInfo, 'guest' | 'email'> {
+  /** Optional, unique regardless of case. Only shown to the player itself and to admins, never in the game's identity */
+  email: string | null
+  /** When the player confirmed the email is theirs, null until then. Nothing sets it before there is a mail plugin */
+  emailVerifiedAt: string | null
+  /** When a session was last started for it: a login, a registration, a guest playing */
+  lastLoginAt: string | null
+  createdAt: string
+  /** When an admin disabled it, null while it may log in */
+  disabledAt: string | null
+  /** Made with `POST /guest`: no password nor linked login until the player registers */
+  guest: boolean
+}
+
+export interface IdentityRow {
+  provider: string
+  externalId: string
+  accountId: string
+  /** The password hash for `password`, null for providers that check themselves */
+  secret: string | null
+}
+
+export interface AccountListing extends Account {
+  /** Providers it logs in with */
+  providers: string[]
+  sessions: number
+}
+
+/** Names of the plugin's tables, from `ctx.table()` */
+export type TableNames = (name: 'accounts' | 'identities' | 'sessions') => string
+
+export const migrations: Record<string, PluginMigration> = {
+  '001_init': {
+    async up(db, { table }) {
+      await db.schema.createTable(table('accounts'))
+        .addColumn('id', 'varchar(36)', c => c.primaryKey())
+        .addColumn('name', 'varchar(64)', c => c.notNull())
+        // 0 or 1 rather than a boolean, which not every database driver binds
+        .addColumn('guest', 'integer', c => c.notNull().defaultTo(0))
+        .addColumn('created_at', 'varchar(32)', c => c.notNull())
+        .addColumn('disabled_at', 'varchar(32)')
+        .addColumn('email', 'varchar(254)')
+        // The email lowercased, so one address can't be taken twice in another case. Unique; nulls don't count
+        .addColumn('email_key', 'varchar(254)')
+        .addColumn('email_verified_at', 'varchar(32)')
+        .addColumn('last_login_at', 'varchar(32)')
+        .execute()
+      await db.schema.createIndex(`${table('accounts')}_email`).on(table('accounts')).column('email_key').unique().execute()
+
+      await db.schema.createTable(table('identities'))
+        .addColumn('provider', 'varchar(32)', c => c.notNull())
+        // The username for `password`, lowercased, so names are unique regardless of case
+        .addColumn('external_id', 'varchar(255)', c => c.notNull())
+        .addColumn('account_id', 'varchar(36)', c => c.notNull().references(`${table('accounts')}.id`).onDelete('cascade'))
+        .addColumn('secret', 'varchar(255)')
+        .addColumn('created_at', 'varchar(32)', c => c.notNull())
+        .addPrimaryKeyConstraint(`${table('identities')}_pk`, ['provider', 'external_id'])
+        .execute()
+      await db.schema.createIndex(`${table('identities')}_account`).on(table('identities')).column('account_id').execute()
+
+      await db.schema.createTable(table('sessions'))
+        .addColumn('token_hash', 'varchar(64)', c => c.primaryKey())
+        .addColumn('account_id', 'varchar(36)', c => c.notNull().references(`${table('accounts')}.id`).onDelete('cascade'))
+        .addColumn('created_at', 'varchar(32)', c => c.notNull())
+        .addColumn('expires_at', 'varchar(32)', c => c.notNull())
+        .addColumn('last_seen_at', 'varchar(32)', c => c.notNull())
+        .execute()
+      await db.schema.createIndex(`${table('sessions')}_account`).on(table('sessions')).column('account_id').execute()
+    },
+  },
+}
+
+/** sha256 of a session token: what is stored and looked up, so a leaked database holds no usable tokens */
+export function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function toAccount(row: Record<string, any>): Account {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email ?? null,
+    emailVerifiedAt: row.email_verified_at ?? null,
+    lastLoginAt: row.last_login_at ?? null,
+    createdAt: row.created_at,
+    disabledAt: row.disabled_at ?? null,
+    guest: Number(row.guest) === 1,
+  }
+}
+
+/** What an email is looked up and kept unique by */
+export function emailKey(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+export default class AuthStore {
+  constructor(readonly db: Kysely<any>, private readonly table: TableNames, private readonly now: () => Date = () => new Date()) {}
+
+  /** Run `work` in a transaction where the database has them, with a store on it */
+  transaction<T>(work: (store: AuthStore) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute(trx => work(new AuthStore(trx, this.table, this.now)))
+  }
+
+  async createAccount(name: string, { guest = false, email = null as string | null, emailVerified = false } = {}): Promise<Account> {
+    const now = this.now().toISOString()
+    const account = {
+      id: randomUUID(),
+      name,
+      guest: guest ? 1 : 0,
+      email: email?.trim() ?? null,
+      email_key: email ? emailKey(email) : null,
+      email_verified_at: email && emailVerified ? now : null,
+      last_login_at: null,
+      created_at: now,
+      disabled_at: null,
+    }
+    await this.db.insertInto(this.table('accounts')).values(account).execute()
+    return toAccount(account)
+  }
+
+  async account(id: string): Promise<Account | undefined> {
+    const row = await this.db.selectFrom(this.table('accounts')).selectAll().where('id', '=', id).executeTakeFirst()
+    return row && toAccount(row)
+  }
+
+  async rename(id: string, name: string): Promise<void> {
+    await this.db.updateTable(this.table('accounts')).set({ name }).where('id', '=', id).execute()
+  }
+
+  /** Whether another account than `exceptId` has this email, in any case */
+  async emailTaken(email: string, exceptId?: string): Promise<boolean> {
+    let query = this.db.selectFrom(this.table('accounts')).select('id').where('email_key', '=', emailKey(email))
+    if (exceptId)
+      query = query.where('id', '!=', exceptId)
+    return !!await query.executeTakeFirst()
+  }
+
+  /** Give the account an email, or take it away with null. A new one isn't verified */
+  async setEmail(id: string, email: string | null, { verified = false } = {}): Promise<void> {
+    await this.db.updateTable(this.table('accounts')).set({
+      email: email?.trim() ?? null,
+      email_key: email ? emailKey(email) : null,
+      email_verified_at: email && verified ? this.now().toISOString() : null,
+    }).where('id', '=', id).execute()
+  }
+
+  /** A guest account becomes a full one, under a name of its own: same id, so what the game kept for it stays */
+  async upgradeGuest(id: string, name: string): Promise<void> {
+    await this.db.updateTable(this.table('accounts')).set({ name, guest: 0 }).where('id', '=', id).execute()
+  }
+
+  /** Disable or enable it again. Returns whether there is such an account */
+  async setDisabled(id: string, disabled: boolean): Promise<boolean> {
+    const result = await this.db.updateTable(this.table('accounts'))
+      .set({ disabled_at: disabled ? this.now().toISOString() : null })
+      .where('id', '=', id)
+      .executeTakeFirst()
+    return Number(result.numUpdatedRows) > 0
+  }
+
+  async identity(provider: string, externalId: string): Promise<IdentityRow | undefined> {
+    const row = await this.db.selectFrom(this.table('identities'))
+      .select(['provider', 'external_id', 'account_id', 'secret'])
+      .where('provider', '=', provider)
+      .where('external_id', '=', externalId)
+      .executeTakeFirst()
+    return row && { provider: row.provider, externalId: row.external_id, accountId: row.account_id, secret: row.secret ?? null }
+  }
+
+  /** The provider's identity of an account, e.g. its username for `password` */
+  async identityOf(accountId: string, provider: string): Promise<IdentityRow | undefined> {
+    const row = await this.db.selectFrom(this.table('identities'))
+      .select(['provider', 'external_id', 'account_id', 'secret'])
+      .where('account_id', '=', accountId)
+      .where('provider', '=', provider)
+      .executeTakeFirst()
+    return row && { provider: row.provider, externalId: row.external_id, accountId: row.account_id, secret: row.secret ?? null }
+  }
+
+  async addIdentity(identity: IdentityRow): Promise<void> {
+    await this.db.insertInto(this.table('identities')).values({
+      provider: identity.provider,
+      external_id: identity.externalId,
+      account_id: identity.accountId,
+      secret: identity.secret,
+      created_at: this.now().toISOString(),
+    }).execute()
+  }
+
+  async setSecret(provider: string, externalId: string, secret: string): Promise<void> {
+    await this.db.updateTable(this.table('identities')).set({ secret }).where('provider', '=', provider).where('external_id', '=', externalId).execute()
+  }
+
+  /** Log the account in: a new random token, of which only the hash is kept */
+  async createSession(accountId: string, lifetimeMs: number): Promise<{ token: string, expiresAt: string }> {
+    const token = randomBytes(32).toString('base64url')
+    const now = this.now()
+    const expiresAt = new Date(now.getTime() + lifetimeMs).toISOString()
+    await this.db.insertInto(this.table('sessions')).values({
+      token_hash: hashToken(token),
+      account_id: accountId,
+      created_at: now.toISOString(),
+      expires_at: expiresAt,
+      last_seen_at: now.toISOString(),
+    }).execute()
+    await this.db.updateTable(this.table('accounts')).set({ last_login_at: now.toISOString() }).where('id', '=', accountId).execute()
+    return { token, expiresAt }
+  }
+
+  /**
+   * The account a token is logged in as, while its session hasn't run out, and the session moved on by `lifetime`
+   * from now (in ms, or as the account's lifetime). Undefined for an unknown or expired token. Disabled accounts are
+   * returned too: the caller says why it refuses
+   */
+  async useSession(token: string, lifetime: number | ((account: Account) => number)): Promise<Account | undefined> {
+    const hash = hashToken(token)
+    const now = this.now()
+    const row = await this.db.selectFrom(`${this.table('sessions')} as s`)
+      .innerJoin(`${this.table('accounts')} as a`, 'a.id', 's.account_id')
+      .select(['a.id', 'a.name', 'a.guest', 'a.email', 'a.email_verified_at', 'a.last_login_at', 'a.created_at', 'a.disabled_at', 's.expires_at'])
+      .where('s.token_hash', '=', hash)
+      .executeTakeFirst()
+    if (!row)
+      return undefined
+
+    if (row.expires_at <= now.toISOString()) {
+      await this.deleteSession(token)
+      return undefined
+    }
+
+    const account = toAccount(row)
+    const lifetimeMs = typeof lifetime === 'number' ? lifetime : lifetime(account)
+    await this.db.updateTable(this.table('sessions'))
+      .set({ last_seen_at: now.toISOString(), expires_at: new Date(now.getTime() + lifetimeMs).toISOString() })
+      .where('token_hash', '=', hash)
+      .execute()
+    return account
+  }
+
+  /** Returns whether there was such a session */
+  async deleteSession(token: string): Promise<boolean> {
+    const result = await this.db.deleteFrom(this.table('sessions')).where('token_hash', '=', hashToken(token)).executeTakeFirst()
+    return Number(result.numDeletedRows) > 0
+  }
+
+  /** Log the account out everywhere, but for the session of `exceptToken`. Returns how many sessions ended */
+  async deleteSessionsOf(accountId: string, exceptToken?: string): Promise<number> {
+    let query = this.db.deleteFrom(this.table('sessions')).where('account_id', '=', accountId)
+    if (exceptToken)
+      query = query.where('token_hash', '!=', hashToken(exceptToken))
+    const result = await query.executeTakeFirst()
+    return Number(result.numDeletedRows)
+  }
+
+  /** Forget sessions that ran out. Returns how many */
+  async deleteExpiredSessions(): Promise<number> {
+    const result = await this.db.deleteFrom(this.table('sessions')).where('expires_at', '<=', this.now().toISOString()).executeTakeFirst()
+    return Number(result.numDeletedRows)
+  }
+
+  /**
+   * Delete the guest accounts without a session that still works: with no password nor linked login, nobody can
+   * reach them again. Returns how many
+   */
+  async deleteAbandonedGuests(): Promise<number> {
+    const live = this.db.selectFrom(this.table('sessions')).select('account_id').where('expires_at', '>', this.now().toISOString())
+    const ids = (await this.db.selectFrom(this.table('accounts')).select('id').where('guest', '=', 1).where('id', 'not in', live).execute())
+      .map(row => row.id as string)
+
+    // In chunks, below the bound parameters a statement may have
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      await this.db.deleteFrom(this.table('sessions')).where('account_id', 'in', chunk).execute()
+      await this.db.deleteFrom(this.table('identities')).where('account_id', 'in', chunk).execute()
+      await this.db.deleteFrom(this.table('accounts')).where('id', 'in', chunk).execute()
+    }
+    return ids.length
+  }
+
+  /** A page of accounts, newest first, with how they log in and how many sessions they have */
+  async listAccounts(limit: number, offset: number): Promise<{ accounts: AccountListing[], total: number }> {
+    const rows = await this.db.selectFrom(this.table('accounts')).selectAll().orderBy('created_at', 'desc').orderBy('id').limit(limit).offset(offset).execute()
+    const total = await this.db.selectFrom(this.table('accounts')).select(eb => eb.fn.countAll().as('count')).executeTakeFirstOrThrow()
+    const ids = rows.map(row => row.id as string)
+    if (ids.length === 0)
+      return { accounts: [], total: Number(total.count) }
+
+    const identities = await this.db.selectFrom(this.table('identities')).select(['account_id', 'provider']).where('account_id', 'in', ids).execute()
+    const sessions = await this.db.selectFrom(this.table('sessions'))
+      .select(['account_id', eb => eb.fn.countAll().as('count')])
+      .where('account_id', 'in', ids)
+      .where('expires_at', '>', this.now().toISOString())
+      .groupBy('account_id')
+      .execute()
+
+    return {
+      total: Number(total.count),
+      accounts: rows.map(row => ({
+        ...toAccount(row),
+        providers: identities.filter(identity => identity.account_id === row.id).map(identity => identity.provider as string).sort(),
+        sessions: Number(sessions.find(session => session.account_id === row.id)?.count ?? 0),
+      })),
+    }
+  }
+}

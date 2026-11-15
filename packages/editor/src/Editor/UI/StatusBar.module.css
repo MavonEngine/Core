@@ -27,6 +27,12 @@
     font-family: var(--font-mono);
 }
 
+.warning {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    cursor: help;
+}
+
 .branch {
     font-family: var(--font-ui);
     font-weight: 500;

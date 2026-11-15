@@ -147,7 +147,7 @@ async function main() {
     const data = async (name, args) => JSON.parse((await call(name, args)).content[0].text)
 
     const { tools } = await mcp.listTools()
-    check(tools.length === 25 && tools.every(tool => tool.annotations?.readOnlyHint), 'it lists 25 read-only tools')
+    check(tools.length === 27 && tools.every(tool => tool.annotations?.readOnlyHint), 'it lists 27 read-only tools')
 
     // The name follows the connection in a message of its own, so the server may know the player before its name
     let serverPlayers
