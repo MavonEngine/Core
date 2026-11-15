@@ -128,6 +128,8 @@ await auth(server).endSessions(accountId) // logged out everywhere, its connecti
 const account = await auth(server).account(accountId)
 ```
 
+Other plugins get the same as `ctx.plugin('@mavonengine/auth')`, which is undefined when the project has no auth plugin, so they can do without accounts: `await ctx.plugin('@mavonengine/auth')?.account(id)`.
+
 ## Routes
 
 | Route | |

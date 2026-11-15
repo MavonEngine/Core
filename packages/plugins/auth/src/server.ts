@@ -623,9 +623,19 @@ async function sweep(state: AuthState) {
   }
 }
 
+declare module '@mavonengine/core/Plugins/types' {
+  interface ServerPluginApis {
+    '@mavonengine/auth': AuthHooks
+  }
+}
+
 export default {
   name: 'Auth',
   migrations,
+  /** Other plugins get `auth(server)` as `ctx.plugin('@mavonengine/auth')` */
+  api(ctx: ServerPluginContext): AuthHooks {
+    return auth(ctx.server)
+  },
   async setup(ctx: ServerPluginContext) {
     const state = stateOf(ctx.server)
     state.ctx = ctx
