@@ -30,6 +30,16 @@ export interface QueueOptions {
   retryAfterMs?: number
 }
 
+/** What a queue did since it was made, for the server's metrics */
+export interface QueueCounters {
+  /** Jobs that ran without a throw */
+  processed: number
+  /** Tries that threw and were put back to be tried again */
+  retried: number
+  /** Jobs that ran out of tries */
+  failed: number
+}
+
 export interface DispatchOptions {
   /** Queue to put it on, instead of the job's `queue` */
   queue?: string
@@ -63,6 +73,7 @@ export default class Queue {
   private filling = false
   private fillAgain = false
   private running = new Set<Promise<void>>()
+  private done: QueueCounters = { processed: 0, retried: 0, failed: 0 }
   private poller?: ReturnType<typeof setInterval>
   private wakeups = new Set<ReturnType<typeof setTimeout>>()
 
@@ -74,6 +85,16 @@ export default class Queue {
   }
 
   /** Whether this process runs jobs */
+  /** How many jobs this process runs right now */
+  get runningCount(): number {
+    return this.running.size
+  }
+
+  /** Jobs this process ran, retried and failed so far */
+  get counters(): Readonly<QueueCounters> {
+    return { ...this.done }
+  }
+
   get isWorking(): boolean {
     return this.working
   }
@@ -307,6 +328,7 @@ export default class Queue {
       return
     }
 
+    this.done.processed++
     try {
       await driver.delete(queued.id)
     }
@@ -323,6 +345,7 @@ export default class Queue {
       if (job && queued.attempts < tries) {
         const delay = backoffAfter(job.backoffMs, queued.attempts)
         await driver.release(queued.id, Date.now() + delay)
+        this.done.retried++
         this.logger?.warn(`${label} failed try ${queued.attempts} of ${tries}, trying again${delay ? ` in ${delay} ms` : ''}: ${error.message}`)
         if (delay > 0)
           this.wakeAfter(delay)
@@ -330,6 +353,7 @@ export default class Queue {
       }
 
       await driver.fail(queued, error.stack ?? error.message, Date.now())
+      this.done.failed++
       this.logger?.error(`${label} failed${tries > 1 ? ` all ${tries} tries` : ''}: ${error.stack ?? error.message}`)
     }
     catch (err) {

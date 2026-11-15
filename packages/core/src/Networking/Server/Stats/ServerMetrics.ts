@@ -6,12 +6,14 @@ import type { LatencySimulatorOptions } from '../LatencySimulator'
 import type ServerWorld from '../World'
 import type { BandwidthSample } from './BandwidthTracker'
 import type { CpuHistoryEntry } from './CpuTracker'
+import type { QueueSample, QueueSource } from './QueueTracker'
 import type { TickSample } from './TickTracker'
 import process from 'node:process'
 import { version as ENGINE_VERSION } from '../../../version'
 import { accountOf } from '../../identity'
 import BandwidthTracker from './BandwidthTracker'
 import CpuTracker from './CpuTracker'
+import QueueTracker from './QueueTracker'
 import TickTracker from './TickTracker'
 
 /**
@@ -88,6 +90,15 @@ export interface ServerMetricsSnapshot {
     external: number
   }
   latencySimulation: Required<LatencySimulatorOptions> | null
+  /** The job queue. Null from a server without one, or older than the queue */
+  queue: {
+    /** `memory` or `database` */
+    driver: string
+    /** Whether this server runs jobs */
+    working: boolean
+    latest: QueueSample | null
+    history: QueueSample[]
+  } | null
 }
 
 export interface ServerMetricsOptions {
@@ -100,6 +111,7 @@ export interface ServerMetricsOptions {
 export interface ServerMetricsSource {
   game: BaseGame
   latencySimulation?: Readonly<Required<LatencySimulatorOptions>>
+  queue?: QueueSource
 }
 
 /**
@@ -114,6 +126,7 @@ export default class ServerMetrics {
   readonly cpu: CpuTracker
   readonly bandwidth: BandwidthTracker
   readonly tick: TickTracker
+  readonly queue?: QueueTracker
 
   readonly sampleIntervalMs: number
 
@@ -126,6 +139,8 @@ export default class ServerMetrics {
     this.cpu = new CpuTracker(logger)
     this.bandwidth = new BandwidthTracker(historyLength)
     this.tick = new TickTracker(historyLength)
+    if (source.queue)
+      this.queue = new QueueTracker(source.queue, historyLength)
   }
 
   /**
@@ -135,6 +150,7 @@ export default class ServerMetrics {
     this.cpu.sample()
     this.bandwidth.sample(SERVER_BANDWIDTH_ID, now)
     this.tick.sample(now)
+    this.queue?.sample(now)
   }
 
   health(): ServerHealth {
@@ -211,6 +227,14 @@ export default class ServerMetrics {
         external: memory.external,
       },
       latencySimulation: latencySimulation ? { ...latencySimulation } : null,
+      queue: this.queue
+        ? {
+            driver: this.queue.driver,
+            working: this.queue.working,
+            latest: this.queue.latest ?? null,
+            history: [...this.queue.history],
+          }
+        : null,
     }
   }
 
