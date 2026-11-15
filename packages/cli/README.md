@@ -369,6 +369,42 @@ export default defineServerPlugin({
 
 A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
 
+### Authenticating players
+
+An auth plugin decides who may connect, before a client gets a player. Its client entry gives the token the game connects with, and its server entry's `authorize()` checks it:
+
+```ts
+// client.ts: sent as the Authorization header of the connection request
+export default defineClientPlugin({
+  authorization: () => {
+    const token = localStorage.getItem('session')
+    return token ? `Bearer ${token}` : undefined
+  },
+})
+```
+
+```ts
+// server.ts
+export default defineServerPlugin({
+  async authorize(authorization, request, ctx) {
+    const account = await findSession(ctx.db, authorization)
+    if (!account)
+      return false // 401
+    if (account.banned)
+      return 403
+    return { id: account.id, name: account.username }
+  },
+})
+```
+
+`authorize()` returns an identity (`{ id, name?, … }`) to let the client in as that account, `true` to let it in without one (a guest), or `false` or an HTTP status from 400 to 599 to turn it away. The identity is also sent to the client, so keep it to what the player may see. A throw or any other result turns that one client away with 500, and the next client is still asked.
+
+Other plugins read the identity with `ctx.identity(channel)`, and the game with `player.identity` on the server or `network.identity` on the client. Key anything that should outlast a connection, such as a mute or a score, on `identity.id`: `channel.id` changes every time the player reconnects.
+
+On the client, a refusal arrives as the `connectError` event of the `NetworkManager` (and its `onConnectError()`), with the `status` the server answered. The token is read when a `NetworkManager` is made, so to connect again after logging in, make a new one. A game that handles the token itself passes `authorization` to the `NetworkManager` instead.
+
+Only one auth plugin is asked: with more than one enabled, set `"auth": "<package>"` in mavonengine.json. When the project has an auth plugin that doesn't run, for example because one of its migrations failed or the package named in `auth` isn't enabled, the server turns every client away with 503 instead of letting them in unchecked. The editor connects like a client too, so with an auth plugin it needs a token as well.
+
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 
 ```ts

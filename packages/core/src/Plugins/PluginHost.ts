@@ -91,6 +91,14 @@ export default class PluginHost<P extends { name?: string }, C> {
   }
 
   /**
+   * The context of the plugin of package `pkg`, for a caller that calls one of its hooks itself, e.g. one whose
+   * throws must not turn the hook off. Undefined when there is no such plugin, also after `remove()`.
+   */
+  contextOf(pkg: string): C | undefined {
+    return this.entries.find(e => e.loaded.package === pkg)?.ctx
+  }
+
+  /**
    * Stop running a plugin: none of its hooks are called any more.
    */
   remove(pkg: string): void {

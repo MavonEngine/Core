@@ -3,11 +3,13 @@ import type { Data, GeckosServer, ServerChannel } from '@geckos.io/server'
 import type { Express } from 'express'
 import type { Kysely } from 'kysely'
 import type { FSWatcher } from 'node:fs'
+import type { IncomingMessage } from 'node:http'
 import type winston from 'winston'
 import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
 import type GameScene from '../../Scene/GameScene'
 import type GameObject from '../../World/GameObject'
 import type { NetDebugSource, SyncSnapshot, SyncStateSummary } from '../Debug/sync'
+import type { AuthorizeResult, Identity } from '../identity'
 import type NetworkedActor from '../NetworkedActor'
 import type { CommandPacket, IncomingClientCommandPacket, StatePacket } from './Commands'
 import type { ClientOptions } from './Http/ClientMiddleware'
@@ -32,6 +34,7 @@ import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegi
 import NetRecorder from '../Debug/NetRecorder'
 import { rememberJson, tapMessages } from '../Debug/tap'
 import Player from '../Entities/Player'
+import { identityOf, isIdentity } from '../identity'
 import NetworkedGameObject from '../NetworkedGameObject'
 import { ClientCommand, ServerCommand } from './Commands'
 import HttpServer, { ADMIN_TOKEN_ENV } from './Http/HttpServer'
@@ -100,6 +103,12 @@ export interface ServerOptions {
    * else the first database plugin
    */
   database?: string
+
+  /**
+   * Package of the auth plugin to use, when more than one is enabled. Defaults to `auth` in mavonengine.json,
+   * else the first auth plugin
+   */
+  auth?: string
 
   /**
    * Project root, the directory with mavonengine.json and `scenes/`. Scene names given to `openScene()` are looked up there.
@@ -188,6 +197,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   private database?: { db: Kysely<any>, provider: string }
 
+  /**
+   * Set when the project has an auth plugin. Without `provider` (the plugin was meant to run but doesn't), every
+   * client is turned away
+   */
+  private auth?: { provider?: string }
+
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
 
@@ -204,7 +219,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
 
-    this.gameSocket = geckos()
+    // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
+    this.gameSocket = geckos({ authorization: (authorization, request) => this.authorizeConnection(authorization, request) })
     this.logger = logger
     this.options = options ?? {}
 
@@ -231,7 +247,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     })
 
     this.gameSocket.onConnection((channel) => {
-      this.logger.info(`Connected: ${channel.id}`)
+      const identity = identityOf(channel)
+      this.logger.info(`Connected: ${channel.id}${identity ? ` as ${identity.name ?? identity.id} (${identity.id})` : ''}`)
 
       // Before anything is sent or listened to, so the game's own messages are recorded too
       this.tapChannel(channel)
@@ -715,6 +732,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private boot(loaded: LoadedPlugin<ServerPlugin>[]): Promise<void> {
     const host = this.createPluginHost(loaded)
     this.openDatabase(host)
+    // Decided before the migrations, which turn off a plugin whose migration fails: an auth plugin that drops out
+    // that way leaves the server turning everyone away instead of letting everyone in
+    if (this.expectsAuth(host))
+      this.auth = {}
 
     const migrating = host.plugins.filter(plugin => hasMigrations(plugin.plugin))
     if (!this.database) {
@@ -746,6 +767,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         return server.db
       },
       table: name => tableName(loaded.package, name),
+      identity: identityOf,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
@@ -759,22 +781,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    */
   private openDatabase(host: PluginHost<ServerPlugin, ServerPluginContext>) {
     const providers = host.plugins.filter(plugin => typeof plugin.plugin.database === 'function')
-    if (providers.length === 0)
+    const provider = this.pickProvider(providers, this.options.database ?? this.configured('database'), 'database', 'so the server has no database')
+    if (!provider)
       return
-
-    const wanted = this.options.database ?? this.configuredDatabase()
-    let provider = providers[0]
-    if (wanted) {
-      const match = providers.find(plugin => plugin.package === wanted)
-      if (!match) {
-        this.logger.error(`Database plugin ${wanted} is not running, so the server has no database. Database plugins running: ${providers.map(plugin => plugin.package).join(', ')}`)
-        return
-      }
-      provider = match
-    }
-    else if (providers.length > 1) {
-      this.logger.warn(`More than one database plugin is enabled (${providers.map(plugin => plugin.package).join(', ')}), using ${provider.package}. Set "database" in mavonengine.json to pick one`)
-    }
 
     const db = host.callOn(provider.package, 'database')
     if (!db) {
@@ -786,14 +795,107 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.logger.info(`Database: ${PluginHost.label(provider)}`)
   }
 
-  private configuredDatabase(): string | undefined {
+  /** Auth plugins among `plugins` */
+  private static authProviders(plugins: LoadedPlugin<ServerPlugin>[]) {
+    return plugins.filter(plugin => typeof plugin.plugin.authorize === 'function')
+  }
+
+  /** Whether the project means to check who connects: it has an auth plugin, or names one */
+  private expectsAuth(host: PluginHost<ServerPlugin, ServerPluginContext>): boolean {
+    return !!(this.options.auth ?? this.configured('auth')) || Server.authProviders(host.plugins).length > 0
+  }
+
+  /**
+   * Pick the auth plugin that decides who may connect: `options.auth`, else `auth` in mavonengine.json, else the first
+   * that is enabled. Without the one the project expects, `this.auth` stays without a provider and everyone is turned away.
+   */
+  private openAuth(host: PluginHost<ServerPlugin, ServerPluginContext>) {
+    if (!this.auth)
+      return
+
+    const providers = Server.authProviders(host.plugins)
+    const provider = this.pickProvider(providers, this.options.auth ?? this.configured('auth'), 'auth', 'so every client is turned away')
+    if (!provider) {
+      if (providers.length === 0)
+        this.logger.error('The project\'s auth plugin is not running, so every client is turned away')
+      return
+    }
+
+    this.auth = { provider: provider.package }
+    this.logger.info(`Auth: ${PluginHost.label(provider)}`)
+  }
+
+  /**
+   * The provider of a database or auth among `providers`: the one named `wanted`, else the first. Undefined, with an
+   * error, when `wanted` isn't among them, and without one when there are none.
+   */
+  private pickProvider(providers: LoadedPlugin<ServerPlugin>[], wanted: string | undefined, kind: 'database' | 'auth', withoutIt: string) {
+    if (providers.length === 0)
+      return undefined
+
+    const title = kind === 'database' ? 'Database' : 'Auth'
+    if (wanted) {
+      const match = providers.find(plugin => plugin.package === wanted)
+      if (!match)
+        this.logger.error(`${title} plugin ${wanted} is not running, ${withoutIt}. ${title} plugins running: ${providers.map(plugin => plugin.package).join(', ')}`)
+      return match
+    }
+
+    if (providers.length > 1)
+      this.logger.warn(`More than one ${kind} plugin is enabled (${providers.map(plugin => plugin.package).join(', ')}), using ${providers[0].package}. Set "${kind}" in mavonengine.json to pick one`)
+    return providers[0]
+  }
+
+  /**
+   * geckos' authorization callback: asks the auth plugin whether the client may connect, and returns what geckos
+   * makes of it: the userData of the channel, true to let it in without, or the HTTP status to turn it away with
+   */
+  private async authorizeConnection(authorization: string | undefined, request: IncomingMessage): Promise<Identity | true | number> {
+    const auth = this.auth
+    if (!auth)
+      return true
+
+    const provider = auth.provider && this.plugins?.plugins.find(plugin => plugin.package === auth.provider)
+    const ctx = provider && this.plugins?.contextOf(provider.package)
+    if (!provider || !ctx)
+      return 503
+
+    let result: AuthorizeResult
+    try {
+      // Called directly rather than through the plugin host, which turns a hook off when it throws: one bad header
+      // must not lock every client out, nor let them in
+      result = await provider.plugin.authorize!(authorization, request, ctx)
+    }
+    catch (err) {
+      this.logger.error(`Auth plugin ${PluginHost.label(provider)} failed in authorize(), turning the client away: ${(err as Error)?.stack ?? err}`)
+      return 500
+    }
+
+    if (result === true || isIdentity(result))
+      return result
+    if (result === false)
+      return 401
+    if (typeof result === 'number' && Number.isInteger(result) && result >= 400 && result < 600)
+      return result
+
+    this.logger.error(`Auth plugin ${PluginHost.label(provider)} returned ${JSON.stringify(result)} from authorize(), which is no identity, boolean or HTTP status from 400 to 599: turning the client away`)
+    return 500
+  }
+
+  /** Package of the auth plugin that decides who may connect */
+  get authProvider(): string | undefined {
+    return this.auth?.provider
+  }
+
+  /** `database` or `auth` from mavonengine.json */
+  private configured(key: 'database' | 'auth'): string | undefined {
     const root = this.projectRoot
     if (!root)
       return undefined
 
     try {
-      const database = readConfig(root).database
-      return typeof database === 'string' && database ? database : undefined
+      const value = readConfig(root)[key]
+      return typeof value === 'string' && value ? value : undefined
     }
     catch {
       // An unreadable mavonengine.json was already reported when the plugins were loaded
@@ -821,6 +923,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   private startServer(host: PluginHost<ServerPlugin, ServerPluginContext>) {
     this.plugins = host
+    this.openAuth(host)
     // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
     const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
       this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
@@ -930,8 +1033,15 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         infos.push({ package: pkg, enabled: true, installed: true, target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true })
     }
 
-    const provider = this.databaseProvider
-    return provider ? infos.map(info => info.package === provider ? { ...info, database: true } : info) : infos
+    const database = this.databaseProvider
+    const auth = this.authProvider
+    return infos.map((info) => {
+      if (info.package === database)
+        info = { ...info, database: true }
+      if (info.package === auth)
+        info = { ...info, auth: true }
+      return info
+    })
   }
 
   get projectRoot(): string | undefined {

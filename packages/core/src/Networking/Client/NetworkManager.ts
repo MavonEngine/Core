@@ -2,12 +2,16 @@ import type { ClientChannel } from '@geckos.io/client'
 import type { ClientOptions } from '@geckos.io/common/lib/types'
 
 import type { Vec3 } from '../../Dev/inspect'
+import type PluginHost from '../../Plugins/PluginHost'
+import type { ClientPlugin, ClientPluginContext } from '../../Plugins/types'
+import type { Identity } from '../identity'
 import type { CommandPacket, StatePacket } from '../Server/Commands'
 import { geckos } from '@geckos.io/client'
 import Game from '../../BaseGame'
 import EventEmitter from '../../Utils/EventEmitter'
 import NetRecorder, { netDebugDefault } from '../Debug/NetRecorder'
 import { tapMessages } from '../Debug/tap'
+import { identityOf } from '../identity'
 import { ClientCommand, ServerCommand } from '../Server/Commands'
 
 /** An entity as the server last sent it, before the client smoothed or predicted anything */
@@ -46,6 +50,19 @@ function vec(value: unknown): Vec3 {
 
 let instance: NetworkManager | undefined
 
+/** Why connecting failed. `status` is the HTTP status the server turned the client away with, e.g. 401 from its auth plugin */
+export interface ConnectError {
+  message: string
+  status?: number
+  statusText?: string
+}
+
+/** The `Authorization` header the client plugins give, from the first that returns one */
+function pluginAuthorization(): string | undefined {
+  const plugins = (Game.instance() as { plugins?: PluginHost<ClientPlugin, ClientPluginContext> }).plugins
+  return plugins?.collect('authorization').find(({ result }) => typeof result === 'string')?.result
+}
+
 export default class NetworkManager extends EventEmitter {
   protected _socket: ClientChannel
   ping = 1000
@@ -78,7 +95,8 @@ export default class NetworkManager extends EventEmitter {
     // Lets dev tools (the editor, the dev bridge) find the connection from the game
     ;(Game.instance() as { network?: NetworkManager }).network = this
 
-    this._socket = geckos(options)
+    // Sent as the Authorization header of the connection request, for the server's auth plugin
+    this._socket = geckos({ ...options, authorization: options.authorization ?? pluginAuthorization() })
 
     // Only hooked into the socket once something records
     this.net.onEnabled(() => {
@@ -92,7 +110,11 @@ export default class NetworkManager extends EventEmitter {
 
     this._socket.onConnect((error) => {
       if (error) {
-        Game.instance().logger?.error(`Socket error: ${error.message}`)
+        const failed = error as ConnectError
+        Game.instance().logger?.error(`Socket error: ${failed.message}`)
+        this.net.event('connect_error', { info: { status: failed.status ?? null, message: failed.message } })
+        this.onConnectError(failed)
+        this.trigger('connectError', failed)
         return
       }
 
@@ -177,6 +199,14 @@ export default class NetworkManager extends EventEmitter {
     this._socket.emit(ClientCommand.CL_EDITOR, { type: ClientCommand.CL_EDITOR }, { reliable: true })
   }
 
+  /**
+   * Who the server's auth plugin let this client in as, once connected. Undefined before, and when the server has no
+   * auth plugin or let it in without an identity.
+   */
+  get identity(): Identity | undefined {
+    return identityOf(this._socket as { userData?: unknown })
+  }
+
   /** Whether this client runs the editor and so is no player on the server */
   get editorMode() {
     return this._editorMode
@@ -220,6 +250,12 @@ export default class NetworkManager extends EventEmitter {
   protected onPong() { }
 
   protected onDisconnect() { }
+
+  /**
+   * Connecting failed, e.g. the server's auth plugin turned the client away (`error.status` 401, 403, …).
+   * Also triggered as the `connectError` event. The client does not try again: make a new NetworkManager for that.
+   */
+  protected onConnectError(_error: ConnectError) { }
 
   protected pingCheck() {
     this.pingNow = performance.now()
