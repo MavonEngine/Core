@@ -6,7 +6,7 @@ A [MavonEngine](https://mavonengine.com) plugin that gives the game server and i
 npx @mavonengine/cli install @mavonengine/sqlite
 ```
 
-The database is created at `.mavonengine/data/mavonengine.sqlite` in the project when the server starts. The plugin writes a `.gitignore` into `.mavonengine/data/` when it creates that directory, so the database stays out of git.
+The database is created at `.mavonengine/data/mavonengine.sqlite` in the project when the server starts. Projects made with `mavonengine create` ignore `.mavonengine/` in git; add it to your `.gitignore` if your project predates that.
 
 Without a database plugin, the server has no database: `ctx.db` and `server.db` are undefined and plugins run without one. Nothing database-related is installed until you add a database plugin.
 

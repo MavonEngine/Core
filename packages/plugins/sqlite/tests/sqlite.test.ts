@@ -1,6 +1,6 @@
 import type { ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Kysely } from 'kysely'
-import { existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -110,23 +110,14 @@ describe('databasePath', () => {
 })
 
 describe('the plugin', () => {
-  it('opens the database in .mavonengine/data/ of the project and keeps that directory out of git', async () => {
+  it('opens the database in .mavonengine/data/ of the project', async () => {
     const { ctx, logger, projectRoot } = context()
 
     const db = track(plugin.database!(ctx)!)
     await sql`select 1`.execute(db)
 
     expect(existsSync(join(projectRoot, DEFAULT_PATH))).toBe(true)
-    expect(readFileSync(join(projectRoot, '.mavonengine', 'data', '.gitignore'), 'utf8')).toContain('*')
     expect(logger.info).toHaveBeenCalledWith(`SQLite: ${join(projectRoot, DEFAULT_PATH)}`)
-  })
-
-  it('leaves a directory that already existed alone', () => {
-    const { ctx, projectRoot } = context({ path: 'db.sqlite' })
-
-    track(plugin.database!(ctx)!)
-
-    expect(existsSync(join(projectRoot, '.gitignore'))).toBe(false)
   })
 
   it('can keep the database in memory', () => {

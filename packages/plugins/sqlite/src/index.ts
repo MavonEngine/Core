@@ -1,7 +1,7 @@
 import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Dialect, SqliteDatabase } from 'kysely'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import { DatabaseSync } from 'node:sqlite'
 import { Kysely, SqliteDialect } from 'kysely'
@@ -89,24 +89,13 @@ export function databasePath(options: SqliteOptions, root: string = process.cwd(
   return isAbsolute(path) ? path : resolve(root, path)
 }
 
-/** Keeps a new data directory out of git: the database is the server's state, not the project's source */
-function ignoreInGit(dir: string) {
-  const ignore = join(dir, '.gitignore')
-  if (!existsSync(ignore))
-    writeFileSync(ignore, '# Written by @mavonengine/sqlite: the game server\'s database\n*\n')
-}
-
 const plugin: ServerPlugin = {
   name: 'SQLite',
   database(ctx: ServerPluginContext) {
     const options = ctx.options as SqliteOptions
     const path = databasePath(options, ctx.projectRoot)
 
-    const dir = dirname(path)
-    const isNewDir = path !== MEMORY && !existsSync(dir)
     const db = openSqlite(path, options)
-    if (isNewDir)
-      ignoreInGit(dir)
 
     ctx.logger?.info(path === MEMORY
       ? 'SQLite: in memory, the database is gone when the server stops'
