@@ -1,4 +1,5 @@
 import type { Vec3 } from '../../Dev/inspect'
+import type { PlayerAccount } from '../identity'
 import type NetRecorder from './NetRecorder'
 
 /**
@@ -35,6 +36,8 @@ export interface SyncPlayer {
   tracked: string[]
   /** The last sv_state sent to it, null when none was yet */
   lastState: SyncStateSummary | null
+  /** The account the server's auth plugin let it in as, null without one */
+  account: PlayerAccount | null
 }
 
 export interface SyncEntity {

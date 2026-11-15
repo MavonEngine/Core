@@ -161,6 +161,31 @@ describe('networkPanel', () => {
     screen.getByText('This tab is not connected to a game server')
   })
 
+  it('shows the players\' accounts when the server knows them, guests marked', async () => {
+    overlay.sync = new SyncStore(250, async () => ({
+      ...sync,
+      players: [
+        { ...sync.players[0], account: { id: 'acc-1', name: 'ada_account', guest: false } },
+        { ...sync.players[0], id: 'p2', displayName: 'Visitor', account: { id: 'acc-2', name: 'Guest-4821', guest: true } },
+      ],
+    }) as any)
+    render(<NetworkPanel />)
+    await settle()
+
+    screen.getByText('Account')
+    expect(screen.getByText('ada_account').closest('td')?.getAttribute('title')).toBe('Account acc-1')
+    screen.getByText('Guest-4821')
+    screen.getByText('guest')
+  })
+
+  it('leaves the account column out without accounts', async () => {
+    render(<NetworkPanel />)
+    await settle()
+
+    screen.getByText('Ada')
+    expect(screen.queryByText('Account')).toBeNull()
+  })
+
   it('says why the server turned the tab away', async () => {
     Object.assign((window as any).Game.network, { connected: false, connectError: { message: 'Connection failed with status code 401.', status: 401 } })
     render(<NetworkPanel />)

@@ -871,7 +871,7 @@ describe('server', () => {
 
       expect(sync).toMatchObject({ tick: 1, tickRate: server.game.tickRate, syncDistance: 10, editors: [] })
       expect(sync.players).toHaveLength(3)
-      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 } })
+      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 }, account: null })
       expect(sync.players[0].lastState!.bytes).toBeGreaterThan(0)
       // near and far are players without a connection here, so they track what is around them but are sent nothing
       expect(sync.players[2]).toMatchObject({ id: 'far', lastState: null })

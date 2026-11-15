@@ -322,7 +322,7 @@ describe('metricsClient', () => {
         entities: 3,
         untracked: 1,
         editors: 1,
-        players: [{ id: 'p1', displayName: 'Ada', tracked: 2, ack: 3, lastState: { tick: 4, bytes: 120, entities: 2 } }],
+        players: [{ id: 'p1', displayName: 'Ada', tracked: 2, ack: 3, lastState: { tick: 4, bytes: 120, entities: 2 }, account: null }],
       })
     })
 

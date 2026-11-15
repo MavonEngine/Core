@@ -34,7 +34,7 @@ import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegi
 import NetRecorder from '../Debug/NetRecorder'
 import { rememberJson, tapMessages } from '../Debug/tap'
 import Player from '../Entities/Player'
-import { identityOf, isIdentity } from '../identity'
+import { accountOf, identityOf, isIdentity } from '../identity'
 import NetworkedGameObject from '../NetworkedGameObject'
 import { ClientCommand, ServerCommand } from './Commands'
 import HttpServer, { ADMIN_TOKEN_ENV } from './Http/HttpServer'
@@ -581,6 +581,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         ack: player.lastProcessedSequenceId,
         tracked: [...player.trackedEntities],
         lastState: this.lastStates.get(player.id) ?? null,
+        account: accountOf(player.identity),
       })),
       editors: [...this.editorChannels],
       entities: entities.map(entity => ({

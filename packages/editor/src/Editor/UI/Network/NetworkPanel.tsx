@@ -88,6 +88,8 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
     return <div className={styles.note}>{error ?? 'Asking the server…'}</div>
 
   const untracked = sync.entities.filter(entity => !entity.player && entity.trackedBy === 0).length
+  // Only a server with an auth plugin knows who its players are; older servers don't say
+  const showAccounts = sync.players.some(player => player.account)
 
   return (
     <div className={styles.sync}>
@@ -104,6 +106,7 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
               <thead>
                 <tr>
                   <th>Player</th>
+                  {showAccounts && <th>Account</th>}
                   <th>Tracked</th>
                   <th>Ack</th>
                   <th>Last state</th>
@@ -118,6 +121,12 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
                     onClick={() => onViewAs(player.id === viewAs ? null : player.id)}
                   >
                     <td>{player.displayName}</td>
+                    {showAccounts && (
+                      <td title={player.account ? `Account ${player.account.id}` : 'Connected without an account'}>
+                        {player.account ? (player.account.name ?? player.account.id) : '—'}
+                        {player.account?.guest && <span className={styles.guest}>guest</span>}
+                      </td>
+                    )}
                     <td>{player.tracked.length}</td>
                     <td>{player.ack}</td>
                     <td>{player.lastState ? `${formatBytes(player.lastState.bytes)} · tick ${player.lastState.tick}` : 'none'}</td>

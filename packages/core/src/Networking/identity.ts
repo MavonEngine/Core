@@ -22,3 +22,15 @@ export function identityOf(channel: { userData?: unknown } | undefined): Identit
   const data = channel?.userData
   return isIdentity(data) ? data : undefined
 }
+
+/** The account of a player as the server's tools show it: no more than its id, name and whether it is a guest */
+export interface PlayerAccount {
+  id: string
+  name: string | null
+  guest: boolean
+}
+
+/** What the tools show of an identity, null without one */
+export function accountOf(identity: Identity | undefined): PlayerAccount | null {
+  return identity ? { id: identity.id, name: typeof identity.name === 'string' ? identity.name : null, guest: identity.guest === true } : null
+}

@@ -51,6 +51,7 @@ describe('serverMetrics', () => {
       trackedEntities: 1,
       connectedFor: 0,
       connection: null,
+      account: null,
     }])
     expect(snapshot.world.entities).toBe(1)
     expect(snapshot.physics).toBeNull()
@@ -75,6 +76,20 @@ describe('serverMetrics', () => {
     expect(connected.connectedFor).toBe(90)
     expect(connected.connection).toEqual({ address: '203.0.113.7', rttMs: 42, bytesSent: 1000, bytesReceived: 200 })
     expect(bot.connection).toBeNull()
+  })
+
+  it('shows the account the auth plugin let a player in as, and nothing secret of it', () => {
+    const { game, metrics } = makeMetrics()
+
+    addPlayer(game, 'p1').channel = { userData: { id: 'acc-1', name: 'Ada', session: 'abc123' } } as any
+    addPlayer(game, 'p2').channel = { userData: { id: 'acc-2', name: 'Guest-4821', guest: true } } as any
+    addPlayer(game, 'bot')
+
+    expect(metrics.snapshot().players.map(player => player.account)).toEqual([
+      { id: 'acc-1', name: 'Ada', guest: false },
+      { id: 'acc-2', name: 'Guest-4821', guest: true },
+      null,
+    ])
   })
 
   it('uses the player id as the display name until one is set', () => {
