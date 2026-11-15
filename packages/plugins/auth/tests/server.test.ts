@@ -10,6 +10,8 @@ import plugin, { auth, AuthError, parseOptions } from '../src/server'
 import { memoryDb } from './memoryDb'
 
 const PKG = '@mavonengine/auth'
+/** Which session a connection was made with: a piece of the token's hash, never the token */
+const SESSION = expect.stringMatching(/^[0-9a-f]{16}$/)
 
 const requireAdmin: RequestHandler = (req, res, next) => {
   if (req.headers.authorization !== 'Bearer admin-token') {
@@ -88,7 +90,7 @@ describe('auth plugin', () => {
     const { token, account } = await registered(server)
 
     expect(account.name).toBe('Ada')
-    expect(await server.authorize(`Bearer ${token}`)).toEqual({ id: account.id, name: 'Ada' })
+    expect(await server.authorize(`Bearer ${token}`)).toEqual({ id: account.id, name: 'Ada', session: SESSION })
     expect((await server.request('GET', '/me', { token })).json).toEqual({ account })
   })
 
@@ -148,6 +150,43 @@ describe('auth plugin', () => {
     expect((await server.request('POST', '/logout', { token })).status).toBe(204)
     expect(await server.authorize(`Bearer ${token}`)).toBe(401)
     expect((await server.request('POST', '/logout')).status).toBe(204)
+  })
+
+  it('tells sessions apart, without the token in the identity', async () => {
+    const server = await started()
+    const { token } = await registered(server)
+    const other = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+
+    const here = await server.authorize(`Bearer ${token}`) as Record<string, unknown>
+    const there = await server.authorize(`Bearer ${other}`) as Record<string, unknown>
+    expect(here.session).not.toBe(there.session)
+    expect(JSON.stringify(here)).not.toContain(token)
+  })
+
+  it('closes the game connections of a session that logs out, and only those', async () => {
+    const server = await started()
+    const { token } = await registered(server)
+    const phone = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const here = server.connect(await server.authorize(`Bearer ${token}`))
+    const onPhone = server.connect(await server.authorize(`Bearer ${phone}`))
+
+    expect((await server.request('POST', '/logout', { token })).status).toBe(204)
+
+    expect(here.close).toHaveBeenCalled()
+    expect(onPhone.close).not.toHaveBeenCalled()
+  })
+
+  it('closes the game connections of the sessions a password change ends, not this one\'s', async () => {
+    const server = await started()
+    const { token } = await registered(server, 'Ada', 'correct horse')
+    const elsewhere = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const here = server.connect(await server.authorize(`Bearer ${token}`))
+    const there = server.connect(await server.authorize(`Bearer ${elsewhere}`))
+
+    await server.request('POST', '/password', { token, body: { current: 'correct horse', password: 'battery staple' } })
+
+    expect(there.close).toHaveBeenCalled()
+    expect(here.close).not.toHaveBeenCalled()
   })
 
   it('changes the password and logs out everywhere else', async () => {
@@ -253,7 +292,7 @@ describe('auth plugin', () => {
 
       expect(guest.account.name).toMatch(/^Guest-\d{4}$/)
       expect(guest.account.guest).toBe(true)
-      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: guest.account.name, guest: true })
+      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: guest.account.name, guest: true, session: SESSION })
       expect((await server.request('GET', '/me', { token: guest.token })).json.account.guest).toBe(true)
       // A registered player has no guest flag at all
       const { token } = await registered(server)
@@ -268,8 +307,8 @@ describe('auth plugin', () => {
       expect(res.status).toBe(201)
       expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada' })
       // Both the new session and the guest's own now connect as the full account
-      expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada' })
-      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada' })
+      expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
+      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
       expect((await server.request('POST', '/login', { body: { username: 'ada', password: 'correct horse' } })).json.account.id).toBe(guest.account.id)
     })
 
@@ -339,7 +378,7 @@ describe('auth plugin', () => {
       const again = await server.hooks.signIn('discord', '123', { name: 'renamed' })
       expect(again.account.id).toBe(first.account.id)
       expect(again.token).not.toBe(first.token)
-      expect(await server.authorize(`Bearer ${again.token}`)).toEqual({ id: first.account.id, name: 'ada' })
+      expect(await server.authorize(`Bearer ${again.token}`)).toEqual({ id: first.account.id, name: 'ada', session: SESSION })
 
       expect((await server.hooks.signIn('github', '9')).account.name).toBe('player')
     })

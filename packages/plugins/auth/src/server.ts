@@ -8,7 +8,7 @@ import process from 'node:process'
 import { decoyHash, hashPassword, verifyPassword } from './password'
 import { DEFAULT_PATH, PASSWORD_PROVIDER, passwordProblem, usernameProblem } from './protocol'
 import RateLimit from './rateLimit'
-import AuthStore, { migrations } from './store'
+import AuthStore, { hashToken, migrations } from './store'
 
 export type { AccountInfo, SessionResponse } from './protocol'
 export type { Account, AccountListing } from './store'
@@ -151,14 +151,34 @@ async function startSession(state: AuthState, store: AuthStore, account: Account
 }
 
 /** Close the game connections of an account: it reconnects only with a session that still works */
-function kick(state: AuthState, accountId: string): number {
+/**
+ * Which session a connection was made with, as its identity says: a short piece of the token's hash, which tells
+ * sessions apart without being any use to log in with
+ */
+function sessionKey(token: string): string {
+  return hashToken(token).slice(0, 16)
+}
+
+/**
+ * Close the game connections of an account, or only those `which` picks by the session they were made with:
+ * they reconnect only with a session that still works
+ */
+function kick(state: AuthState, accountId: string, which?: (session: unknown) => boolean): number {
   const channels = state.channels.get(accountId)
   if (!channels)
     return 0
-  for (const channel of channels)
+
+  let closed = 0
+  for (const channel of [...channels]) {
+    if (which && !which(state.ctx?.identity(channel)?.session))
+      continue
     void channel.close().catch(() => {})
-  state.channels.delete(accountId)
-  return channels.size
+    channels.delete(channel)
+    closed++
+  }
+  if (channels.size === 0)
+    state.channels.delete(accountId)
+  return closed
 }
 
 /**
@@ -425,7 +445,7 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
 
   app.post(`${path}/logout`, describe({
     summary: 'End this session',
-    description: 'With `Authorization: Bearer <token>`. The game connection it is in stays open until it closes. A guest that logs out loses its account: nothing else logs in to it.',
+    description: 'With `Authorization: Bearer <token>`. The game connections made with this session close; those of the account\'s other sessions stay. A guest that logs out loses its account: nothing else logs in to it.',
     response: '204, also when the session had already ended',
   }), route(state, async (req, res) => {
     const token = bearer(req.headers.authorization)
@@ -433,6 +453,10 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
       const store = running(state)
       const account = await store.useSession(token, 0)
       await store.deleteSession(token)
+      if (account) {
+        const session = sessionKey(token)
+        kick(state, account.id, key => key === session)
+      }
       if (account?.guest)
         await store.deleteAbandonedGuests()
     }
@@ -450,7 +474,7 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
 
   app.post(`${path}/password`, describe({
     summary: 'Change the password',
-    description: 'With `Authorization: Bearer <token>`, send `{ "current": "...", "password": "..." }`. Every other session of the account ends.',
+    description: 'With `Authorization: Bearer <token>`, send `{ "current": "...", "password": "..." }`. Every other session of the account ends, and the game connections made with them close.',
     response: '204. 401 for a wrong current password, 400 for a new one that can\'t be used, 409 for an account without a password',
   }), route(state, async (req, res) => {
     const { token, account } = await requireSession(state, req)
@@ -469,6 +493,8 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     await store.setSecret(PASSWORD_PROVIDER, identity.externalId, await hashPassword(password as string))
     // Wherever else it was logged in, maybe by whoever knew the old password, ends. This device stays
     await store.deleteSessionsOf(account.id, token)
+    const session = sessionKey(token)
+    kick(state, account.id, key => key !== session)
     res.status(204).end()
   }))
 
@@ -544,7 +570,8 @@ async function authorizeConnection(state: AuthState, authorization: string | und
     return 401
   if (account.disabledAt)
     return 403
-  return { ...publicAccount(account) } satisfies Identity
+  // `session` tells this account's connections apart, to close those of a session that logs out
+  return { ...publicAccount(account), session: sessionKey(token) } satisfies Identity
 }
 
 /** Forget sessions that ran out and the guest accounts nobody can reach any more */
