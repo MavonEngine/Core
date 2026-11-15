@@ -27,6 +27,15 @@
       "engine": ">=0.0.24",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/sqlite/README.md"
+    },
+    {
+      "package": "@mavonengine/auth",
+      "name": "Auth",
+      "description": "Player accounts with logins and sessions, so the game server knows who connects",
+      "target": "both",
+      "engine": ">=0.0.24",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/auth/README.md"
     }
   ]
 }

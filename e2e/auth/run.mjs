@@ -7,19 +7,25 @@
  *    is still asked), the right token gets in with the plugin's identity as userData. GET /api/game/plugins marks it
  * 2. mavonengine.json names an auth plugin that isn't there: every client gets 503 instead of being let in
  * 3. without an auth plugin: everyone gets in, as before
+ * 4. with the built @mavonengine/auth on @mavonengine/sqlite: a player registers over HTTP and connects with the
+ *    session as that account, the session outlasts a restart, and a disabled account is turned away
  *
- * Needs core built and the template's dependencies installed. The template is restored afterwards, also on failure.
+ * Needs core and the auth and sqlite plugins built and the template's dependencies installed. The database goes to a
+ * temporary directory. The template is restored afterwards, also on failure.
  *
  *   node e2e/auth/run.mjs
  */
-import { rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { base, check, linkIntoTemplate, log, run, snapshotFiles, startServer, template } from '../helpers.mjs'
+import { base, check, linkIntoTemplate, log, repo, run, snapshotFiles, startServer, template } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const AUTH = 'e2e-token-auth'
+const REAL_AUTH = '@mavonengine/auth'
+const SQLITE = '@mavonengine/sqlite'
 // The template's client connects through /socket on the HTTP port, and geckos answers its routes under any prefix
 const CONNECTIONS = `${base}/socket/.wrtc/v2/connections`
 
@@ -39,10 +45,16 @@ async function connect(authorization) {
 
 const json = async path => (await fetch(`${base}${path}`)).json()
 
+async function post(path, body) {
+  const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
+  return { status: res.status, json: await res.json().catch(() => undefined) }
+}
+
 async function main() {
   const configPath = join(template, 'mavonengine.json')
   const restore = snapshotFiles([configPath])
   const links = []
+  const dataDir = mkdtempSync(join(tmpdir(), 'mavonengine-auth-e2e-'))
   let server
 
   const configure = (config) => {
@@ -85,6 +97,36 @@ async function main() {
     const anyone = await connect()
     check(anyone.status === 200, 'every client gets in, as before')
     check(!anyone.userData?.id, 'without an identity')
+    await server.stop()
+    server = undefined
+
+    log('\n== @mavonengine/auth on @mavonengine/sqlite')
+    links.push(linkIntoTemplate(REAL_AUTH, join(repo, 'packages/plugins/auth')))
+    links.push(linkIntoTemplate(SQLITE, join(repo, 'packages/plugins/sqlite')))
+    configure({ plugins: { [SQLITE]: { options: { path: join(dataDir, 'e2e.sqlite') } }, [REAL_AUTH]: {} } })
+    server = await startServer({ LOG_LEVEL: 'debug' })
+    check(server.output().includes(`Auth: Auth (${REAL_AUTH})`), 'the server uses the auth plugin')
+    check(server.output().includes(`Plugin Auth (${REAL_AUTH}): ran migrations 001_init`), 'its tables are made')
+    check((await connect()).status === 401, 'a client that isn\'t logged in is turned away')
+
+    const signup = await post('/api/auth/register', { username: 'Ada', password: 'correct horse' })
+    check(signup.status === 201 && typeof signup.json?.token === 'string', 'a player registers and is logged in')
+    const ada = await connect(`Bearer ${signup.json.token}`)
+    check(ada.status === 200 && ada.userData?.id === signup.json.account.id && ada.userData?.name === 'Ada', 'and connects as that account')
+    check((await post('/api/auth/register', { username: 'ada', password: 'another one' })).status === 409, 'the name is taken, in any case')
+    await server.stop()
+    server = undefined
+
+    log('\n== restarted')
+    server = await startServer({ LOG_LEVEL: 'debug' })
+    check(!server.output().includes('ran migrations'), 'the migration doesn\'t run again')
+    check((await connect(`Bearer ${signup.json.token}`)).status === 200, 'the session still works')
+    const again = await post('/api/auth/login', { username: 'ada', password: 'correct horse' })
+    check(again.status === 200 && again.json.account.id === signup.json.account.id, 'the player logs in to the same account')
+    // Without an admin token the server takes admin requests from this machine
+    check((await post(`/api/auth/accounts/${signup.json.account.id}/disable`)).status === 200, 'an admin disables the account')
+    check((await connect(`Bearer ${again.json.token}`)).status === 401, 'its sessions ended, so it can\'t connect')
+    check((await post('/api/auth/login', { username: 'Ada', password: 'correct horse' })).status === 403, 'nor log in')
 
     log('\nauth e2e passed')
   }
@@ -98,6 +140,7 @@ async function main() {
     restore()
     for (const link of links)
       rmSync(link, { recursive: true, force: true })
+    rmSync(dataDir, { recursive: true, force: true })
   }
 }
 

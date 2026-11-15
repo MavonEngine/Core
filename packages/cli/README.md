@@ -371,7 +371,7 @@ A plugin that takes the token some other way, such as the password of a login, c
 
 ### Authenticating players
 
-An auth plugin decides who may connect, before a client gets a player. Its client entry gives the token the game connects with, and its server entry's `authorize()` checks it:
+An auth plugin decides who may connect, before a client gets a player. [`@mavonengine/auth`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth) is one, with accounts, passwords and sessions; write your own for anything else. Its client entry gives the token the game connects with, and its server entry's `authorize()` checks it:
 
 ```ts
 // client.ts: sent as the Authorization header of the connection request
