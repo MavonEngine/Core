@@ -9,7 +9,7 @@ import AvailablePlugins from '../dashboard/available'
 import MetricsClient, { httpSource } from '../dashboard/MetricsClient'
 import { simulatedSource } from '../dashboard/simulator'
 import { readableTheme } from '../dashboard/theme'
-import { handleInstallKey, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, renderDashboard, showsNetwork, tabForKey } from '../dashboard/view'
+import { dashboardTabs, handleDatabaseKey, handleInstallKey, handleNetworkKey, handlePlayersKey, handlePluginsKey, initialViewState, renderDashboard, selectedTable, showsDatabase, showsNetwork, tabForKey } from '../dashboard/view'
 
 export const DASHBOARD_HELP = `Usage: mavonengine dashboard [options]
 
@@ -148,6 +148,20 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
     }
     client.watchNetwork = watch
 
+    // Same for the database, which is only read for the Database tab
+    const watchDatabase = showsDatabase(view)
+    if (watchDatabase && !client.watchDatabase) {
+      client.watchDatabase = true
+      void client.refresh()
+    }
+    client.watchDatabase = watchDatabase
+
+    // Another table or page of rows was picked: load it
+    const table = watchDatabase ? selectedTable(view, client.state.database) : undefined
+    const detail = client.state.tableDetail
+    if (table && (detail?.table !== table.name || detail.offset !== (view.tableOffset ?? 0)))
+      void client.inspectTable(table.name, view.tableOffset ?? 0)
+
     // A click or a key picked another packet: load its content
     if ((client.state.packetDetail?.id ?? null) !== view.selectedPacketId)
       void client.inspectPacket(view.selectedPacketId)
@@ -187,13 +201,13 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
     if (event.key === 'o' && options.clientUrl)
       openBrowser(options.clientUrl)
 
-    const tab = tabForKey(event.key)
+    const tab = tabForKey(event.key, dashboardTabs(client.state).length)
     if (tab !== null) {
       view.tab = tab
       app.invalidate()
     }
 
-    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets) || handlePluginsKey(view, client.state.plugins, event.key, installable()))
+    if (handlePlayersKey(view, client.state.snapshot, event.key) || handleNetworkKey(view, event.key, client.state.packets) || handlePluginsKey(view, client.state.plugins, event.key, installable()) || handleDatabaseKey(view, client.state.database, event.key))
       app.invalidate()
   })
 

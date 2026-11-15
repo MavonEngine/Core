@@ -48,6 +48,10 @@ async function liveState(samples = 30): Promise<DashboardState> {
       { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
     ],
     pluginsAvailable: true,
+    database: null,
+    databaseAvailable: null,
+    databaseError: null,
+    tableDetail: null,
   }
 }
 
@@ -60,7 +64,7 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null, plugins: [], pluginsAvailable: null }
+  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null, plugins: [], pluginsAvailable: null, database: null, databaseAvailable: null, databaseError: null, tableDetail: null }
 }
 
 describe('dashboard view', () => {
@@ -198,7 +202,8 @@ describe('dashboard view', () => {
     expect(tabForKey('5')).toBe(4)
     expect(tabForKey('6')).toBe(5)
     expect(tabForKey('7')).toBe(6)
-    expect(tabForKey('8')).toBeNull()
+    expect(tabForKey('8')).toBe(7)
+    expect(tabForKey('9')).toBeNull()
     expect(tabForKey('0')).toBeNull()
     expect(tabForKey('q')).toBeNull()
   })
@@ -230,6 +235,10 @@ describe('dashboard view', () => {
       routesAvailable: null,
       plugins: [],
       pluginsAvailable: null,
+      database: null,
+      databaseAvailable: null,
+      databaseError: null,
+      tableDetail: null,
     })
 
     expect(screen.contains('UNAUTHORIZED')).toBe(true)

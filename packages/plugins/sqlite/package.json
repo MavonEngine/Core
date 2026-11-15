@@ -1,0 +1,60 @@
+{
+  "name": "@mavonengine/sqlite",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine plugin: a SQLite database for the game server and its plugins, on Node's built-in node:sqlite",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MavonEngine/Core.git",
+    "directory": "packages/plugins/sqlite"
+  },
+  "keywords": [
+    "mavonengine",
+    "mavonengine-plugin",
+    "sqlite",
+    "database",
+    "kysely"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@mavonengine/core": ">=0.0.24"
+  },
+  "dependencies": {
+    "kysely": "^0.29.8"
+  },
+  "devDependencies": {
+    "@mavonengine/core": "*",
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "mavonengine": {
+    "target": "server",
+    "server": "./dist/index.js",
+    "engine": ">=0.0.24"
+  }
+}

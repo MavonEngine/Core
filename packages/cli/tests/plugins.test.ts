@@ -66,7 +66,7 @@ describe('plugins.json in the repository', () => {
       expect(readFileSync(join(dir, 'README.md'), 'utf8')).toContain(pkg.name)
     }
 
-    expect(registry.plugins.map(plugin => plugin.package)).toEqual(['@mavonengine/http-monitoring', '@mavonengine/chat'])
+    expect(registry.plugins.map(plugin => plugin.package)).toEqual(['@mavonengine/http-monitoring', '@mavonengine/chat', '@mavonengine/sqlite'])
   })
 
   it('is read from the main branch on GitHub', () => {

@@ -82,6 +82,21 @@ export default class PluginHost<P extends { name?: string }, C> {
     return results
   }
 
+  /**
+   * Call `hook` on the plugin of package `pkg` only. Undefined when there is no such plugin, it has no such hook or it threw.
+   */
+  callOn<K extends HookName<P>>(pkg: string, hook: K, ...args: HookArgs<P, K>): HookResult<P, K> | undefined {
+    const entry = this.entries.find(e => e.loaded.package === pkg)
+    return entry && this.call(entry, hook, args)
+  }
+
+  /**
+   * Stop running a plugin: none of its hooks are called any more.
+   */
+  remove(pkg: string): void {
+    this.entries = this.entries.filter(e => e.loaded.package !== pkg)
+  }
+
   private call(entry: Entry<P, C>, hook: PropertyKey, args: unknown[]): any {
     const fn = (entry.loaded.plugin as Record<PropertyKey, unknown>)[hook]
     if (typeof fn !== 'function' || entry.failed.has(hook))

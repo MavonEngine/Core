@@ -1,5 +1,6 @@
 import type { MetricsSource } from './MetricsClient'
 import type { LogLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot } from './snapshot'
+import { MetricsSourceError } from './MetricsClient'
 
 const HISTORY_LENGTH = 60
 /** As many as a real server keeps */
@@ -34,6 +35,49 @@ const SIMULATED_PLUGINS: PluginLine[] = [
     usedPrefabs: ['Tree'],
   },
   { package: 'chat', enabled: false, installed: true, runningOnServer: false, version: '1.0.0', target: 'both', declaredPrefabs: [], usedPrefabs: [] },
+  {
+    package: '@mavonengine/sqlite',
+    enabled: true,
+    installed: true,
+    runningOnServer: true,
+    database: true,
+    version: '0.0.1',
+    description: 'A SQLite database for the game server and its plugins, on Node\'s built-in node:sqlite',
+    license: 'MIT',
+    target: 'server',
+    engine: '>=0.0.24',
+    declaredPrefabs: [],
+    usedPrefabs: [],
+  },
+]
+
+/** The tables of the simulated database: a chat plugin's and one of the game's */
+const SIMULATED_TABLES = [
+  {
+    name: 'chat_messages',
+    plugin: '@mavonengine/chat',
+    columns: [
+      { name: 'id', type: 'INTEGER', nullable: false, autoIncrement: true, hasDefault: false },
+      { name: 'player', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
+      { name: 'text', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
+      { name: 'sent_at', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
+    ],
+    rows: Array.from({ length: 137 }, (_, i) => ({ id: i + 1, player: `sim-0${(i % 3) + 1}`, text: ['gg', 'anyone near the tower?', 'brb'][i % 3], sent_at: new Date(Date.UTC(2026, 10, 14, 12, 0, i * 7)).toISOString() })),
+  },
+  {
+    name: 'game_scores',
+    plugin: null,
+    columns: [
+      { name: 'player', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
+      { name: 'score', type: 'INTEGER', nullable: false, autoIncrement: false, hasDefault: true },
+      { name: 'guild', type: 'TEXT', nullable: true, autoIncrement: false, hasDefault: false },
+    ],
+    rows: [
+      { player: 'sim-01', score: 1200, guild: 'Wolves' },
+      { player: 'sim-02', score: 950, guild: null },
+      { player: 'sim-03', score: 400, guild: 'Bears' },
+    ],
+  },
 ]
 
 const SIMULATED_ROUTES: RouteLine[] = [
@@ -326,6 +370,19 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
     },
     async fetchPlugins() {
       return { plugins: SIMULATED_PLUGINS }
+    },
+    async fetchDatabase() {
+      return {
+        provider: '@mavonengine/sqlite',
+        tables: SIMULATED_TABLES.map(({ rows, ...table }) => ({ ...table, rows: rows.length })),
+        migrations: [{ plugin: '@mavonengine/chat', table: 'chat__migrations', applied: [{ name: '001_init', executedAt: '2026-11-14T12:00:00.000Z' }] }],
+      }
+    },
+    async fetchTable(name: string, offset: number, limit: number) {
+      const table = SIMULATED_TABLES.find(t => t.name === name)
+      if (!table)
+        throw new MetricsSourceError(`No table ${name}`, 'disabled')
+      return { table: name, columns: table.columns, rows: table.rows.slice(offset, offset + limit), total: table.rows.length, offset, limit }
     },
   }
 }

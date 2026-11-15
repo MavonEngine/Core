@@ -3,7 +3,7 @@ import type { AvailablePlugin } from '@mavonengine/core/Plugins/registry'
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type AvailablePlugins from './available'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
+import type { DatabaseInfo, DatabaseTableLine, LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { notInProject } from '@mavonengine/core/Plugins/registry'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
@@ -45,6 +45,12 @@ export interface ViewState {
   selectedPlugin?: string | null
   /** Package the Plugins tab asks to confirm the install of, unset when it asks nothing */
   confirmInstall?: string | null
+  /** Table whose rows the Database tab shows, the first one while unset */
+  selectedTable?: string | null
+  /** First row of that table shown */
+  tableOffset?: number
+  /** How many of its rows fit on screen, as last drawn: what left and right page by */
+  tableVisibleRows?: number
 }
 
 /** What the dashboard needs of the installer `mavonengine dev` gives it */
@@ -87,7 +93,59 @@ export interface StartupInfo {
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins'] as const
+export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins', 'Database'] as const
+
+/** What left and right page by before the rows were drawn */
+const DEFAULT_VISIBLE_ROWS = 20
+
+/** Whether the tab showing needs the database, which is only fetched for it */
+export function showsDatabase(view: ViewState): boolean {
+  return DASHBOARD_TABS[view.tab] === 'Database'
+}
+
+/** The table the Database tab shows: the one picked, else the first */
+export function selectedTable(view: ViewState, database: DatabaseInfo | null): DatabaseTableLine | undefined {
+  const tables = database?.tables ?? []
+  return tables.find(t => t.name === view.selectedTable) ?? tables[0]
+}
+
+/**
+ * Keys of the Database tab: arrow keys / j k pick a table, left and right (or page up and down) page through its rows.
+ * Returns whether the key was used.
+ */
+export function handleDatabaseKey(view: ViewState, database: DatabaseInfo | null, key: string, pageRows = view.tableVisibleRows || DEFAULT_VISIBLE_ROWS): boolean {
+  if (!showsDatabase(view))
+    return false
+
+  const tables = database?.tables ?? []
+  const shown = selectedTable(view, database)
+  if (!shown)
+    return false
+
+  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  if (delta !== 0) {
+    const next = tables[Math.max(0, Math.min(tables.length - 1, tables.indexOf(shown) + delta))]
+    if (next.name === shown.name)
+      return false
+    view.selectedTable = next.name
+    view.tableOffset = 0
+    return true
+  }
+
+  const page = key === 'right' || key === 'pagedown' ? 1 : key === 'left' || key === 'pageup' ? -1 : 0
+  if (page === 0)
+    return false
+
+  const offset = view.tableOffset ?? 0
+  // The last page shows the last rows, as many as fit
+  const last = shown.rows === null ? Infinity : Math.max(0, shown.rows - pageRows)
+  const next = Math.max(0, Math.min(last, offset + page * pageRows))
+  if (next === offset)
+    return false
+  view.selectedTable = shown.name
+  view.tableOffset = next
+  return true
+}
 
 /** Whether the tab showing needs the packets and the state sync, which are only fetched for it */
 export function showsNetwork(view: ViewState): boolean {
@@ -110,11 +168,19 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
 }
 
 /**
+ * The tabs to show: the Database tab only while the server says it has a database plugin.
+ * It is the last tab, so the others keep their number keys either way.
+ */
+export function dashboardTabs(state: Pick<DashboardState, 'plugins'>): readonly (typeof DASHBOARD_TABS)[number][] {
+  return state.plugins.some(plugin => plugin.database) ? DASHBOARD_TABS : DASHBOARD_TABS.filter(tab => tab !== 'Database')
+}
+
+/**
  * The tab a number key switches to, or null if the key isn't one.
  */
-export function tabForKey(key: string): number | null {
+export function tabForKey(key: string, tabCount: number = DASHBOARD_TABS.length): number | null {
   const index = Number(key) - 1
-  return Number.isInteger(index) && index >= 0 && index < DASHBOARD_TABS.length ? index : null
+  return Number.isInteger(index) && index >= 0 && index < Math.min(tabCount, DASHBOARD_TABS.length) ? index : null
 }
 
 function sortedPlayers(players: ServerMetricsSnapshot['players']) {
@@ -348,6 +414,7 @@ function statusColor(status: ConnectionStatus, theme: Theme): Color {
 export function renderDashboard(ui: Container, theme: Theme, state: DashboardState, view: ViewState, { transparent = false, startup, openKey = false, available, installer }: RenderOptions = {}) {
   const { snapshot } = state
   const starting = !snapshot && !!startup && (state.status === 'connecting' || state.status === 'unreachable')
+  const tabs = dashboardTabs(state)
 
   ui.column({}, (root) => {
     header(root, theme, state)
@@ -365,8 +432,12 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       waiting(root, theme, state)
     }
     else {
+      // The Database tab went away, e.g. the server restarted without its database plugin
+      if (view.tab >= tabs.length)
+        view.tab = 0
+
       root.tabs({
-        tabs: DASHBOARD_TABS.map((name, i) => `${i + 1} ${name}`),
+        tabs: tabs.map((name, i) => `${i + 1} ${name}`),
         active: view.tab,
         size: 1,
         onSelect: (index) => {
@@ -394,6 +465,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       else if (tab === 'Plugins') {
         pluginsTab(root, theme, state, view, transparent, available, installer)
       }
+      else if (tab === 'Database') {
+        databaseTab(root, theme, state, view, transparent)
+      }
       else {
         root.responsive({
           [WIDE_LAYOUT]: c => wideLayout(c, theme, state, snapshot, view, transparent),
@@ -408,7 +482,7 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
       items: [
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
-        { key: `1-${DASHBOARD_TABS.length}`, label: 'Tabs' },
+        { key: `1-${tabs.length}`, label: 'Tabs' },
         ...(openKey && snapshot ? [{ key: 'o', label: 'Open game' }] : []),
         ...(snapshot && DASHBOARD_TABS[view.tab] === 'Players'
           ? [{ key: '↑↓', label: 'Select player' }, ...(view.selectedPlayerId ? [{ key: 'esc', label: 'Close' }] : [])]
@@ -422,6 +496,9 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
             ]
           : []),
         ...(snapshot && DASHBOARD_TABS[view.tab] === 'Plugins' ? pluginKeys(state, view, available, installer) : []),
+        ...(snapshot && showsDatabase(view) && state.database?.tables.length
+          ? [...(state.database.tables.length > 1 ? [{ key: '↑↓', label: 'Select table' }] : []), { key: '←→', label: 'Page rows' }]
+          : []),
       ],
       right: [starting
         ? { label: 'STARTING', color: statusColor('connecting', theme) }
@@ -1455,6 +1532,145 @@ function pluginDetails(ui: Container, theme: Theme, state: DashboardState, plugi
         { key: 'path', title: 'Path' },
         { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
       ],
+    })
+  })
+}
+
+const MAX_CELL_CHARS = 60
+const LINE_BREAKS_RE = /\r?\n/g
+
+/** One value of a database row as a table cell */
+export function formatCell(value: unknown): string {
+  let text: string
+  if (value === null || value === undefined)
+    text = 'NULL'
+  else if (typeof value === 'object')
+    text = JSON.stringify(value)
+  else
+    text = String(value).replace(LINE_BREAKS_RE, ' ⏎ ')
+
+  return text.length > MAX_CELL_CHARS ? `${text.slice(0, MAX_CELL_CHARS - 1)}…` : text
+}
+
+function tableOwner(table: { plugin: string | null }): string {
+  return table.plugin ?? 'game'
+}
+
+function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
+  const { database } = state
+
+  const notice = state.databaseAvailable === false
+    ? 'Not available: the server runs a @mavonengine/core release without GET /api/game/database'
+    : !database
+        ? state.databaseError ?? 'Asking the server for its database…'
+        : !database.provider
+            ? 'The project has no database plugin. Add one with: mavonengine install @mavonengine/sqlite'
+            : database.tables.length === 0
+              ? `No tables yet in the database of ${database.provider}`
+              : null
+
+  if (notice) {
+    ui.panel({ title: 'Database', size: '1fr' }, (panel) => {
+      panel.text([{ text: notice, fg: state.databaseError && !database ? theme.danger : theme.muted }])
+    })
+    return
+  }
+
+  const { tables, migrations } = database!
+  const shown = selectedTable(view, database)!
+  let top = 0
+
+  if (state.databaseError)
+    ui.text([{ text: ` ${state.databaseError} — showing what was read last`, fg: theme.danger }], { size: 1 })
+
+  ui.panel({ title: `Tables in ${database!.provider} (${tables.length})`, size: Math.min(tables.length, 8) + 3 }, (panel) => {
+    panel.table<DatabaseTableLine>({
+      rows: tables,
+      selected: tables.indexOf(shown),
+      followSelection: true,
+      onRow: (_row, index, y) => {
+        if (y === 1)
+          top = index
+      },
+      onSelectRow: (visibleRow) => {
+        const row = tables[top + visibleRow]
+        if (!row)
+          return
+        view.selectedTable = row.name
+        view.tableOffset = 0
+        ui.ctx.invalidate()
+      },
+      scrollbar: true,
+      // Zebra stripes are solid fills, which would break transparency
+      zebra: !transparent,
+      size: '1fr',
+      columns: [
+        { key: 'name', title: 'Table' },
+        { key: 'plugin', title: 'Plugin', color: t => t.plugin ? theme.primary : theme.muted, render: tableOwner },
+        { key: 'rows', title: 'Rows', width: 10, align: 'right', render: t => t.rows === null ? '?' : t.rows.toLocaleString('en-US') },
+        { key: 'columns', title: 'Columns', width: 7, align: 'right', render: t => String(t.columns.length) },
+      ],
+    })
+  })
+
+  tableRowsPanel(ui, theme, state, view, shown, transparent)
+
+  if (migrations.length) {
+    ui.panel({ title: 'Migrations', size: Math.min(migrations.length, 4) + 2 }, (panel) => {
+      for (const m of migrations.slice(0, 4)) {
+        const names = m.applied.map(a => a.name).join(', ') || 'none'
+        panel.text([
+          { text: `${m.plugin ?? m.table}  `, fg: m.plugin ? theme.primary : theme.muted },
+          { text: `${m.applied.length} ran: `, fg: theme.muted },
+          { text: names },
+        ])
+      }
+    })
+  }
+}
+
+function tableRowsPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, table: DatabaseTableLine, transparent: boolean) {
+  const detail = state.tableDetail?.table === table.name ? state.tableDetail : null
+  const page = detail?.page
+  const total = page?.total ?? table.rows ?? 0
+  const shownRows = page ? Math.min(page.rows.length, view.tableVisibleRows || page.rows.length) : 0
+  const range = page && shownRows
+    ? `rows ${(page.offset + 1).toLocaleString('en-US')}–${(page.offset + shownRows).toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`
+    : `${total.toLocaleString('en-US')} rows`
+
+  ui.panel({ title: `${table.name} · ${range}${detail?.status === 'loading' ? ' · loading…' : ''}`, size: '1fr' }, (panel) => {
+    if (detail?.status === 'error')
+      panel.text([{ text: detail.error ?? 'Could not load the rows', fg: theme.danger }], { size: 1 })
+
+    if (!page) {
+      if (detail?.status !== 'error')
+        panel.label('Loading the rows…')
+      return
+    }
+
+    if (page.rows.length === 0) {
+      panel.label('The table is empty')
+      return
+    }
+
+    const columns = page.columns.length ? page.columns.map(c => c.name) : Object.keys(page.rows[0])
+    let visible = 0
+    panel.table<Record<string, unknown>>({
+      rows: page.rows,
+      // Counts the rows that fit, so paging moves by a screenful
+      onRow: (_row, _index, y) => {
+        visible = Math.max(visible, y)
+        view.tableVisibleRows = visible
+      },
+      scrollbar: true,
+      zebra: !transparent,
+      size: '1fr',
+      columns: columns.map(name => ({
+        key: name,
+        title: name,
+        color: (row: Record<string, unknown>) => row[name] === null || row[name] === undefined ? theme.muted : undefined,
+        render: (row: Record<string, unknown>) => formatCell(row[name]),
+      })),
     })
   })
 }

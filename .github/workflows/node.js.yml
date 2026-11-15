@@ -53,6 +53,10 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/plugins/http-monitoring
 
+    - name: Typecheck sqlite plugin
+      run: npm run typecheck
+      working-directory: ./packages/plugins/sqlite
+
     # Run the built file directly: npm ci runs before the build, so npm skipped
     # linking the `mavonengine` bin (its target didn't exist yet) and npx would
     # fall back to looking it up on the registry
@@ -117,6 +121,12 @@ jobs:
         name: monitoring-e2e-screenshots-${{ matrix.os }}
         path: e2e/http-monitoring/screenshots
         if-no-files-found: ignore
+
+    # Boots the template's game server with the built @mavonengine/sqlite and a plugin that migrates and writes:
+    # the database file, ctx.db, GET /api/game/database, the data after a restart, and the server without the plugin
+    - name: SQLite end-to-end test
+      timeout-minutes: 5
+      run: npm run test:sqlite-e2e
 
     # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
     # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
