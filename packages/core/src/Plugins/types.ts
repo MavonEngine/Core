@@ -34,7 +34,7 @@ export interface AdminToken {
   matches(candidate: string): boolean
 }
 
-interface PluginContextBase<TGame extends BaseGame> {
+interface PluginContextBase<TGame extends BaseGame, TApis> {
   /** npm package name of the plugin */
   readonly package: string
   /** `plugins.<package>.options` from mavonengine.json */
@@ -46,9 +46,16 @@ interface PluginContextBase<TGame extends BaseGame> {
    * Register the same type in the plugin's client and server entries to build it on both.
    */
   registerSceneObject<T extends GameObject>(definition: Omit<SceneObjectDefinition<T>, 'plugin'>): string
+  /**
+   * The api of another plugin on this side, what its `api()` returned. Undefined when that plugin isn't installed,
+   * enabled or running, or has no api, so a plugin can work without the ones it can use:
+   * `ctx.plugin('@mavonengine/mail')?.send(new Welcome(player))`. Ready from `setup()` on.
+   */
+  plugin<K extends keyof TApis>(pkg: K): TApis[K] | undefined
+  plugin<T = unknown>(pkg: string): T | undefined
 }
 
-export interface ClientPluginContext extends PluginContextBase<Game> {
+export interface ClientPluginContext extends PluginContextBase<Game, ClientPluginApis> {
   /**
    * URL of a file in the plugin's assets directory, e.g. `assetUrl('models/tree.glb')` → `/plugins/<package>/models/tree.glb`.
    */
@@ -63,7 +70,7 @@ export interface EditorPluginContext extends ClientPluginContext {
   readonly editor: IEditor
 }
 
-export interface ServerPluginContext extends PluginContextBase<BaseGame> {
+export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerPluginApis> {
   readonly server: Server<GameObject>
   /** Directory with mavonengine.json, when the plugins were loaded from it */
   readonly projectRoot?: string
@@ -92,9 +99,33 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame> {
   identity(channel: ServerChannel): Identity | undefined
 }
 
+/**
+ * The apis server plugins give each other, by package, so `ctx.plugin()` knows their type. A plugin with an api adds
+ * itself:
+ *
+ * ```ts
+ * declare module '@mavonengine/core/Plugins/types' {
+ *   interface ServerPluginApis {
+ *     '@mavonengine/mail': MailApi
+ *   }
+ * }
+ * ```
+ */
+export interface ServerPluginApis {}
+
+/** The same for client plugins, in the browser: a plugin's client api can differ from its server api */
+export interface ClientPluginApis {}
+
 interface PluginBase<TContext> {
   /** Shown in logs. Defaults to the package name */
   name?: string
+  /**
+   * What the plugin offers other plugins, which they get with `ctx.plugin('<this package>')`. Called once, before any
+   * plugin's `setup()`, so other plugins can use it in theirs whatever the order they load in. On the server it runs
+   * after the database migrations, so a plugin they turned off has no api. Add the type to `ServerPluginApis` or
+   * `ClientPluginApis`.
+   */
+  api?(ctx: TContext): unknown
   /** Called once when the game (client) or server starts */
   setup?(ctx: TContext): void
 }

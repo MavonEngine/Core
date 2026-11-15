@@ -763,7 +763,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private createPluginHost(plugins: LoadedPlugin<ServerPlugin>[]) {
     // eslint-disable-next-line ts/no-this-alias
     const server = this
-    return new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
+    const host: PluginHost<ServerPlugin, ServerPluginContext> = new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
       package: loaded.package,
       options: loaded.options,
       game: this.game,
@@ -777,11 +777,13 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       },
       table: name => tableName(loaded.package, name),
       identity: identityOf,
+      plugin: (pkg: string) => host.api(pkg) as any,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
+    return host
   }
 
   /**
@@ -937,6 +939,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
       this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
 
+    this.plugins.exposeApis()
     this.plugins.runAround('setup', asPlugin)
 
     this.http.start()

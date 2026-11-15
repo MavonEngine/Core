@@ -13,6 +13,42 @@ function host(plugins: TestPlugin[], logger = { info: vi.fn(), error: vi.fn() })
   return { host: new PluginHost<TestPlugin, { pkg: string }>(loaded, p => ({ pkg: p.package }), logger as any, 'server'), logger }
 }
 
+describe('pluginHost apis', () => {
+  function apiHost(plugins: (TestPlugin & { api?(ctx: { pkg: string }): unknown })[]) {
+    const logger = { info: vi.fn(), error: vi.fn() }
+    const loaded = plugins.map((plugin, i) => ({ package: `p${i}`, options: {}, plugin }))
+    return { host: new PluginHost<typeof plugins[number], { pkg: string }>(loaded, p => ({ pkg: p.package }), logger as any, 'server'), logger }
+  }
+
+  it('keeps what each plugin\'s api() returned, called with its context', () => {
+    const mail = { send: vi.fn() }
+    const { host: h } = apiHost([{ api: ctx => ({ ...mail, from: ctx.pkg }) }, {}, { api: () => undefined }])
+
+    expect(h.api('p0')).toBeUndefined()
+    h.exposeApis()
+
+    expect(h.api('p0')).toEqual({ ...mail, from: 'p0' })
+    expect(h.api('p1')).toBeUndefined()
+    expect(h.api('p2')).toBeUndefined()
+    expect(h.api('nope')).toBeUndefined()
+  })
+
+  it('has no api for a plugin whose api() threw, or that was removed', () => {
+    const { host: h, logger } = apiHost([{ api: () => {
+      throw new Error('broken')
+    } }, { api: () => 'api' }])
+
+    h.exposeApis()
+
+    expect(h.api('p0')).toBeUndefined()
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('failed in api()'))
+    expect(h.api('p1')).toBe('api')
+
+    h.remove('p1')
+    expect(h.api('p1')).toBeUndefined()
+  })
+})
+
 describe('pluginHost', () => {
   it('logs each plugin when it loads', () => {
     const { logger } = host([{}, { name: 'Trees' }])
