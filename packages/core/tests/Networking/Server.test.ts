@@ -706,6 +706,22 @@ describe('server', () => {
       expect(other.channel.emit).toHaveBeenCalledTimes(1)
     })
 
+    it('ignores a client that asks to attach the editor in production, which would show it the whole world', () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const warn = vi.spyOn(logger, 'warn')
+      const server = new TestServer(logger)
+      const other = connect('player')
+      const cheater = connect('cheater')
+
+      cheater.handlers[ClientCommand.CL_EDITOR]()
+
+      expect(server.editorChannels.size).toBe(0)
+      expect(server.game.world.entities.items.has('cheater')).toBe(true)
+      expect(other.channel.emit).not.toHaveBeenCalledWith(ServerCommand.SV_REMOVE_ENTITY, { id: 'cheater' })
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('cheater asked to attach the editor, which a production server doesn\'t allow'))
+      vi.unstubAllEnvs()
+    })
+
     it('sends the editor every entity, however far away', () => {
       const server = new TestServer(logger)
       server.getStateSyncDistance = () => 10

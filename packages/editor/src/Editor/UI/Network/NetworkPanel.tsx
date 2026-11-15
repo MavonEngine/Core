@@ -4,7 +4,7 @@ import type { NetworkOverlayOptions } from '../../Network/NetworkOverlay'
 import type { RecordFilter } from './format'
 import type { RecordSource } from './useRecords'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { describeRecord, filterRecords, formatBytes, formatTime } from './format'
+import { describeConnectError, describeRecord, filterRecords, formatBytes, formatTime } from './format'
 import styles from './NetworkPanel.module.css'
 import Timeline, { laneOf } from './Timeline'
 import { useRecordDetail, useRecords } from './useRecords'
@@ -42,6 +42,7 @@ function useConnection() {
       tick,
       stateAge: receivedAt === null ? null : Math.round(performance.now() - receivedAt),
       missedStates,
+      refused: network.connectError ? describeConnectError(network.connectError) : undefined,
     }
   }
 
@@ -58,6 +59,15 @@ function Status() {
   const connection = useConnection()
   if (!connection)
     return <span className={styles.status}>This tab has no game connection</span>
+
+  if (!connection.connected && connection.refused) {
+    return (
+      <span className={styles.status} title={connection.refused.detail}>
+        <span className={styles.dotOff} />
+        {`${connection.refused.short} · ${connection.refused.detail}`}
+      </span>
+    )
+  }
 
   return (
     <span className={styles.status}>

@@ -68,6 +68,7 @@ export default class NetworkManager extends EventEmitter {
   ping = 1000
   pingNow = 0
   private _connected = false
+  private _connectError: ConnectError | null = null
   private _editorMode = false
 
   private currentSequenceId = 0
@@ -111,6 +112,7 @@ export default class NetworkManager extends EventEmitter {
     this._socket.onConnect((error) => {
       if (error) {
         const failed = error as ConnectError
+        this._connectError = failed
         Game.instance().logger?.error(`Socket error: ${failed.message}`)
         this.net.event('connect_error', { info: { status: failed.status ?? null, message: failed.message } })
         this.onConnectError(failed)
@@ -120,6 +122,7 @@ export default class NetworkManager extends EventEmitter {
 
       Game.instance().logger?.info(`Socket connection established: ${this._socket.id}`)
       this._connected = true
+      this._connectError = null
       this.net.event('connect', { info: { id: this._socket.id } })
       if (this._editorMode)
         this.announceEditor()
@@ -197,6 +200,14 @@ export default class NetworkManager extends EventEmitter {
 
   private announceEditor() {
     this._socket.emit(ClientCommand.CL_EDITOR, { type: ClientCommand.CL_EDITOR }, { reliable: true })
+  }
+
+  /**
+   * Why the last attempt to connect failed, e.g. `status` 401 when the server's auth plugin turned this client away.
+   * Null before and once connected. Kept, unlike the `connectError` event, for whoever looks after it happened
+   */
+  get connectError(): ConnectError | null {
+    return this._connectError
   }
 
   /**

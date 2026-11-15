@@ -66,7 +66,11 @@ describe('network manager auth', () => {
 
     socket.connect!({ message: 'Connection failed with status code 401.', status: 401, statusText: 'Unauthorized' })
     expect(refused).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }))
+    // Kept for whoever looks later, like the editor's panels, and cleared once connected
+    expect(network.connectError?.status).toBe(401)
     expect(network.identity).toBeUndefined()
+    socket.connect!()
+    expect(network.connectError).toBeNull()
 
     socket.userData = { id: 'acc-1', name: 'alice' }
     expect(network.identity).toEqual({ id: 'acc-1', name: 'alice' })

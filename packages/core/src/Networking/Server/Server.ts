@@ -603,6 +603,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    */
   private attachEditor(channel: ServerChannel) {
     const id = channel.id!
+    // An editor is sent every entity in the world, however far away: in production that would let any player see
+    // the whole map. The editor only runs in dev, so a production server ignores the request
+    if (!devEndpointsEnabled()) {
+      const identity = identityOf(channel)
+      this.logger.warn(`${id}${identity ? ` (${identity.name ?? identity.id})` : ''} asked to attach the editor, which a production server doesn't allow: ignored`)
+      this.net.event('editor_refused', { peer: id })
+      return
+    }
     if (this.editorChannels.has(id))
       return
     this.editorChannels.add(id)

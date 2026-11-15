@@ -1,3 +1,4 @@
+import type { ConnectError } from '@mavonengine/core/Networking/Client/NetworkManager'
 import type { NetRecord } from '@mavonengine/core/Networking/Debug/NetRecorder'
 
 export function formatBytes(bytes: number | undefined): string {
@@ -48,4 +49,20 @@ export function filterRecords(records: NetRecord[], { kind, pings, text }: Recor
     (kind === 'all' || record.kind === kind)
     && (pings || (record.type !== 'ping' && record.type !== 'pong'))
     && (!needle || record.type.toLowerCase().includes(needle) || !!record.peer?.toLowerCase().includes(needle)))
+}
+
+/** Why this tab isn't connected, in the words of what to do about it: `short` for a status line, `detail` for its tooltip */
+export function describeConnectError(error: ConnectError): { short: string, detail: string } {
+  switch (error.status) {
+    case 401:
+      return { short: 'refused (401)', detail: 'The server\'s auth plugin turned this tab away: log in to the game first, then reload' }
+    case 403:
+      return { short: 'refused (403)', detail: 'The server\'s auth plugin doesn\'t let this account connect' }
+    case 503:
+      return { short: 'refused (503)', detail: 'The server has an auth plugin that isn\'t running, so it turns every client away: see the server log' }
+    case undefined:
+      return { short: 'could not connect', detail: error.message }
+    default:
+      return { short: `refused (${error.status})`, detail: error.message }
+  }
 }

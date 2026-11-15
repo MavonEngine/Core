@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { version } from '../../../package.json' with { type: 'json' }
 import ControllerDebug from './Controllers/ControllerDebug'
 import { useGamepads } from './Controllers/useGamepads'
+import { describeConnectError } from './Network/format'
 import styles from './StatusBar.module.css'
 import { useSceneStats } from './useSceneStats'
 import Window from './Window'
@@ -12,6 +13,7 @@ export default function StatusBar() {
   const gamepads = useGamepads()
   const [controllerDebugOpen, setControllerDebugOpen] = useState(false)
   const scene = useActiveScene()
+  const refused = useConnectionRefused()
 
   return (
     <div className={styles.statusBar}>
@@ -19,6 +21,11 @@ export default function StatusBar() {
         <span className={styles.branch} title={scene ? `scenes/${scene.file}.json` : 'No scene loaded'}>
           {scene ? `${scene.name}${scene.dirty ? ' ●' : ''}` : 'no scene'}
         </span>
+        {refused && (
+          <span className={styles.warning} title={refused.detail} role="status">
+            {`⚠ Server ${refused.short}`}
+          </span>
+        )}
         <span className={styles.stat}>
           <span className={styles.statLabel}>FPS</span>
           {stats.fps}
@@ -102,4 +109,24 @@ function useActiveScene() {
   }, [])
 
   return state
+}
+
+/** Why the server turned this tab's connection away, checked every second, so it shows even with the Network panel closed */
+function useConnectionRefused() {
+  const [refused, setRefused] = useState<ReturnType<typeof describeConnectError>>()
+
+  useEffect(() => {
+    const read = () => {
+      const network = window.Game.network
+      const error = network && !network.connected ? network.connectError : null
+      const next = error ? describeConnectError(error) : undefined
+      // Same object while nothing changed, so the bar doesn't render every second
+      setRefused(previous => previous?.short === next?.short ? previous : next)
+    }
+    read()
+    const timer = setInterval(read, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return refused
 }

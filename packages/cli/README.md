@@ -403,7 +403,7 @@ Other plugins read the identity with `ctx.identity(channel)`, and the game with 
 
 On the client, a refusal arrives as the `connectError` event of the `NetworkManager` (and its `onConnectError()`), with the `status` the server answered. The token is read when a `NetworkManager` is made, so to connect again after logging in, make a new one. A game that handles the token itself passes `authorization` to the `NetworkManager` instead.
 
-Only one auth plugin is asked: with more than one enabled, set `"auth": "<package>"` in mavonengine.json. When the project has an auth plugin that doesn't run, for example because one of its migrations failed or the package named in `auth` isn't enabled, the server turns every client away with 503 instead of letting them in unchecked. The editor connects like a client too, so with an auth plugin it needs a token as well.
+Only one auth plugin is asked: with more than one enabled, set `"auth": "<package>"` in mavonengine.json. When the project has an auth plugin that doesn't run, for example because one of its migrations failed or the package named in `auth` isn't enabled, the server turns every client away with 503 instead of letting them in unchecked. The editor connects like a client too, so with an auth plugin it needs a token as well: when the server turns it away, the editor's status bar and Network panel say why. A server in production (`NODE_ENV=production`) ignores clients that ask to attach the editor, since the editor is sent every entity in the world.
 
 Projects made with `mavonengine create` are already set up for plugins. To set up an existing project:
 
