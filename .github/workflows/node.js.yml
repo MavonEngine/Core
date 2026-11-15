@@ -130,7 +130,8 @@ jobs:
 
     # Boots the template's game server with a stub auth plugin and sends geckos' connection request the way a client
     # does: refused tokens get the plugin's status, the right one its identity, and a missing auth plugin locks everyone out.
-    # Then the built @mavonengine/auth on sqlite: register, connect as the account, a restart, disabling the account
+    # Then the built @mavonengine/auth on sqlite: register, connect as the account, a restart, disabling the account.
+    # Last, in the runner's Chrome: a tab without a session is refused, a registered player and a guest join the game
     - name: Auth end-to-end test
       timeout-minutes: 5
       run: npm run test:auth-e2e
