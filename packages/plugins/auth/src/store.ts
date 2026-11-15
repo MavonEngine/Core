@@ -14,7 +14,13 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
  * Times are ISO strings, which sort like the times they are on every database.
  */
 
-export interface Account extends Omit<AccountInfo, 'guest'> {
+export interface Account extends Omit<AccountInfo, 'guest' | 'email'> {
+  /** Optional, unique regardless of case. Only shown to the player itself and to admins, never in the game's identity */
+  email: string | null
+  /** When the player confirmed the email is theirs, null until then. Nothing sets it before there is a mail plugin */
+  emailVerifiedAt: string | null
+  /** When a session was last started for it: a login, a registration, a guest playing */
+  lastLoginAt: string | null
   createdAt: string
   /** When an admin disabled it, null while it may log in */
   disabledAt: string | null
@@ -49,7 +55,13 @@ export const migrations: Record<string, PluginMigration> = {
         .addColumn('guest', 'integer', c => c.notNull().defaultTo(0))
         .addColumn('created_at', 'varchar(32)', c => c.notNull())
         .addColumn('disabled_at', 'varchar(32)')
+        .addColumn('email', 'varchar(254)')
+        // The email lowercased, so one address can't be taken twice in another case. Unique; nulls don't count
+        .addColumn('email_key', 'varchar(254)')
+        .addColumn('email_verified_at', 'varchar(32)')
+        .addColumn('last_login_at', 'varchar(32)')
         .execute()
+      await db.schema.createIndex(`${table('accounts')}_email`).on(table('accounts')).column('email_key').unique().execute()
 
       await db.schema.createTable(table('identities'))
         .addColumn('provider', 'varchar(32)', c => c.notNull())
@@ -80,7 +92,21 @@ export function hashToken(token: string): string {
 }
 
 function toAccount(row: Record<string, any>): Account {
-  return { id: row.id, name: row.name, createdAt: row.created_at, disabledAt: row.disabled_at ?? null, guest: Number(row.guest) === 1 }
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email ?? null,
+    emailVerifiedAt: row.email_verified_at ?? null,
+    lastLoginAt: row.last_login_at ?? null,
+    createdAt: row.created_at,
+    disabledAt: row.disabled_at ?? null,
+    guest: Number(row.guest) === 1,
+  }
+}
+
+/** What an email is looked up and kept unique by */
+export function emailKey(email: string): string {
+  return email.trim().toLowerCase()
 }
 
 export default class AuthStore {
@@ -91,8 +117,19 @@ export default class AuthStore {
     return this.db.transaction().execute(trx => work(new AuthStore(trx, this.table, this.now)))
   }
 
-  async createAccount(name: string, { guest = false } = {}): Promise<Account> {
-    const account = { id: randomUUID(), name, guest: guest ? 1 : 0, created_at: this.now().toISOString(), disabled_at: null }
+  async createAccount(name: string, { guest = false, email = null as string | null, emailVerified = false } = {}): Promise<Account> {
+    const now = this.now().toISOString()
+    const account = {
+      id: randomUUID(),
+      name,
+      guest: guest ? 1 : 0,
+      email: email?.trim() ?? null,
+      email_key: email ? emailKey(email) : null,
+      email_verified_at: email && emailVerified ? now : null,
+      last_login_at: null,
+      created_at: now,
+      disabled_at: null,
+    }
     await this.db.insertInto(this.table('accounts')).values(account).execute()
     return toAccount(account)
   }
@@ -104,6 +141,23 @@ export default class AuthStore {
 
   async rename(id: string, name: string): Promise<void> {
     await this.db.updateTable(this.table('accounts')).set({ name }).where('id', '=', id).execute()
+  }
+
+  /** Whether another account than `exceptId` has this email, in any case */
+  async emailTaken(email: string, exceptId?: string): Promise<boolean> {
+    let query = this.db.selectFrom(this.table('accounts')).select('id').where('email_key', '=', emailKey(email))
+    if (exceptId)
+      query = query.where('id', '!=', exceptId)
+    return !!await query.executeTakeFirst()
+  }
+
+  /** Give the account an email, or take it away with null. A new one isn't verified */
+  async setEmail(id: string, email: string | null, { verified = false } = {}): Promise<void> {
+    await this.db.updateTable(this.table('accounts')).set({
+      email: email?.trim() ?? null,
+      email_key: email ? emailKey(email) : null,
+      email_verified_at: email && verified ? this.now().toISOString() : null,
+    }).where('id', '=', id).execute()
   }
 
   /** A guest account becomes a full one, under a name of its own: same id, so what the game kept for it stays */
@@ -165,6 +219,7 @@ export default class AuthStore {
       expires_at: expiresAt,
       last_seen_at: now.toISOString(),
     }).execute()
+    await this.db.updateTable(this.table('accounts')).set({ last_login_at: now.toISOString() }).where('id', '=', accountId).execute()
     return { token, expiresAt }
   }
 
@@ -178,7 +233,7 @@ export default class AuthStore {
     const now = this.now()
     const row = await this.db.selectFrom(`${this.table('sessions')} as s`)
       .innerJoin(`${this.table('accounts')} as a`, 'a.id', 's.account_id')
-      .select(['a.id', 'a.name', 'a.guest', 'a.created_at', 'a.disabled_at', 's.expires_at'])
+      .select(['a.id', 'a.name', 'a.guest', 'a.email', 'a.email_verified_at', 'a.last_login_at', 'a.created_at', 'a.disabled_at', 's.expires_at'])
       .where('s.token_hash', '=', hash)
       .executeTakeFirst()
     if (!row)

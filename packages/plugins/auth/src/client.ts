@@ -74,11 +74,11 @@ function keep(session: SessionResponse): AccountInfo {
 }
 
 /**
- * Make an account and log in with it. Logged in as a guest, the guest account becomes this one. Rejects with an
- * `AuthRequestError`, e.g. 409 for a taken name
+ * Make an account and log in with it, with an email if given. Logged in as a guest, the guest account becomes this
+ * one. Rejects with an `AuthRequestError`, e.g. 409 for a taken name or email
  */
-export async function register(username: string, password: string): Promise<AccountInfo> {
-  return keep((await call<SessionResponse>('POST', '/register', { username, password }))!)
+export async function register(username: string, password: string, email?: string): Promise<AccountInfo> {
+  return keep((await call<SessionResponse>('POST', '/register', email ? { username, password, email } : { username, password }))!)
 }
 
 /**

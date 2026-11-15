@@ -22,6 +22,11 @@ export interface AccountInfo {
   name: string
   /** Set on a guest account, which keeps its progress only while the browser keeps its session: register to keep it for good */
   guest?: true
+  /**
+   * The account's email, only in answers to the player itself (register, login, `/me`), never in the identity the
+   * game server and its plugins get. Null when it has none
+   */
+  email?: string | null
 }
 
 /** What register and login answer with */
@@ -36,6 +41,19 @@ export interface SessionResponse {
 /** What a route answers when it doesn't do what was asked */
 export interface AuthErrorResponse {
   error: string
+}
+
+/** Longest email address there can be */
+export const MAX_EMAIL_LENGTH = 254
+
+// Something@something.something, without spaces: the rest only a mail to it can tell
+const EMAIL_RE = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/
+
+/** Why an email can't be used, or undefined when it can */
+export function emailProblem(email: unknown): string | undefined {
+  if (typeof email !== 'string' || email.trim().length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email.trim()))
+    return 'That is no email address'
+  return undefined
 }
 
 /** Why a username can't be used, or undefined when it can */

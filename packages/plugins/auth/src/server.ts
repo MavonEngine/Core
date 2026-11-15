@@ -6,7 +6,7 @@ import type { Account } from './store'
 import { randomInt } from 'node:crypto'
 import process from 'node:process'
 import { decoyHash, hashPassword, verifyPassword } from './password'
-import { DEFAULT_PATH, PASSWORD_PROVIDER, passwordProblem, usernameProblem } from './protocol'
+import { DEFAULT_PATH, emailProblem, PASSWORD_PROVIDER, passwordProblem, usernameProblem } from './protocol'
 import RateLimit from './rateLimit'
 import AuthStore, { hashToken, migrations } from './store'
 
@@ -135,8 +135,24 @@ function running(state: AuthState): AuthStore {
   return state.store
 }
 
+/** What the game server and its plugins may know of an account: its identity. No email */
 function publicAccount(account: Account): AccountInfo {
   return account.guest ? { id: account.id, name: account.name, guest: true } : { id: account.id, name: account.name }
+}
+
+/** What the player itself is told of its account: with its email */
+function ownAccount(account: Account): AccountInfo {
+  return { ...publicAccount(account), email: account.email }
+}
+
+/** An email from a request or a provider, trimmed, or undefined for none. Throws a 400 for one that can't be used */
+function emailFrom(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '')
+    return undefined
+  const problem = emailProblem(value)
+  if (problem)
+    throw new AuthError(400, problem)
+  return (value as string).trim()
 }
 
 /** A name from a provider made safe to show: no control characters, not too long, never empty */
@@ -147,7 +163,7 @@ function cleanName(name: string | undefined): string {
 
 async function startSession(state: AuthState, store: AuthStore, account: Account): Promise<SessionResponse> {
   const { token, expiresAt } = await store.createSession(account.id, lifetimeOf(state)(account))
-  return { token, account: publicAccount(account), expiresAt }
+  return { token, account: ownAccount(account), expiresAt }
 }
 
 /** Close the game connections of an account: it reconnects only with a session that still works */
@@ -191,9 +207,11 @@ export interface AuthHooks {
    * the account linked to `externalId` gets a new session, and a new account is made for a user seen the first time.
    * With `linkTo`, a new user is linked to that account instead, so one player logs in either way. A guest account
    * linked that way becomes a full one, named after the profile, and keeps its id.
+   * The profile's `email` is kept on an account that has none, when no other account has it; `emailVerified` says the
+   * provider checked it is the user's.
    * Rejects with 403 for a disabled account and 409 when `linkTo` asks to link a user another account already has.
    */
-  signIn(provider: string, externalId: string, profile?: { name?: string }, options?: { linkTo?: string }): Promise<SessionResponse>
+  signIn(provider: string, externalId: string, profile?: { name?: string, email?: string, emailVerified?: boolean }, options?: { linkTo?: string }): Promise<SessionResponse>
   /** The account a session token is logged in as. Undefined for an unknown or expired token */
   accountOf(token: string): Promise<Account | undefined>
   account(id: string): Promise<Account | undefined>
@@ -217,7 +235,10 @@ export function auth(server: object): AuthHooks {
         throw new AuthError(400, 'signIn() needs the provider\'s id of the user')
 
       const store = running(state)
+      // A provider's email that can't be used is left out rather than failing the login
+      const email = emailProblem(profile.email) ? undefined : profile.email!.trim()
       return store.transaction(async (tx) => {
+        const freeEmail = async (accountId?: string) => email && !await tx.emailTaken(email, accountId) ? email : undefined
         const known = await tx.identity(provider, externalId)
         let account: Account | undefined
         if (known) {
@@ -235,9 +256,14 @@ export function auth(server: object): AuthHooks {
             await tx.upgradeGuest(account.id, name)
             account = { ...account, name, guest: false }
           }
+          const linkedEmail = account.email ? undefined : await freeEmail(account.id)
+          if (linkedEmail) {
+            await tx.setEmail(account.id, linkedEmail, { verified: profile.emailVerified === true })
+            account = { ...account, email: linkedEmail }
+          }
         }
         else {
-          account = await tx.createAccount(cleanName(profile.name))
+          account = await tx.createAccount(cleanName(profile.name), { email: await freeEmail(), emailVerified: profile.emailVerified === true })
           await tx.addIdentity({ provider, externalId, accountId: account.id, secret: null })
         }
 
@@ -343,16 +369,17 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
 
   app.post(`${path}/register`, describe({
     summary: 'Make an account with a username and password',
-    description: 'Send `{ "username": "...", "password": "..." }`. The username is 3 to 32 letters, digits, `_`, `.` or `-` and unique regardless of case; the password at least 8 characters. Sent with the session of a guest (`Authorization: Bearer <token>`), the guest account becomes this one, with the same id.',
-    response: '201 with `{ token, account, expiresAt }`, logged in. 400 for a name or password that can\'t be used, 409 for a taken name, 403 when registration is off',
+    description: 'Send `{ "username": "...", "password": "...", "email": "..." }`, the email optional. The username is 3 to 32 letters, digits, `_`, `.` or `-` and unique regardless of case; the password at least 8 characters; the email unique regardless of case. Sent with the session of a guest (`Authorization: Bearer <token>`), the guest account becomes this one, with the same id.',
+    response: '201 with `{ token, account, expiresAt }`, logged in. 400 for a name, password or email that can\'t be used, 409 for a taken name or email, 403 when registration is off',
   }), route(state, async (req, res) => {
     if (!state.options.registration)
       throw new AuthError(403, 'Registration is turned off on this server')
 
-    const { username, password } = await body(req)
+    const { username, password, email: rawEmail } = await body(req)
     const problem = usernameProblem(username) ?? passwordProblem(password)
     if (problem)
       throw new AuthError(400, problem)
+    const email = emailFrom(rawEmail)
 
     const store = running(state)
     const key = (username as string).toLowerCase()
@@ -365,20 +392,26 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     const session = await store.transaction(async (tx) => {
       if (await tx.identity(PASSWORD_PROVIDER, key))
         throw new AuthError(409, 'That username is taken')
+      if (email && await tx.emailTaken(email, guest?.id))
+        throw new AuthError(409, 'That email is in use')
       let account: Account
       if (guest) {
         await tx.upgradeGuest(guest.id, username as string)
-        account = { ...guest, name: username as string, guest: false }
+        if (email)
+          await tx.setEmail(guest.id, email)
+        account = { ...guest, name: username as string, guest: false, email: email ?? null, emailVerifiedAt: null }
       }
       else {
-        account = await tx.createAccount(username as string)
+        account = await tx.createAccount(username as string, { email: email ?? null })
       }
       await tx.addIdentity({ provider: PASSWORD_PROVIDER, externalId: key, accountId: account.id, secret })
       return startSession(state, tx, account)
     }).catch(async (err: unknown) => {
-      // Two registrations of one name at once: the second insert breaks the primary key
+      // Two registrations of one name or email at once: the second insert breaks the unique key
       if (!(err instanceof AuthError) && await store.identity(PASSWORD_PROVIDER, key))
         throw new AuthError(409, 'That username is taken')
+      if (!(err instanceof AuthError) && email && await store.emailTaken(email))
+        throw new AuthError(409, 'That email is in use')
       throw err
     })
 
@@ -466,10 +499,10 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
   app.get(`${path}/me`, describe({
     summary: 'The account this session is logged in as',
     description: 'With `Authorization: Bearer <token>`. Moves the session on, like connecting does.',
-    response: '`{ account }` with its id and name, 401 when not logged in',
+    response: '`{ account }` with its id, name and email, 401 when not logged in',
   }), route(state, async (req, res) => {
     const { account } = await requireSession(state, req)
-    res.json({ account: publicAccount(account) })
+    res.json({ account: ownAccount(account) })
   }))
 
   app.post(`${path}/password`, describe({

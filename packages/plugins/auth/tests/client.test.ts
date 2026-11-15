@@ -49,6 +49,14 @@ describe('auth client', () => {
     expect(currentAccount()).toEqual({ id: 'acc-9', name: 'Ada' })
   })
 
+  it('registers with an email when given one', async () => {
+    answer(201, { ...session, account: { ...ada, email: 'ada@example.com' } })
+
+    expect((await register('Ada', 'correct horse', 'ada@example.com')).email).toBe('ada@example.com')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ username: 'Ada', password: 'correct horse', email: 'ada@example.com' })
+    expect(currentAccount()?.email).toBe('ada@example.com')
+  })
+
   it('tells the page when the player logs in and out', async () => {
     const seen: unknown[] = []
     const listener = (event: Event) => seen.push((event as CustomEvent).detail)

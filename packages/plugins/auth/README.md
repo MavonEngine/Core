@@ -11,7 +11,8 @@ It keeps its accounts in the server's database, so it needs a database plugin su
 
 ## What it does
 
-- **Accounts** with a username and password. Usernames are 3 to 32 letters, digits, `_`, `.` or `-`, unique regardless of case. Passwords are at least 8 characters and stored as scrypt hashes, built into Node, so there is nothing native to install.
+- **Accounts** with a username and password, and optionally an email. Usernames are 3 to 32 letters, digits, `_`, `.` or `-`, unique regardless of case. Passwords are at least 8 characters and stored as scrypt hashes, built into Node, so there is nothing native to install.
+- **Email**: optional, unique regardless of case. The player sees it in its own account (`register`, `login`, `/me`), admins in the account list; the game's identity of a connection never has it. Nothing is sent to it yet: `emailVerifiedAt` stays empty until a mail plugin can confirm addresses.
 - **Sessions**: logging in gives the browser a random token. The server only keeps its sha256 hash, so a leaked database holds no tokens that work. A session lasts 30 days from when it was last used.
 - **Connection check**: the game connects with the session, and the server turns a client away before it gets a player: 401 without a session that works, 403 for a disabled account. A client that gets in has `{ id, name, session }` as its identity, `session` being a short, non-secret key that tells the account's sessions apart.
 - **Guests**, when you turn them on: a player can start playing without signing up, as a guest account of their own. Guests connect alongside registered players, keep the same account while their browser keeps the session, and keep it for good when they register. See [Guests](#guests).
@@ -94,7 +95,7 @@ async function onLoginForm(username: string, password: string) {
 }
 ```
 
-- `register(username, password)`, `login(username, password)` and `playAsGuest()` resolve with the account (`{ id, name }`, and `guest: true` for a guest) and keep the session in `localStorage`. They reject with an `AuthRequestError` carrying the server's `status` and message.
+- `register(username, password, email?)`, `login(username, password)` and `playAsGuest()` resolve with the account (`{ id, name, email }`, and `guest: true` for a guest) and keep the session in `localStorage`. They reject with an `AuthRequestError` carrying the server's `status` and message.
 - `logout()` forgets the session, on the server too when it can be reached. The server closes the game connection made with that session; the player's other devices stay in the game.
 - `changePassword(current, password)` changes it and logs out every other device, closing their game connections.
 - `currentAccount()` is the stored account, without asking the server. `checkSession()` asks, and forgets a session the server no longer knows.
@@ -131,7 +132,7 @@ const account = await auth(server).account(accountId)
 
 | Route | |
 | --- | --- |
-| `POST /api/auth/register` | `{ username, password }` → 201 `{ token, account, expiresAt }`. Sent with a guest's session, that guest account becomes this one. 409 for a taken name, 400 for one that can't be used, 403 with `registration` off |
+| `POST /api/auth/register` | `{ username, password, email? }` → 201 `{ token, account, expiresAt }`. Sent with a guest's session, that guest account becomes this one. 409 for a taken name or email, 400 for one that can't be used, 403 with `registration` off |
 | `POST /api/auth/guest` | With `guests` on: makes a guest account and logs it in, 201 `{ token, account, expiresAt }`. 403 with guests off, 429 after `guestsPerHour` from one address |
 | `POST /api/auth/login` | `{ username, password }` → `{ token, account, expiresAt }`. 401 wrong username or password, 403 disabled, 429 too many tries (with `Retry-After`) |
 | `POST /api/auth/logout` | Ends the session sent as `Authorization: Bearer <token>`, and closes the game connections made with it. 204 |
@@ -142,7 +143,7 @@ The admin routes ask for the server's admin token (`Authorization: Bearer <admin
 
 | Route | |
 | --- | --- |
-| `GET /api/auth/accounts` | `{ accounts, total }`, newest first, with `?limit=` and `?offset=`. Each with `guest`, `providers` and live `sessions`, never a password hash |
+| `GET /api/auth/accounts` | `{ accounts, total }`, newest first, with `?limit=` and `?offset=`. Each with `email`, `emailVerifiedAt`, `lastLoginAt`, `guest`, `providers` and live `sessions`, never a password hash |
 | `POST /api/auth/accounts/:id/disable` | It can't log in or connect, its sessions end, its connections close |
 | `POST /api/auth/accounts/:id/enable` | It can log in again |
 | `DELETE /api/auth/accounts/:id/sessions` | Logs it out everywhere and closes its connections. `{ ended }` |
@@ -163,6 +164,6 @@ app.get('/api/auth/discord/callback', async (req, res) => {
 })
 ```
 
-`signIn(provider, externalId, profile, options)` logs in the account linked to that user, and makes one the first time the user is seen. With `{ linkTo: accountId }`, a user seen the first time is linked to that account instead, so a player who has a password can log in with Discord too. It rejects with an `AuthError`: 403 for a disabled account, 409 when the user is already linked to another account.
+`signIn(provider, externalId, profile, options)` logs in the account linked to that user, and makes one the first time the user is seen. A `profile.email` is kept on an account that has none, unless another account has it; pass `emailVerified: true` when the provider checked it. With `{ linkTo: accountId }`, a user seen the first time is linked to that account instead, so a player who has a password can log in with Discord too. It rejects with an `AuthError`: 403 for a disabled account, 409 when the user is already linked to another account.
 
 A login plugin has no `authorize()` of its own: this plugin stays the one that checks connections, whichever way the player logged in.

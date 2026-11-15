@@ -81,7 +81,7 @@ async function started(options: Record<string, unknown> = {}, { database = true 
 async function registered(server: Awaited<ReturnType<typeof started>>, username = 'Ada', password = 'correct horse') {
   const res = await server.request('POST', '/register', { body: { username, password } })
   expect(res.status).toBe(201)
-  return res.json as { token: string, account: { id: string, name: string } }
+  return res.json as { token: string, account: { id: string, name: string, email?: string | null } }
 }
 
 describe('auth plugin', () => {
@@ -92,6 +92,68 @@ describe('auth plugin', () => {
     expect(account.name).toBe('Ada')
     expect(await server.authorize(`Bearer ${token}`)).toEqual({ id: account.id, name: 'Ada', session: SESSION })
     expect((await server.request('GET', '/me', { token })).json).toEqual({ account })
+  })
+
+  describe('email', () => {
+    it('is optional, kept with the account and shown to the player, never in the game\'s identity', async () => {
+      const server = await started()
+      const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: '  Ada@Example.com ' } })
+
+      expect(res.status).toBe(201)
+      expect(res.json.account.email).toBe('Ada@Example.com')
+      expect((await server.request('GET', '/me', { token: res.json.token })).json.account.email).toBe('Ada@Example.com')
+      expect(await server.authorize(`Bearer ${res.json.token}`)).not.toHaveProperty('email')
+
+      // Without one
+      expect((await registered(server, 'Bob')).account.email).toBeNull()
+    })
+
+    it('is unique regardless of case', async () => {
+      const server = await started()
+      await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+
+      const taken = await server.request('POST', '/register', { body: { username: 'Bob', password: 'correct horse', email: 'ADA@example.COM' } })
+      expect(taken.status).toBe(409)
+      expect(taken.json.error).toBe('That email is in use')
+      // The name wasn't taken by the failed registration
+      expect((await server.request('POST', '/register', { body: { username: 'Bob', password: 'correct horse' } })).status).toBe(201)
+    })
+
+    it('must look like an email address', async () => {
+      const server = await started()
+      for (const email of ['ada', 'ada@', '@example.com', 'a b@example.com', `${'a'.repeat(250)}@x.io`, 42]) {
+        const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email } })
+        expect(res.status, String(email)).toBe(400)
+      }
+    })
+
+    it('is given to a guest that registers with one', async () => {
+      const server = await started({ guests: true })
+      const guest = (await server.request('POST', '/guest')).json
+
+      const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: 'ada@example.com' })
+    })
+
+    it('comes from a login plugin\'s profile, when no other account has it', async () => {
+      const server = await started()
+      const first = await server.hooks.signIn('discord', '1', { name: 'ada', email: 'ada@example.com', emailVerified: true })
+      expect(first.account.email).toBe('ada@example.com')
+      expect((await server.hooks.account(first.account.id))?.emailVerifiedAt).toEqual(expect.any(String))
+
+      // Taken, or no email at all: the login still works, without one
+      expect((await server.hooks.signIn('github', '2', { name: 'other', email: 'ADA@example.com' })).account.email).toBeNull()
+      expect((await server.hooks.signIn('github', '3', { name: 'odd', email: 'not an email' })).account.email).toBeNull()
+    })
+
+    it('is shown to admins with when the account last logged in', async () => {
+      const server = await started()
+      await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+
+      const [account] = (await server.request('GET', '/accounts', { token: 'admin-token' })).json.accounts
+      expect(account).toMatchObject({ email: 'ada@example.com', emailVerifiedAt: null, lastLoginAt: expect.any(String) })
+      expect(account).not.toHaveProperty('email_key')
+    })
   })
 
   it('turns away a connection without a working session', async () => {
@@ -305,7 +367,7 @@ describe('auth plugin', () => {
 
       const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse' } })
       expect(res.status).toBe(201)
-      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada' })
+      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: null })
       // Both the new session and the guest's own now connect as the full account
       expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
       expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
@@ -334,7 +396,7 @@ describe('auth plugin', () => {
       const guest = await asGuest(server)
 
       const linked = await server.hooks.signIn('discord', '123', { name: 'ada_discord' }, { linkTo: guest.account.id })
-      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord' })
+      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord', email: null })
       expect((await server.hooks.signIn('discord', '123')).account.id).toBe(guest.account.id)
     })
 

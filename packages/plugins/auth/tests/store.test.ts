@@ -145,6 +145,28 @@ describe('auth store', () => {
     expect(await store.db.selectFrom('auth_sessions').select('account_id').execute()).toEqual([{ account_id: live.id }])
   })
 
+  it('keeps one email per account regardless of case, and accounts without one', async () => {
+    const ada = await store.createAccount('Ada', { email: 'Ada@Example.com' })
+    await store.createAccount('Bob')
+    await store.createAccount('Cy')
+
+    expect(ada.email).toBe('Ada@Example.com')
+    expect(await store.emailTaken('ada@example.COM')).toBe(true)
+    expect(await store.emailTaken('ada@example.com', ada.id)).toBe(false)
+    await expect(store.createAccount('Eve', { email: 'ADA@example.com' })).rejects.toThrow()
+
+    await store.setEmail(ada.id, null)
+    expect(await store.emailTaken('ada@example.com')).toBe(false)
+  })
+
+  it('remembers when the account last got a session', async () => {
+    const ada = await store.createAccount('Ada')
+    expect(ada.lastLoginAt).toBeNull()
+
+    await store.createSession(ada.id, DAY)
+    expect((await store.account(ada.id))?.lastLoginAt).toBe('2026-11-15T12:00:00.000Z')
+  })
+
   it('rolls a transaction back when it throws', async () => {
     await expect(store.transaction(async (tx) => {
       await tx.createAccount('Ada')
