@@ -4,7 +4,7 @@ import NetRecorder from '@mavonengine/core/Networking/Debug/NetRecorder'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SyncStore from '../../../src/Editor/Network/SyncStore'
-import { describeRecord, filterRecords, formatBytes, formatTime } from '../../../src/Editor/UI/Network/format'
+import { describeConnectError, describeRecord, filterRecords, formatBytes, formatTime } from '../../../src/Editor/UI/Network/format'
 import NetworkPanel from '../../../src/Editor/UI/Network/NetworkPanel'
 
 vi.mock('../../../src/Editor/UI/Network/NetworkPanel.module.css', () => ({
@@ -160,9 +160,50 @@ describe('networkPanel', () => {
     screen.getByText('This tab has no game connection')
     screen.getByText('This tab is not connected to a game server')
   })
+
+  it('shows the players\' accounts when the server knows them, guests marked', async () => {
+    overlay.sync = new SyncStore(250, async () => ({
+      ...sync,
+      players: [
+        { ...sync.players[0], account: { id: 'acc-1', name: 'ada_account', guest: false } },
+        { ...sync.players[0], id: 'p2', displayName: 'Visitor', account: { id: 'acc-2', name: 'Guest-4821', guest: true } },
+      ],
+    }) as any)
+    render(<NetworkPanel />)
+    await settle()
+
+    screen.getByText('Account')
+    expect(screen.getByText('ada_account').closest('td')?.getAttribute('title')).toBe('Account acc-1')
+    screen.getByText('Guest-4821')
+    screen.getByText('guest')
+  })
+
+  it('leaves the account column out without accounts', async () => {
+    render(<NetworkPanel />)
+    await settle()
+
+    screen.getByText('Ada')
+    expect(screen.queryByText('Account')).toBeNull()
+  })
+
+  it('says why the server turned the tab away', async () => {
+    Object.assign((window as any).Game.network, { connected: false, connectError: { message: 'Connection failed with status code 401.', status: 401 } })
+    render(<NetworkPanel />)
+    await settle()
+
+    screen.getByText(/refused \(401\) · The server's auth plugin turned this tab away: log in to the game first/)
+  })
 })
 
 describe('format', () => {
+  it('says what to do about a refused connection', () => {
+    expect(describeConnectError({ message: 'x', status: 401 }).detail).toMatch(/log in to the game first/)
+    expect(describeConnectError({ message: 'x', status: 403 }).short).toBe('refused (403)')
+    expect(describeConnectError({ message: 'x', status: 503 }).detail).toMatch(/auth plugin that isn't running/)
+    expect(describeConnectError({ message: 'x', status: 418 })).toEqual({ short: 'refused (418)', detail: 'x' })
+    expect(describeConnectError({ message: 'Failed to fetch' })).toEqual({ short: 'could not connect', detail: 'Failed to fetch' })
+  })
+
   it('formats sizes and times', () => {
     expect(formatBytes(undefined)).toBe('')
     expect(formatBytes(512)).toBe('512 B')

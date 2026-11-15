@@ -1,6 +1,7 @@
 import type winston from 'winston'
 import type BaseGame from '../../../BaseGame'
 import type { PlayerConnectionInfo } from '../../Entities/Player'
+import type { PlayerAccount } from '../../identity'
 import type { LatencySimulatorOptions } from '../LatencySimulator'
 import type ServerWorld from '../World'
 import type { BandwidthSample } from './BandwidthTracker'
@@ -8,6 +9,7 @@ import type { CpuHistoryEntry } from './CpuTracker'
 import type { TickSample } from './TickTracker'
 import process from 'node:process'
 import { version as ENGINE_VERSION } from '../../../version'
+import { accountOf } from '../../identity'
 import BandwidthTracker from './BandwidthTracker'
 import CpuTracker from './CpuTracker'
 import TickTracker from './TickTracker'
@@ -28,6 +30,8 @@ export interface PlayerMetrics {
   connectedFor: number
   /** Null when the player has no live connection, e.g. a bot */
   connection: PlayerConnectionInfo | null
+  /** The account the server's auth plugin let the player in as, null without one */
+  account: PlayerAccount | null
 }
 
 export interface ServerHealth {
@@ -172,6 +176,7 @@ export default class ServerMetrics {
         trackedEntities: player.trackedEntities.size,
         connectedFor: Math.max(0, Math.round((Date.now() - player.connectedAt) / 1000)),
         connection: player.connection,
+        account: accountOf(player.identity),
       })),
       world: {
         entities: game.world.entities.length,

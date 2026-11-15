@@ -4,7 +4,7 @@ import type { NetworkOverlayOptions } from '../../Network/NetworkOverlay'
 import type { RecordFilter } from './format'
 import type { RecordSource } from './useRecords'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { describeRecord, filterRecords, formatBytes, formatTime } from './format'
+import { describeConnectError, describeRecord, filterRecords, formatBytes, formatTime } from './format'
 import styles from './NetworkPanel.module.css'
 import Timeline, { laneOf } from './Timeline'
 import { useRecordDetail, useRecords } from './useRecords'
@@ -42,6 +42,7 @@ function useConnection() {
       tick,
       stateAge: receivedAt === null ? null : Math.round(performance.now() - receivedAt),
       missedStates,
+      refused: network.connectError ? describeConnectError(network.connectError) : undefined,
     }
   }
 
@@ -58,6 +59,15 @@ function Status() {
   const connection = useConnection()
   if (!connection)
     return <span className={styles.status}>This tab has no game connection</span>
+
+  if (!connection.connected && connection.refused) {
+    return (
+      <span className={styles.status} title={connection.refused.detail}>
+        <span className={styles.dotOff} />
+        {`${connection.refused.short} · ${connection.refused.detail}`}
+      </span>
+    )
+  }
 
   return (
     <span className={styles.status}>
@@ -78,6 +88,8 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
     return <div className={styles.note}>{error ?? 'Asking the server…'}</div>
 
   const untracked = sync.entities.filter(entity => !entity.player && entity.trackedBy === 0).length
+  // Only a server with an auth plugin knows who its players are; older servers don't say
+  const showAccounts = sync.players.some(player => player.account)
 
   return (
     <div className={styles.sync}>
@@ -94,6 +106,7 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
               <thead>
                 <tr>
                   <th>Player</th>
+                  {showAccounts && <th>Account</th>}
                   <th>Tracked</th>
                   <th>Ack</th>
                   <th>Last state</th>
@@ -108,6 +121,12 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
                     onClick={() => onViewAs(player.id === viewAs ? null : player.id)}
                   >
                     <td>{player.displayName}</td>
+                    {showAccounts && (
+                      <td title={player.account ? `Account ${player.account.id}` : 'Connected without an account'}>
+                        {player.account ? (player.account.name ?? player.account.id) : '—'}
+                        {player.account?.guest && <span className={styles.guest}>guest</span>}
+                      </td>
+                    )}
                     <td>{player.tracked.length}</td>
                     <td>{player.ack}</td>
                     <td>{player.lastState ? `${formatBytes(player.lastState.bytes)} · tick ${player.lastState.tick}` : 'none'}</td>

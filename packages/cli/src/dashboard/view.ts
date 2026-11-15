@@ -3,7 +3,7 @@ import type { AvailablePlugin } from '@mavonengine/core/Plugins/registry'
 import type { Color, Container, Span, Theme } from '@profullstack/hqtui'
 import type AvailablePlugins from './available'
 import type { ConnectionStatus, DashboardState } from './MetricsClient'
-import type { DatabaseInfo, DatabaseTableLine, LogLine, PacketDetail, PacketLine, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
+import type { DatabaseInfo, DatabaseTableLine, LogLine, PacketDetail, PacketLine, PlayerAccount, PluginLine, RequestLine, RouteLine, ServerMetricsSnapshot, SyncPlayerLine } from './snapshot'
 import { stripVTControlCharacters } from 'node:util'
 import { notInProject } from '@mavonengine/core/Plugins/registry'
 import { bootBanner } from '@mavonengine/core/Utils/BootBanner'
@@ -92,6 +92,14 @@ export interface StartupInfo {
 }
 
 type PlayerRow = ServerMetricsSnapshot['players'][number]
+
+/** An account in a table cell: its name, marked when it is a guest. A dash without one */
+export function accountLabel(account: PlayerAccount | null | undefined): string {
+  if (!account)
+    return '—'
+  const name = account.name ?? account.id
+  return account.guest ? `${name} (guest)` : name
+}
 
 export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins', 'Database'] as const
 
@@ -767,6 +775,7 @@ function playerDetails(ui: Container, theme: Theme, player: PlayerRow, size: num
   ui.panel({ title: player.displayName, size }, (panel) => {
     panel.keyValues([
       { label: 'ID', value: player.id },
+      { label: 'Account', value: player.account ? `${accountLabel(player.account)} · ${player.account.id}` : 'none', color: player.account?.guest ? theme.warning : undefined },
       { label: 'Connected', value: formatDuration(player.connectedFor) },
       { label: 'IP', value: connection ? connection.address ?? 'pending' : '—', color: theme.primary },
       { label: 'RTT', value: connection?.rttMs != null ? formatMs(connection.rttMs) : '—' },
@@ -788,6 +797,8 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
   view.playerOffset = Math.min(view.playerOffset, maxOffset)
   // Display names default to the id, so the column only adds noise until a game sets them
   const showNames = rows.some(p => p.displayName !== p.id)
+  // Only servers with an auth plugin know who their players are
+  const showAccounts = rows.some(p => p.account)
 
   ui.panel({ title: `Players (${rows.length})`, size: '1fr' }, (panel) => {
     if (rows.length === 0) {
@@ -825,6 +836,7 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
       },
       columns: [
         ...(showNames ? [{ key: 'displayName', title: 'Name' }] : []),
+        ...(showAccounts ? [{ key: 'account', title: 'Account', render: (p: PlayerRow) => accountLabel(p.account), color: (p: PlayerRow) => p.account?.guest ? theme.warning : undefined }] : []),
         { key: 'id', title: 'ID' },
         { key: 'x', title: 'X', width: 9, align: 'right', render: p => p.position.x.toFixed(2) },
         { key: 'y', title: 'Y', width: 9, align: 'right', render: p => p.position.y.toFixed(2) },
@@ -1088,6 +1100,7 @@ function syncPanel(ui: Container, theme: Theme, { sync }: DashboardState, transp
       size: '1fr',
       columns: [
         { key: 'displayName', title: 'Player' },
+        ...(sync.players.some(p => p.account) ? [{ key: 'account', title: 'Account', render: (p: SyncPlayerLine) => accountLabel(p.account) }] : []),
         { key: 'tracked', title: 'Tracked', width: 8, align: 'right' },
         { key: 'ack', title: 'Ack', width: 9, align: 'right' },
         { key: 'bytes', title: 'State', width: 10, align: 'right', render: p => p.lastState ? formatBytes(p.lastState.bytes) : '—' },

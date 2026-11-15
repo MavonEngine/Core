@@ -110,10 +110,10 @@ describe('chatRoom', () => {
   it('keeps a muted player quiet until the mute ends or is lifted', () => {
     const { room: chat, clock } = room()
 
-    expect(chat.mute(ada.id, 10)).toEqual({ playerId: ada.id, until: clock.now + 600_000 })
+    expect(chat.mute(ada.id, 10)).toEqual({ playerId: ada.id, kind: 'connection', until: clock.now + 600_000 })
     expect(chat.say(ada, 'hello?')).toEqual({ notice: 'You are muted for another 10 min' })
     expect(chat.say(bob, 'hi')).toHaveProperty('message')
-    expect(chat.listMutes()).toEqual([{ playerId: ada.id, until: clock.now + 600_000 }])
+    expect(chat.listMutes()).toEqual([{ playerId: ada.id, kind: 'connection', until: clock.now + 600_000 }])
 
     clock.now += 9 * 60_000 + 1
     expect(chat.say(ada, 'hello?')).toEqual({ notice: 'You are muted for another 1 min' })
@@ -126,7 +126,7 @@ describe('chatRoom', () => {
   it('mutes for good without a duration', () => {
     const { room: chat, clock } = room()
 
-    expect(chat.mute(ada.id)).toEqual({ playerId: ada.id, until: null })
+    expect(chat.mute(ada.id)).toEqual({ playerId: ada.id, kind: 'connection', until: null })
     clock.now += 365 * 24 * 3600_000
     expect(chat.say(ada, 'still here')).toEqual({ notice: 'You are muted' })
     expect(chat.mutedUntil(ada.id)).toBeNull()
@@ -134,6 +134,31 @@ describe('chatRoom', () => {
     expect(chat.unmute(ada.id)).toBe(true)
     expect(chat.unmute(ada.id)).toBe(false)
     expect(chat.say(ada, 'finally')).toHaveProperty('message')
+  })
+
+  it('checks the mute of the key it is given, e.g. the sender\'s account', () => {
+    const { room: chat } = room()
+    chat.mute('acc-ada', undefined, 'account')
+
+    expect(chat.say(ada, 'hi')).toHaveProperty('message')
+    expect(chat.check(ada, 'hi', 'acc-ada')).toEqual({ notice: 'You are muted' })
+    expect(chat.listMutes()).toEqual([{ playerId: 'acc-ada', kind: 'account', until: null }])
+  })
+
+  it('puts back saved mutes that are still on, without undoing newer ones', () => {
+    const { room: chat, clock } = room()
+    chat.mute('acc-bob', 5, 'account')
+
+    chat.restore([
+      { playerId: 'acc-ada', kind: 'account', until: null },
+      { playerId: 'acc-old', kind: 'account', until: clock.now - 1 },
+      { playerId: 'acc-bob', kind: 'account', until: null },
+    ])
+
+    expect(chat.listMutes()).toEqual([
+      { playerId: 'acc-bob', kind: 'account', until: clock.now + 300_000 },
+      { playerId: 'acc-ada', kind: 'account', until: null },
+    ])
   })
 
   it('says things as the server', () => {

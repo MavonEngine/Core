@@ -342,6 +342,32 @@ describe('dashboard view', () => {
     expect(render(state).contains('Name')).toBe(false)
   })
 
+  it('shows the account column only when the server knows accounts, guests marked', async () => {
+    const state = await liveState()
+    const screen = render(state, 130, 40, false, 1)
+    expect(screen.contains('Account')).toBe(true)
+    expect(screen.contains('(guest)')).toBe(true)
+
+    // A server without an auth plugin: the table is as it always was
+    for (const player of state.snapshot!.players)
+      player.account = null
+    const without = render(state, 130, 40, false, 1)
+    expect(without.contains('Account')).toBe(false)
+    expect(without.contains('Players (')).toBe(true)
+  })
+
+  it('shows the account of the selected player, or that it has none', async () => {
+    const state = await liveState()
+    const player = state.snapshot!.players[0]
+    player.account = { id: 'acc-0042', name: 'Ada', guest: false }
+
+    const screen = render(state, 130, 40, false, 1, viewState({ tab: 1, selectedPlayerId: player.id }))
+    expect(screen.contains('Ada · acc-0042')).toBe(true)
+
+    player.account = null
+    expect(render(state, 130, 40, false, 1, viewState({ tab: 1, selectedPlayerId: player.id })).contains('none')).toBe(true)
+  })
+
   it('fills the status bar unless transparent', async () => {
     const state = await liveState()
 

@@ -183,6 +183,12 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
           bytesSent: Math.round((now - joinedAt[i]) * (25 + i)),
           bytesReceived: Math.round((now - joinedAt[i]) * (4 + i / 2)),
         },
+        // As with an auth plugin: most have accounts, some play as guests, one in five got in without either
+        account: i % 5 === 4
+          ? null
+          : i % 3 === 2
+            ? { id: `guest-${i + 1}`, name: `Guest-${4800 + i}`, guest: true }
+            : { id: `acc-${(i + 1).toString().padStart(4, '0')}`, name: `player${i + 1}`, guest: false },
       }))
 
       for (let i = previousPlayers; i < playerCount; i++) {
@@ -238,6 +244,7 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         ack: player.lastProcessedSequenceId,
         tracked: Array.from({ length: player.trackedEntities }, (_, i) => `entity-${i}`),
         lastState: lastStates.get(player.id) ?? null,
+        account: player.account,
       }))
 
       if (step % 10 === 0)

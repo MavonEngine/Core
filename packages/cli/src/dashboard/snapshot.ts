@@ -1,10 +1,11 @@
+import type { PlayerAccount } from '@mavonengine/core/Networking/identity'
 import type { HttpRouteInfo } from '@mavonengine/core/Networking/Server/Http/RouteInfo'
 import type { LogEntry } from '@mavonengine/core/Networking/Server/Stats/LogBuffer'
 import type { RequestLogEntry } from '@mavonengine/core/Networking/Server/Stats/RequestLog'
 import type { ServerMetricsSnapshot } from '@mavonengine/core/Networking/Server/Stats/ServerMetrics'
 import type { ServerPluginInfo } from '@mavonengine/core/Plugins/types'
 
-export type { ServerMetricsSnapshot }
+export type { PlayerAccount, ServerMetricsSnapshot }
 export type LogLine = LogEntry
 export type RequestLine = RequestLogEntry
 export type RouteLine = HttpRouteInfo
@@ -60,6 +61,8 @@ export interface SyncPlayerLine {
   /** Sequence id of its last input the server processed */
   ack: number
   lastState: { tick: number, bytes: number, entities: number } | null
+  /** The account the server's auth plugin let it in as, null without one */
+  account: PlayerAccount | null
 }
 
 /**
@@ -116,6 +119,12 @@ function tickSample(t: AnyRecord) {
  * (older server) or unknown (newer server). Missing fields fall back to empty
  * values so the dashboard keeps rendering instead of crashing.
  */
+function accountFrom(value: unknown): PlayerAccount | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id)
+    return null
+  return { id: value.id, name: strOrNull(value.name), guest: value.guest === true }
+}
+
 export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
   const s = section(raw)
   const world = section(s.world)
@@ -153,6 +162,8 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
               bytesReceived: num(connection.bytesReceived),
             }
           : null,
+        // Older servers, and servers without an auth plugin, have none
+        account: accountFrom(p.account),
       }
     }),
     world: {
@@ -268,6 +279,7 @@ export function normalizeSync(raw: unknown): SyncInfo {
       tracked: Array.isArray(p.tracked) ? p.tracked.length : 0,
       ack: num(p.ack),
       lastState: lastState && { tick: num(lastState.tick), bytes: num(lastState.bytes), entities: num(lastState.entities) },
+      account: accountFrom(p.account),
     }
   })
   const entities = arr(r.entities, e => ({ player: e.player === true, trackedBy: num(e.trackedBy) }))

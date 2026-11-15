@@ -90,4 +90,13 @@ describe('pluginHost', () => {
 
     expect(h.collect('assets').map(r => [r.plugin.package, r.result])).toEqual([['p0', ['a']], ['p2', ['b']]])
   })
+
+  it('gives a plugin\'s context until it is removed', () => {
+    const { host: h } = host([{}, {}])
+
+    expect(h.contextOf('p1')).toEqual({ pkg: 'p1' })
+    expect(h.contextOf('nope')).toBeUndefined()
+    h.remove('p1')
+    expect(h.contextOf('p1')).toBeUndefined()
+  })
 })

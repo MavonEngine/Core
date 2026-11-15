@@ -706,6 +706,22 @@ describe('server', () => {
       expect(other.channel.emit).toHaveBeenCalledTimes(1)
     })
 
+    it('ignores a client that asks to attach the editor in production, which would show it the whole world', () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const warn = vi.spyOn(logger, 'warn')
+      const server = new TestServer(logger)
+      const other = connect('player')
+      const cheater = connect('cheater')
+
+      cheater.handlers[ClientCommand.CL_EDITOR]()
+
+      expect(server.editorChannels.size).toBe(0)
+      expect(server.game.world.entities.items.has('cheater')).toBe(true)
+      expect(other.channel.emit).not.toHaveBeenCalledWith(ServerCommand.SV_REMOVE_ENTITY, { id: 'cheater' })
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('cheater asked to attach the editor, which a production server doesn\'t allow'))
+      vi.unstubAllEnvs()
+    })
+
     it('sends the editor every entity, however far away', () => {
       const server = new TestServer(logger)
       server.getStateSyncDistance = () => 10
@@ -855,7 +871,7 @@ describe('server', () => {
 
       expect(sync).toMatchObject({ tick: 1, tickRate: server.game.tickRate, syncDistance: 10, editors: [] })
       expect(sync.players).toHaveLength(3)
-      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 } })
+      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 }, account: null })
       expect(sync.players[0].lastState!.bytes).toBeGreaterThan(0)
       // near and far are players without a connection here, so they track what is around them but are sent nothing
       expect(sync.players[2]).toMatchObject({ id: 'far', lastState: null })

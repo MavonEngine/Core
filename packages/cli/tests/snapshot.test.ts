@@ -25,7 +25,26 @@ describe('normalizeSnapshot', () => {
     expect(() => normalizeSnapshot(null)).not.toThrow()
     expect(() => normalizeSnapshot('nope')).not.toThrow()
     expect(normalizeSnapshot({ players: [null, 3, { id: 'a' }] }).players).toEqual([
-      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0, connectedFor: 0, connection: null },
+      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0, connectedFor: 0, connection: null, account: null },
+    ])
+  })
+
+  it('reads the account of a player, and none from servers without an auth plugin or from before accounts', () => {
+    const players = normalizeSnapshot({ players: [
+      { id: 'a', account: { id: 'acc-1', name: 'Ada', guest: false } },
+      { id: 'b', account: { id: 'acc-2', guest: true } },
+      { id: 'c', account: null },
+      // A server from before accounts sends no field at all
+      { id: 'd' },
+      { id: 'e', account: { name: 'no id' } },
+    ] }).players
+
+    expect(players.map(player => player.account)).toEqual([
+      { id: 'acc-1', name: 'Ada', guest: false },
+      { id: 'acc-2', name: null, guest: true },
+      null,
+      null,
+      null,
     ])
   })
 
