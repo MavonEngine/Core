@@ -28,7 +28,7 @@ import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migra
 import { tableName } from '../../Plugins/Database/tables'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
-import { pluginInfos, readConfig } from '../../Plugins/ProjectConfig'
+import { APP_URL_ENV, parseAppUrl, pluginInfos, readConfig } from '../../Plugins/ProjectConfig'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
@@ -109,6 +109,15 @@ export interface ServerOptions {
    * else the first auth plugin
    */
   auth?: string
+
+  /**
+   * Where the game is, e.g. `https://mygame.com`, for links that leave it, like in mails. Defaults to `appUrl` in
+   * mavonengine.json. `MAVONENGINE_APP_URL` overrides both
+   */
+  appUrl?: string
+
+  /** The game's name, e.g. in mails. Defaults to `appName` in mavonengine.json */
+  appName?: string
 
   /**
    * Project root, the directory with mavonengine.json and `scenes/`. Scene names given to `openScene()` are looked up there.
@@ -770,6 +779,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
       projectRoot: this.projectRoot,
+      get appUrl() {
+        return server.appUrl
+      },
+      get appName() {
+        return server.appName
+      },
       requireAdmin: this.http.requireAdmin,
       adminToken: this.http.adminToken,
       get db() {
@@ -897,7 +912,21 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /** `database` or `auth` from mavonengine.json */
-  private configured(key: 'database' | 'auth'): string | undefined {
+  /**
+   * Where the game is, for links that leave it: `MAVONENGINE_APP_URL`, else the `appUrl` option, else `appUrl` in
+   * mavonengine.json. Only http(s) URLs, without a trailing slash. Undefined when none is set
+   */
+  get appUrl(): string | undefined {
+    return parseAppUrl(process.env[APP_URL_ENV]) ?? parseAppUrl(this.options.appUrl) ?? parseAppUrl(this.configured('appUrl'))
+  }
+
+  /** The game's name: the `appName` option, else `appName` in mavonengine.json. Undefined when none is set */
+  get appName(): string | undefined {
+    const name = this.options.appName?.trim() || this.configured('appName')?.trim()
+    return name || undefined
+  }
+
+  private configured(key: 'database' | 'auth' | 'appUrl' | 'appName'): string | undefined {
     const root = this.projectRoot
     if (!root)
       return undefined

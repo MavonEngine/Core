@@ -109,6 +109,12 @@ npx @mavonengine/cli install @acme/forest@^2 file:../my-plugin --yes
 - `prefabs`: the plugin prefabs the project uses. The editor adds a prefab here when you place it, and you can edit the list by hand. Only the assets of these prefabs (plus the plugin's shared assets) go into the release.
 - `options`: passed to the plugin as `ctx.options`.
 
+Next to `plugins`, the file says what goes for the whole project:
+
+- `appUrl`: where the game is, like `https://mygame.com`. Links that leave the game, such as those in mails, point there. Server plugins get it as `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it, for example per deployment.
+- `appName`: the game's name, for example in mails. Server plugins get it as `ctx.appName`.
+- `database`, `auth`, `notifications`: which plugin to use when more than one of that kind is enabled.
+
 The client reloads when the plugins in `mavonengine.json` change. Restart the game server to load a new server plugin. Without an interactive terminal it only installs, unless `--yes` is given.
 
 | Option | Default | |
