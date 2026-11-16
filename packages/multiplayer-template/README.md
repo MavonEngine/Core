@@ -170,6 +170,18 @@ npm start --prefix server
 
 The server serves the built client from `client/dist` on port `8050`, and the game socket is reachable on the same port, so a single process is enough. Vite is never loaded outside `npm run dev`. Behind a reverse proxy or CDN you can still serve `client/dist` yourself and forward `/socket` to the game server's port `8050`.
 
+Before deploying, set where the game is in `mavonengine.json`, or as `MAVONENGINE_APP_URL` on the server:
+
+```json
+{
+  "appUrl": "https://mygame.com",
+  "appName": "My Game",
+  "plugins": {}
+}
+```
+
+Links that leave the game point there, such as the links the auth plugin mails to confirm an email or reset a password. A production server never builds them from the address a request names, so without `appUrl` it mails none and says so when it starts. `appName` is the game's name in mails and in the browser tab, where `client/index.html` has `%MAVONENGINE_APP_NAME%`; `mavonengine create` sets it from the project's name. The title is written into the page when the client is built, so rebuild after changing it.
+
 ---
 
 ## Credits

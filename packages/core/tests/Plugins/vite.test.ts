@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEV_CONTROL_TOKEN_HEADER, PLUGIN_INSTALL_PATH } from '../../src/Plugins/install'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
 import { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
-import { generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
+import { APP_NAME_PLACEHOLDER, fillAppName, generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
 let root: string
@@ -63,7 +63,39 @@ describe('generatePluginsModule', () => {
   })
 })
 
+describe('fillAppName', () => {
+  it('fills in the game\'s name, escaped, and MavonEngine without one', () => {
+    expect(fillAppName(`<title>${APP_NAME_PLACEHOLDER}</title><h1>${APP_NAME_PLACEHOLDER}</h1>`, 'Tom & <Jerry>')).toBe('<title>Tom &amp; &lt;Jerry&gt;</title><h1>Tom &amp; &lt;Jerry&gt;</h1>')
+    expect(fillAppName(`<title>${APP_NAME_PLACEHOLDER}</title>`, undefined)).toBe('<title>MavonEngine</title>')
+    expect(fillAppName(`<title>${APP_NAME_PLACEHOLDER}</title>`, '  ')).toBe('<title>MavonEngine</title>')
+    expect(fillAppName('<title>My own</title>', 'Space Game')).toBe('<title>My own</title>')
+  })
+})
+
 describe('build', () => {
+  const titledPage = `<!doctype html><html><head><title>${APP_NAME_PLACEHOLDER}</title></head><body><script type="module" src="./main.js"></script></body></html>`
+
+  it('writes the game\'s name into the built page', async () => {
+    writeConfig(root, { plugins: { forest: { prefabs: ['Tree'] } }, appName: 'Space & <Game>' })
+    writeFile(join(root, 'client', 'index.html'), titledPage)
+    const outDir = join(root, 'client', 'dist')
+    await build({ root: join(root, 'client'), logLevel: 'silent', configFile: false, plugins: [mavonEnginePlugins()], build: { outDir, minify: false } })
+
+    const html = readFileSync(join(outDir, 'index.html'), 'utf8')
+    expect(html).toContain('<title>Space &amp; &lt;Game&gt;</title>')
+    expect(html).not.toContain(APP_NAME_PLACEHOLDER)
+    // The dev bridge stays out of a release
+    expect(html).not.toContain('dev-bridge')
+  })
+
+  it('names a game without an appName MavonEngine', async () => {
+    writeFile(join(root, 'client', 'index.html'), titledPage)
+    const outDir = join(root, 'client', 'dist')
+    await build({ root: join(root, 'client'), logLevel: 'silent', configFile: false, plugins: [mavonEnginePlugins()], build: { outDir, minify: false } })
+
+    expect(readFileSync(join(outDir, 'index.html'), 'utf8')).toContain('<title>MavonEngine</title>')
+  })
+
   it('bundles the client entries and ships only the assets of used prefabs', async () => {
     const outDir = join(root, 'client', 'dist')
     await build({
@@ -121,6 +153,24 @@ describe('dev server', () => {
   afterEach(async () => {
     await new Promise(resolve => http.close(resolve))
     await vite.close()
+  })
+
+  it('fills in the game\'s name on every page, so a new name shows on the next reload', async () => {
+    writeFile(join(root, 'client', 'index.html'), `<!doctype html><html><head><title>${APP_NAME_PLACEHOLDER}</title></head><body></body></html>`)
+    writeConfig(root, { plugins: {}, appName: 'Space Game' })
+    expect(await (await fetch(`${base}/`)).text()).toContain('<title>Space Game</title>')
+
+    writeConfig(root, { plugins: {}, appName: 'Space Game 2' })
+    const html = await (await fetch(`${base}/`)).text()
+    expect(html).toContain('<title>Space Game 2</title>')
+    // The dev bridge is still there in dev
+    expect(html).toContain('dev-bridge')
+  })
+
+  it('keeps the page working with a mavonengine.json it can\'t read', async () => {
+    writeFile(join(root, 'client', 'index.html'), `<!doctype html><html><head><title>${APP_NAME_PLACEHOLDER}</title></head><body></body></html>`)
+    writeConfig(root, '{ not json')
+    expect(await (await fetch(`${base}/`)).text()).toContain('<title>MavonEngine</title>')
   })
 
   it('serves every plugin asset, used or not', async () => {

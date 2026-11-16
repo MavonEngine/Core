@@ -112,7 +112,7 @@ npx @mavonengine/cli install @acme/forest@^2 file:../my-plugin --yes
 Next to `plugins`, the file says what goes for the whole project:
 
 - `appUrl`: where the game is, like `https://mygame.com`. Links that leave the game, such as those in mails, point there. Server plugins get it as `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it, for example per deployment.
-- `appName`: the game's name, for example in mails. Server plugins get it as `ctx.appName`.
+- `appName`: the game's name, in mails and in the browser tab: `%MAVONENGINE_APP_NAME%` in the client's `index.html` becomes it, in dev and in the build (`MavonEngine` without one). Server plugins get it as `ctx.appName`.
 - `database`, `auth`, `notifications`: which plugin to use when more than one of that kind is enabled.
 
 The client reloads when the plugins in `mavonengine.json` change. Restart the game server to load a new server plugin. Without an interactive terminal it only installs, unless `--yes` is given.

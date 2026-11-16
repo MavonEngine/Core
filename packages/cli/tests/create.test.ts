@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { gatedSource, parseCreateArgs } from '../src/commands/create'
-import { createProject, extractTemplate, TEMPLATE_SUBPATH } from '../src/create/project'
+import { appNameFor, createProject, extractTemplate, TEMPLATE_SUBPATH } from '../src/create/project'
 
 let dir: string
 
@@ -87,11 +87,23 @@ describe('createProject', () => {
 
     expect(projectDir).toBe(join(dir, 'my-game'))
     expect(JSON.parse(readFileSync(join(projectDir, 'package.json'), 'utf8')).name).toBe('my-game')
+    // The game's name, for mails and the like
+    expect(JSON.parse(readFileSync(join(projectDir, 'mavonengine.json'), 'utf8')).appName).toBe('My Game')
     expect(steps[0]).toBe('Downloading the template…')
     expect(steps.some(s => s.includes(' B'))).toBe(true)
     expect(steps.at(-1)).toBe('Extracting the template…')
     expect(output()).toContain('Extracted 2 files')
     expect(JSON.parse(readFileSync(join(projectDir, '.mcp.json'), 'utf8')).mcpServers.mavonengine.args).toEqual(['-y', '@mavonengine/cli', 'mcp'])
+  })
+
+  it('names the game in the template\'s mavonengine.json, keeping the rest, and a name it sets', async () => {
+    const config = (body: object) => (async () => new Response(templateZip({ ...template, [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/mavonengine.json`]: JSON.stringify(body) }))) as typeof fetch
+
+    const named = await createProject({ projectName: 'tower-defense', parentDir: dir, report: recorder().report, fetch: config({ plugins: { '@acme/hud': {} } }), install: false })
+    expect(JSON.parse(readFileSync(join(named, 'mavonengine.json'), 'utf8'))).toEqual({ plugins: { '@acme/hud': {} }, appName: 'Tower Defense' })
+
+    const kept = await createProject({ projectName: 'other', parentDir: dir, report: recorder().report, fetch: config({ plugins: {}, appName: 'Set By Template' }), install: false })
+    expect(JSON.parse(readFileSync(join(kept, 'mavonengine.json'), 'utf8')).appName).toBe('Set By Template')
   })
 
   it('refuses an existing directory', async () => {
@@ -120,5 +132,15 @@ describe('gatedSource', () => {
     ready = true
     await expect(source.fetch()).resolves.toEqual({ ok: true })
     expect(source.label).toBe('http://localhost:8050')
+  })
+})
+
+describe('appNameFor', () => {
+  it('makes a readable name of the project\'s', () => {
+    expect(appNameFor('my-game')).toBe('My Game')
+    expect(appNameFor('space_shooter 2')).toBe('Space Shooter 2')
+    expect(appNameFor('games/tower-defense')).toBe('Tower Defense')
+    expect(appNameFor('Zelda')).toBe('Zelda')
+    expect(appNameFor('---')).toBe('---')
   })
 })
