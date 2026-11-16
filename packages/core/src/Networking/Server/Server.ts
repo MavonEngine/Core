@@ -29,6 +29,7 @@ import { tableName } from '../../Plugins/Database/tables'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
 import { pluginInfos, readConfig } from '../../Plugins/ProjectConfig'
+import { publishedFile } from '../../Plugins/publish'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
@@ -770,6 +771,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       logger: this.logger,
       server: this as unknown as Server<GameObject>,
       projectRoot: this.projectRoot,
+      publishedFile: (path) => {
+        const root = this.projectRoot
+        return root ? publishedFile(root, loaded.package, path) : undefined
+      },
       requireAdmin: this.http.requireAdmin,
       adminToken: this.http.adminToken,
       get db() {
