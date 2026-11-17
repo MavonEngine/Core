@@ -27,6 +27,8 @@ interface Entry<P, C> {
  */
 export default class PluginHost<P extends { name?: string }, C> {
   private entries: Entry<P, C>[]
+  /** What each plugin's `api()` returned, by package */
+  private apis = new Map<string, unknown>()
 
   constructor(
     plugins: LoadedPlugin<P>[],
@@ -99,10 +101,28 @@ export default class PluginHost<P extends { name?: string }, C> {
   }
 
   /**
-   * Stop running a plugin: none of its hooks are called any more.
+   * Stop running a plugin: none of its hooks are called any more, and its api is gone.
    */
   remove(pkg: string): void {
     this.entries = this.entries.filter(e => e.loaded.package !== pkg)
+    this.apis.delete(pkg)
+  }
+
+  /**
+   * Ask every plugin for its `api()`, once, before any `setup()`, so a plugin can use another's api in its `setup()`
+   * whatever their order. A plugin whose `api()` throws (logged) or returns undefined has none.
+   */
+  exposeApis(): void {
+    for (const entry of this.entries) {
+      const api = this.call(entry, 'api', [])
+      if (api !== undefined)
+        this.apis.set(entry.loaded.package, api)
+    }
+  }
+
+  /** What the plugin of package `pkg` returned from `api()`. Undefined when it isn't running or has none */
+  api(pkg: string): unknown {
+    return this.apis.get(pkg)
   }
 
   private call(entry: Entry<P, C>, hook: PropertyKey, args: unknown[]): any {
