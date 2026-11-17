@@ -32,6 +32,10 @@ export interface MailInput {
   text?: string
   html?: string
   headers?: Record<string, string>
+  /** Send it in the plugin's layout. Defaults to the `layout` option, true */
+  layout?: boolean
+  /** The line inboxes show next to the subject, for the layout */
+  preheader?: string
 }
 
 /** A mail that can't be sent as it is: no recipient, no subject, an address that is none */

@@ -4,8 +4,11 @@ import type { Address, MailAddress, MailInput, MailMessage } from './message'
 import type { MailTransport, NodemailerTransport, SentMail } from './transports'
 import process from 'node:process'
 import Job from '@mavonengine/core/Queue/Job'
+import { LAYOUT_FILE, LayoutFile, renderLayout, textToHtml } from './layout'
 import { formatAddress, MailError, parseAddress, toMessage } from './message'
 import { logTransport, nodemailerTransport } from './transports'
+
+export { DEFAULT_LAYOUT_PATH, escapeHtml, LAYOUT_FILE, renderLayout, textToHtml } from './layout'
 
 export type { Address, MailAddress, MailInput, MailMessage } from './message'
 export { formatAddress, MailError, parseAddress, toMessage } from './message'
@@ -47,9 +50,18 @@ export interface MailOptions {
   tries: number
   /** Wait before trying a mail again, in ms, see the queue's `backoffMs`. Default 10s, then 1 minute */
   backoffMs: number | number[]
+  /**
+   * Send mail in the layout: the plugin's, or the project's after `mavonengine asset:publish @mavonengine/mail`.
+   * A mail with only text gets html made from it. Default true
+   */
+  layout: boolean
+  /** The game's name, for the layout. Defaults to the sender's name */
+  appName?: string
+  /** More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` */
+  layoutData: Record<string, string>
 }
 
-const DEFAULTS: MailOptions = { queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000] }
+const DEFAULTS: MailOptions = { queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} }
 
 export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = process.env): MailOptions {
   const options: MailOptions = {
@@ -59,6 +71,17 @@ export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.Proc
     backoffMs: typeof raw.backoffMs === 'number' || (Array.isArray(raw.backoffMs) && raw.backoffMs.every(ms => typeof ms === 'number'))
       ? raw.backoffMs as number | number[]
       : DEFAULTS.backoffMs,
+    layout: typeof raw.layout === 'boolean' ? raw.layout : DEFAULTS.layout,
+    layoutData: {},
+  }
+
+  if (typeof raw.appName === 'string' && raw.appName)
+    options.appName = raw.appName
+  if (raw.layoutData && typeof raw.layoutData === 'object') {
+    for (const [name, value] of Object.entries(raw.layoutData)) {
+      if (typeof value === 'string' || typeof value === 'number')
+        options.layoutData[name] = String(value)
+    }
   }
 
   const from = env[FROM_ENV] || raw.from
@@ -112,11 +135,16 @@ export function smtpConfig(smtp: SmtpOptions | string, env: NodeJS.ProcessEnv = 
 export abstract class Mailable {
   /** Queue it, or send it in the call. Defaults to the plugin's `queued` option */
   queued?: boolean
+  /** Send it in the layout. Defaults to the plugin's `layout` option, true */
+  layout?: boolean
   from?: Address
   replyTo?: Address
   abstract subject(): string
   text?(): string
+  /** The mail's html: what goes inside the layout, not a whole page */
   html?(): string
+  /** The line inboxes show next to the subject */
+  preheader?(): string
   headers?(): Record<string, string>
 }
 
@@ -166,6 +194,9 @@ interface MailState {
   options: MailOptions
   from?: MailAddress
   transport: MailTransport
+  layout: LayoutFile
+  /** Whether a layout that couldn't be read was logged */
+  layoutFailed?: boolean
   api: MailApi
 }
 
@@ -192,6 +223,30 @@ function sendMailJob(state: MailState) {
       await deliver(state, this.data)
     }
   }
+}
+
+/** Put the mail's html, or its text made html, in the layout. A layout that can't be read leaves the mail as it is */
+function applyLayout(state: MailState, message: MailMessage, preheader?: string) {
+  let layout: string
+  try {
+    layout = state.layout.read()
+    state.layoutFailed = false
+  }
+  catch (err) {
+    if (!state.layoutFailed)
+      state.ctx.logger?.error(`Mail: could not read the layout ${state.layout.path}, sending mail without it: ${(err as Error).message}`)
+    state.layoutFailed = true
+    return
+  }
+
+  message.html = renderLayout(layout, {
+    ...state.options.layoutData,
+    content: message.html ?? textToHtml(message.text!),
+    subject: message.subject,
+    preheader,
+    appName: state.options.appName ?? message.from?.name ?? '',
+    year: String(new Date().getFullYear()),
+  })
 }
 
 async function deliver(state: MailState, message: MailMessage): Promise<MailResult> {
@@ -227,7 +282,8 @@ function createState(ctx: ServerPluginContext): MailState {
     }
   }
 
-  const state = { ctx, options, from, transport } as MailState
+  const layout = new LayoutFile(() => ctx.publishedFile?.(LAYOUT_FILE))
+  const state = { ctx, options, from, transport, layout } as MailState
   const SendMail = sendMailJob(state)
   ctx.queue.register(SendMail)
 
@@ -235,6 +291,8 @@ function createState(ctx: ServerPluginContext): MailState {
     const message = toMessage(input, state.from)
     if (!message.from && state.transport.name !== 'log')
       throw new MailError(`No sender: set "from" in the options of ${PACKAGE} or ${FROM_ENV}`)
+    if (input.layout ?? state.options.layout)
+      applyLayout(state, message, input.preheader)
 
     const queued = (sendOptions.delayMs ?? 0) > 0 || (sendOptions.queued ?? mailableQueued ?? state.options.queued)
     if (!queued)
@@ -257,6 +315,8 @@ function createState(ctx: ServerPluginContext): MailState {
       text: mailable.text?.(),
       html: mailable.html?.(),
       headers: mailable.headers?.(),
+      layout: mailable.layout,
+      preheader: mailable.preheader?.(),
     })
     return {
       cc: (...more) => pending(to, [...cc, ...more], bcc),

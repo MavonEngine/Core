@@ -54,8 +54,33 @@ export function nodemailerTransport(config: NodemailerTransport, name?: string):
 /** How much of a mail's body the log transport writes */
 export const LOG_BODY_CHARS = 2000
 
+const COMMENTS_RE = /<!--[\s\S]*?-->/g
+const HEAD_RE = /<head[\s>][\s\S]*?<\/head>/gi
+const BLOCK_END_RE = /<\/(?:p|div|tr|h[1-6]|li)>|<br\s*\/?>/gi
 const TAGS_RE = /<[^>]*>/g
-const BLANK_LINES_RE = /\n{3,}/g
+const SPACES_RE = /[ \t]+/g
+const BLANK_LINES_RE = /\n\s*\n\s*/g
+
+/** The words of an html mail, roughly, for the log: no head, comments or tags, a line per paragraph */
+export function htmlToLogText(html: string): string {
+  return html
+    .replace(COMMENTS_RE, '')
+    .replace(HEAD_RE, '')
+    .replace(BLOCK_END_RE, '\n')
+    .replace(TAGS_RE, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, '\'')
+    .replace(/&copy;/g, '©')
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map(line => line.replace(SPACES_RE, ' ').trim())
+    .join('\n')
+    .replace(BLANK_LINES_RE, '\n')
+    .trim()
+}
 
 interface Logger {
   info(message: string): unknown
@@ -69,7 +94,7 @@ export function logTransport(logger: Logger | null | undefined): MailTransport {
   return {
     name: 'log',
     async send(message) {
-      const body = message.text ?? message.html!.replace(TAGS_RE, '').replace(BLANK_LINES_RE, '\n\n').trim()
+      const body = message.text ?? htmlToLogText(message.html!)
       const cut = body.length > LOG_BODY_CHARS ? `${body.slice(0, LOG_BODY_CHARS)}…` : body
       logger?.info([
         `Mail (not sent: no mail transport is set up) to ${message.to.map(formatAddress).join(', ')}: ${message.subject}`,

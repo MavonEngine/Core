@@ -13,7 +13,7 @@ Until you set up a transport, mail is written to the server's log instead of sen
 Write a mail as a class, then send it to someone:
 
 ```ts
-import { Mailable } from '@mavonengine/mail'
+import { escapeHtml, Mailable } from '@mavonengine/mail'
 
 export class Welcome extends Mailable {
   constructor(private name: string) {
@@ -64,6 +64,57 @@ await mail(server)?.to('Ada <ada@example.com>').cc('team@example.com').send(new 
 - **A mail written out**, e.g. one a notification built: `mail.send({ to, subject, text, html })`.
 
 `from`, `replyTo` and `headers()` can be set per mailable. Mail without a `from` gets the one from the options.
+
+## Layout
+
+HTML mail is sent in a layout: the game's name at the top, the mail on a white card, a footer below. A mail with only text gets html made from it too, a paragraph per blank line, so every mail looks the same. Write `html()` as what goes inside the layout, not as a whole page.
+
+To change the layout, publish it into your project:
+
+```sh
+npx @mavonengine/cli asset:publish @mavonengine/mail
+```
+
+That copies it to `resources/@mavonengine/mail/layout.html`, which is used from then on. Outside production the file is read again for every mail, so a change shows in the next one without restarting.
+
+In the layout, `{{ name }}` is filled in escaped and `{{{ name }}}` as it is:
+
+| | |
+| --- | --- |
+| `{{{ content }}}` | The mail's html, or its text made into paragraphs |
+| `{{ subject }}` | The subject |
+| `{{ preheader }}` | The line inboxes show next to the subject, from a mailable's `preheader()` or `preheader` in `send()` |
+| `{{ appName }}` | The `appName` option, else the sender's name |
+| `{{ year }}` | This year |
+| anything else | From `layoutData` in the options, e.g. `{{ footer }}` |
+
+Comments are left out of the mail, apart from Outlook's conditional comments (`<!--[if mso]>`). Mail clients ignore most CSS and `<style>` blocks: keep to tables and inline styles, as the default layout does.
+
+A mailable with `layout = false`, or `send({ …, layout: false })`, is sent without it; the `layout` option turns it off for all mail. When a layout can't be read, mail is sent without it and the log says so.
+
+`escapeHtml()` makes what players wrote safe to put in a mail's html:
+
+```ts
+import { escapeHtml, Mailable } from '@mavonengine/mail'
+
+class Welcome extends Mailable {
+  constructor(private name: string) {
+    super()
+  }
+
+  subject() {
+    return 'Welcome!'
+  }
+
+  preheader() {
+    return 'Your account is ready'
+  }
+
+  html() {
+    return `<p>Good to have you, <b>${escapeHtml(this.name)}</b>.</p>`
+  }
+}
+```
 
 ## Transports
 
@@ -157,6 +208,9 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 | `queue` | `default` | The queue mail goes on. Use a queue of its own to keep mail from waiting behind other jobs, with the server's `queue.queues` |
 | `tries` | `3` | How often a queued mail is tried before it counts as failed |
 | `backoffMs` | `[10000, 60000]` | How long to wait before trying again, in ms: one number, or one per retry, the last repeating |
+| `layout` | `true` | Send mail in the [layout](#layout) |
+| `appName` | the sender's name | The game's name, at the top and bottom of the layout |
+| `layoutData` | `{}` | More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` |
 
 | Environment | |
 | --- | --- |
@@ -166,4 +220,4 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 
 ## Not yet
 
-Attachments, templates and a view of sent mail in the dashboard. Failed mail shows among the queue's failed jobs, as `mail:send`.
+Attachments and a view of sent mail in the dashboard. Failed mail shows among the queue's failed jobs, as `mail:send`.

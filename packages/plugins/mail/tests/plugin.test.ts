@@ -57,6 +57,8 @@ describe('mail plugin', () => {
       to: [{ address: 'player@example.com', name: 'Player' }],
       subject: 'Welcome, Ada',
       text: 'Good to have you, Ada.',
+      // Text alone gets html, in the layout
+      html: expect.stringContaining('<p style="margin: 0 0 16px;">Good to have you, Ada.</p>'),
     }]))
   })
 
@@ -117,7 +119,7 @@ describe('mail plugin', () => {
       bcc: [{ address: 'c@example.com' }, { address: 'd@example.com' }],
       replyTo: { address: 'support@example.com' },
       subject: 'Report',
-      html: '<b>3 cheaters</b>',
+      html: expect.stringContaining('<b>3 cheaters</b>'),
       headers: { 'X-Report': 'weekly' },
     })
   })
@@ -160,9 +162,12 @@ describe('mail plugin', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mail is written to the log'))
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('no sender set'))
 
-    // The log needs no sender
+    // The log needs no sender, and shows the words of the mail, not the layout's markup
     await api.send({ to: 'a@example.com', subject: 'Hi', html: '<p>Hello <b>you</b></p>' }, { queued: false })
-    expect(logger.info).toHaveBeenCalledWith('Mail (not sent: no mail transport is set up) to a@example.com: Hi\nHello you')
+    const logged = logger.info.mock.calls.map(([m]) => String(m)).find(m => m.startsWith('Mail (not sent'))!
+    expect(logged.split('\n').slice(0, 2)).toEqual(['Mail (not sent: no mail transport is set up) to a@example.com: Hi', 'Hello you'])
+    expect(logged).not.toContain('<')
+    expect(logged).not.toContain('asset:publish')
   })
 
   it('closes the transport it replaces, and the last one when the server stops', async () => {
@@ -203,11 +208,11 @@ describe('mail plugin', () => {
 
 describe('mail options', () => {
   it('fills in the defaults, and keeps what makes sense', () => {
-    expect(parseOptions({}, {})).toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000] })
+    expect(parseOptions({}, {})).toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} })
     expect(parseOptions({ queued: false, queue: 'mail', tries: 5.7, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' } }, {}))
-      .toEqual({ queued: false, queue: 'mail', tries: 5, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' } })
+      .toEqual({ queued: false, queue: 'mail', tries: 5, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' }, layout: true, layoutData: {} })
     expect(parseOptions({ queued: 'yes', queue: '', tries: 0, backoffMs: ['x'], smtp: { port: 25 } }, {}))
-      .toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000] })
+      .toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} })
   })
 
   it('takes the sender and the SMTP URL from the environment over the options', () => {
