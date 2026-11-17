@@ -55,8 +55,6 @@ export interface MailOptions {
    * A mail with only text gets html made from it. Default true
    */
   layout: boolean
-  /** The game's name, for the layout. Defaults to the sender's name */
-  appName?: string
   /** More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` */
   layoutData: Record<string, string>
 }
@@ -75,8 +73,6 @@ export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.Proc
     layoutData: {},
   }
 
-  if (typeof raw.appName === 'string' && raw.appName)
-    options.appName = raw.appName
   if (raw.layoutData && typeof raw.layoutData === 'object') {
     for (const [name, value] of Object.entries(raw.layoutData)) {
       if (typeof value === 'string' || typeof value === 'number')
@@ -244,7 +240,8 @@ function applyLayout(state: MailState, message: MailMessage, preheader?: string)
     content: message.html ?? textToHtml(message.text!),
     subject: message.subject,
     preheader,
-    appName: state.options.appName ?? message.from?.name ?? '',
+    appName: state.ctx.appName ?? message.from?.name ?? '',
+    appUrl: state.ctx.appUrl ?? '',
     year: String(new Date().getFullYear()),
   })
 }

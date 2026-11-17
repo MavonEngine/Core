@@ -72,7 +72,7 @@ describe('mail in the layout', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  function start(options: Record<string, unknown> = {}, published?: string) {
+  function start(options: Record<string, unknown> = {}, published?: string, appName?: string) {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const queue = new Queue(logger)
     queues.push(queue)
@@ -82,6 +82,8 @@ describe('mail in the layout', () => {
       server: {},
       queue,
       publishedFile: (path: string) => path === 'layout.html' ? published : undefined,
+      appUrl: 'https://game.example.com',
+      appName,
     } as unknown as ServerPluginContext
     const api = plugin.api(ctx)
     const memory = memoryTransport()
@@ -108,8 +110,8 @@ describe('mail in the layout', () => {
     expect(memory.sent[0].text).toBeUndefined()
   })
 
-  it('takes the game\'s name from the options over the sender\'s', async () => {
-    const { api, memory } = start({ appName: 'Space Game Online' })
+  it('takes the game\'s name, appName in mavonengine.json, over the sender\'s', async () => {
+    const { api, memory } = start({}, undefined, 'Space Game Online')
     await api.send({ to: 'a@example.com', subject: 'Hi', text: 'Hello' })
     expect(memory.sent[0].html).toContain('&copy; 2026 Space Game Online'.replace('2026', String(new Date().getFullYear())))
   })
@@ -131,11 +133,11 @@ describe('mail in the layout', () => {
 
   it('uses the project\'s published layout, read again while not in production', async () => {
     const file = join(dir, 'layout.html')
-    writeFileSync(file, '<main>{{ appName }}: {{{ content }}}</main>')
+    writeFileSync(file, '<main>{{ appName }} ({{ appUrl }}): {{{ content }}}</main>')
     const { api, memory } = start({}, file)
 
     await api.to('a@example.com').send(new Welcome('Ada'))
-    expect(memory.sent[0].html).toBe('<main>Space Game: <p>Hi <b>Ada</b></p></main>')
+    expect(memory.sent[0].html).toBe('<main>Space Game (https://game.example.com): <p>Hi <b>Ada</b></p></main>')
 
     writeFileSync(file, '<section>{{{ content }}}</section>')
     await api.to('a@example.com').send(new Welcome('Ada'))

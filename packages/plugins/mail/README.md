@@ -84,7 +84,8 @@ In the layout, `{{ name }}` is filled in escaped and `{{{ name }}}` as it is:
 | `{{{ content }}}` | The mail's html, or its text made into paragraphs |
 | `{{ subject }}` | The subject |
 | `{{ preheader }}` | The line inboxes show next to the subject, from a mailable's `preheader()` or `preheader` in `send()` |
-| `{{ appName }}` | The `appName` option, else the sender's name |
+| `{{ appName }}` | The game's name, `appName` in `mavonengine.json`, else the sender's name |
+| `{{ appUrl }}` | Where the game is: `appUrl` in `mavonengine.json` (or `MAVONENGINE_APP_URL`), for a link back to it. Empty when it isn't set |
 | `{{ year }}` | This year |
 | anything else | From `layoutData` in the options, e.g. `{{ footer }}` |
 
@@ -209,7 +210,6 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 | `tries` | `3` | How often a queued mail is tried before it counts as failed |
 | `backoffMs` | `[10000, 60000]` | How long to wait before trying again, in ms: one number, or one per retry, the last repeating |
 | `layout` | `true` | Send mail in the [layout](#layout) |
-| `appName` | the sender's name | The game's name, at the top and bottom of the layout |
 | `layoutData` | `{}` | More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` |
 
 | Environment | |
