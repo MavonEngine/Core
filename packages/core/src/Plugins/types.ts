@@ -76,6 +76,14 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerP
   /** Directory with mavonengine.json, when the plugins were loaded from it */
   readonly projectRoot?: string
   /**
+   * Where the game is, e.g. `https://mygame.com`, without a trailing slash: `MAVONENGINE_APP_URL`, else the server's
+   * `appUrl` option, else `appUrl` in mavonengine.json. For links that leave the game, like in mails. Undefined when
+   * none is set: don't build links from a request's Host header instead, which whoever sends the request chooses
+   */
+  readonly appUrl: string | undefined
+  /** The game's name: the server's `appName` option, else `appName` in mavonengine.json. Undefined when none is set */
+  readonly appName: string | undefined
+  /**
    * The project's copy of a file this plugin publishes (see `publish` in its manifest), e.g. `publishedFile('layout.html')`,
    * once the project ran `mavonengine asset:publish <package>`. Undefined when it has none, so the plugin uses its own
    */

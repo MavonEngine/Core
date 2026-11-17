@@ -25,6 +25,13 @@ export interface MavonEngineConfig {
   database?: string
   /** Package of the auth plugin to use, when more than one is enabled */
   auth?: string
+  /**
+   * Where the game is, e.g. `https://mygame.com`: what links in mails and the like point to. Plugins get it as
+   * `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it
+   */
+  appUrl?: string
+  /** The game's name, e.g. in mails and their layout. Plugins get it as `ctx.appName` */
+  appName?: string
   [key: string]: unknown
 }
 
@@ -80,6 +87,26 @@ export interface ReleaseAsset {
 const TARGETS: PluginTarget[] = ['client', 'server', 'both']
 
 export class PluginConfigError extends Error {}
+
+/** Overrides `appUrl` in mavonengine.json, e.g. per deployment */
+export const APP_URL_ENV = 'MAVONENGINE_APP_URL'
+
+const TRAILING_SLASHES_RE = /\/+$/
+
+/** An http(s) URL without its trailing slash, or undefined for anything else */
+export function parseAppUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim())
+    return undefined
+  try {
+    const url = new URL(value.trim())
+    if (url.protocol !== 'https:' && url.protocol !== 'http:')
+      return undefined
+  }
+  catch {
+    return undefined
+  }
+  return value.trim().replace(TRAILING_SLASHES_RE, '')
+}
 
 export function configPath(root: string): string {
   return join(root, CONFIG_FILE)
