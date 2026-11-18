@@ -1,5 +1,7 @@
 import type { ServerChannel } from '@geckos.io/server'
+import type { Notifiable, NotificationLike } from '../../Notifications/Notifiable'
 import type { Identity } from '../identity'
+import { notify } from '../../Notifications/Notifiable'
 import { identityOf } from '../identity'
 import NetworkedLivingActor from '../NetworkedLivingActor'
 
@@ -18,8 +20,11 @@ export interface PlayerConnectionInfo {
 /**
  * Base class for connected clients / Players
  */
-export default abstract class Player extends NetworkedLivingActor {
+export default abstract class Player extends NetworkedLivingActor implements Notifiable {
   $typeName = 'player'
+
+  /** A player is notified as its account */
+  readonly notifiableType = 'account'
 
   trackedEntities = new Set<string>()
 
@@ -39,6 +44,20 @@ export default abstract class Player extends NetworkedLivingActor {
    */
   get identity(): Identity | undefined {
     return identityOf(this.channel)
+  }
+
+  /** The player's account, undefined without one (no auth plugin, or let in without an account) */
+  notifiableId(): string | undefined {
+    return this.identity?.id
+  }
+
+  /**
+   * Send the player a notification, through the server's notifications plugin such as `@mavonengine/notifications`.
+   * It goes to the player's account, so it also reaches the player's other connections. Without a notifications
+   * plugin nothing is sent, and that is logged.
+   */
+  notify(notification: NotificationLike): Promise<void> {
+    return notify(this, notification)
   }
 
   private _lastProcessedSequenceId = 0

@@ -7,6 +7,7 @@ import type BaseGame from '../BaseGame'
 import type Game from '../Game'
 import type { AuthorizeResult, Identity } from '../Networking/identity'
 import type Server from '../Networking/Server/Server'
+import type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 import type { PrefabDefinition } from '../Prefab/PrefabRegistry'
 import type Queue from '../Queue/Queue'
 import type { SceneObjectDefinition } from '../Scene/SceneObjectRegistry'
@@ -17,6 +18,7 @@ import type GameObject from '../World/GameObject'
 import type { PluginMigration } from './Database/migrate'
 
 export type { AuthorizeResult, Identity } from '../Networking/identity'
+export type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 export type { MigrationTools, PluginMigration } from './Database/migrate'
 
 /** Where a plugin runs, declared as `mavonengine.target` in its package.json */
@@ -217,6 +219,12 @@ export interface ServerPlugin extends PluginBase<ServerPluginContext> {
    * e.g. because its migrations failed, every client is turned away with 503 rather than let in unchecked.
    */
   authorize?(authorization: string | undefined, request: IncomingMessage, ctx: ServerPluginContext): AuthorizeResult | Promise<AuthorizeResult>
+  /**
+   * Makes this a notifications plugin: send `notification` to the recipients, for `notify()` and `player.notify()`.
+   * Resolve once it is queued or sent; a rejection is passed on to whoever called `notify()`. Only the plugin the
+   * project picked is asked (see `notifications` in mavonengine.json).
+   */
+  notify?(to: Notifiable[], notification: NotificationLike, ctx: ServerPluginContext): void | Promise<void>
 }
 
 /**
@@ -289,6 +297,8 @@ export interface ServerPluginInfo extends Omit<PluginInfo, 'readme'> {
   database?: true
   /** Set on the auth plugin the server uses */
   auth?: true
+  /** Set on the notifications plugin the server uses */
+  notifications?: true
 }
 
 export interface ServerPluginList {
