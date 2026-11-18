@@ -45,6 +45,15 @@
       "engine": ">=0.0.25",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/mail",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/mail/README.md"
+    },
+    {
+      "package": "@mavonengine/notifications",
+      "name": "Notifications",
+      "description": "Notify players and anything else notifiable, in the game and by mail: player.notify(new LevelUp())",
+      "target": "both",
+      "engine": ">=0.0.25",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/notifications",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/notifications/README.md"
     }
   ]
 }
