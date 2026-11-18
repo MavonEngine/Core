@@ -75,6 +75,14 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerP
   /** Directory with mavonengine.json, when the plugins were loaded from it */
   readonly projectRoot?: string
   /**
+   * Where the game is, e.g. `https://mygame.com`, without a trailing slash: `MAVONENGINE_APP_URL`, else the server's
+   * `appUrl` option, else `appUrl` in mavonengine.json. For links that leave the game, like in mails. Undefined when
+   * none is set: don't build links from a request's Host header instead, which whoever sends the request chooses
+   */
+  readonly appUrl: string | undefined
+  /** The game's name: the server's `appName` option, else `appName` in mavonengine.json. Undefined when none is set */
+  readonly appName: string | undefined
+  /**
    * Guard for the plugin's admin routes: `app.post('/api/my-plugin/reset', ctx.requireAdmin, handler)`.
    * It asks for the server's admin token (`adminToken` in its options, or MAVONENGINE_ADMIN_TOKEN) as
    * `Authorization: Bearer <token>`, and without one only lets requests from localhost through.
