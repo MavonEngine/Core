@@ -1,11 +1,14 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type { Notifiable, NotificationLike, ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
-import type { GameNotification } from './protocol'
+import type { GameNotification, ListRequest, NotificationsResult, ReadRequest, StoredNotification } from './protocol'
+import type { Owner } from './store'
 import Job from '@mavonengine/core/Queue/Job'
-import { NOTIFICATION_MESSAGE } from './protocol'
+import { LIST_MESSAGE, MAX_READ_IDS, MAX_REQUEST_ID, NOTIFICATION_MESSAGE, READ_MESSAGE, RESULT_MESSAGE, UNREAD_MESSAGE } from './protocol'
+import NotificationStore, { MAX_PAGE, migrations } from './store'
 
-export type { GameNotification } from './protocol'
+export type { GameNotification, StoredNotification } from './protocol'
 export { NOTIFICATION_EVENT, NOTIFICATION_MESSAGE } from './protocol'
+export { MAX_DATA_CHARS, MAX_PAGE } from './store'
 
 export const PACKAGE = '@mavonengine/notifications'
 
@@ -50,6 +53,8 @@ export abstract class Notification implements NotificationLike {
   abstract via(to: Notifiable): string[]
   toGame?(to: Notifiable): unknown
   toMail?(to: Notifiable): NotificationMail
+  /** What the `database` channel keeps, as JSON */
+  toDatabase?(to: Notifiable): unknown
 }
 
 /** Who a delivery is for, as plain JSON */
@@ -97,6 +102,13 @@ export interface NotificationsApi {
   send(to: Notifiable | Notifiable[], notification: Notification): Promise<void>
   /** Add a channel, or replace one: `channel('discord', { queued: true, route, send })` */
   channel(name: string, channel: NotificationChannel<any>): void
+  /** What the `database` channel kept for `to`, the latest first. Empty without a database */
+  stored(to: Notifiable, options?: { unread?: boolean, limit?: number, offset?: number }): Promise<StoredNotification[]>
+  unreadCount(to: Notifiable): Promise<number>
+  /** Mark `to`'s notifications read, those with these ids or notification ids, all of them without. Returns how many */
+  markRead(to: Notifiable, ids?: string[]): Promise<number>
+  /** Delete `to`'s notifications, those with these ids or notification ids, all of them without. Returns how many */
+  forget(to: Notifiable, ids?: string[]): Promise<number>
 }
 
 declare module '@mavonengine/core/Plugins/types' {
@@ -112,6 +124,8 @@ export interface NotificationsOptions {
   tries: number
   /** Default 10s, then 1 minute */
   backoffMs: number | number[]
+  /** Delete stored notifications this many days after they were read. 0 keeps them. Default 90 */
+  keepReadDays: number
 }
 
 export function parseOptions(raw: Record<string, unknown> = {}): NotificationsOptions {
@@ -121,6 +135,7 @@ export function parseOptions(raw: Record<string, unknown> = {}): NotificationsOp
     backoffMs: typeof raw.backoffMs === 'number' || (Array.isArray(raw.backoffMs) && raw.backoffMs.every(ms => typeof ms === 'number'))
       ? raw.backoffMs as number | number[]
       : [10_000, 60_000],
+    keepReadDays: typeof raw.keepReadDays === 'number' && raw.keepReadDays >= 0 ? raw.keepReadDays : 90,
   }
 }
 
@@ -136,6 +151,7 @@ interface AuthLike {
 
 interface Channel {
   emit(event: string, data: unknown, options?: { reliable?: boolean }): void
+  on(event: string, callback: (data: unknown) => void): void
 }
 
 interface NotificationsState {
@@ -145,6 +161,9 @@ interface NotificationsState {
   /** Open game connections per account */
   connections: Map<string, Set<Channel>>
   warned: Set<string>
+  /** The `database` channel's notifications, once `setup()` found a database */
+  store?: NotificationStore
+  pruner?: ReturnType<typeof setInterval>
   api: NotificationsApi
 }
 
@@ -214,6 +233,39 @@ function mailChannel(state: NotificationsState): NotificationChannel<Notificatio
   }
 }
 
+/** Tell every open game of the account its unread count */
+async function pushUnread(state: NotificationsState, accountId: string) {
+  const open = state.connections.get(accountId)
+  if (!open?.size || !state.store)
+    return
+  const unread = await state.store.unreadCount({ type: 'account', id: accountId })
+  for (const channel of open)
+    channel.emit(UNREAD_MESSAGE, { unread }, { reliable: true })
+}
+
+/** The `database` channel: kept in the plugin's table, for the recipient to read later */
+function databaseChannel(state: NotificationsState): NotificationChannel {
+  return {
+    route: (_to, recipient) => recipient.id,
+    async send(delivery) {
+      if (!state.store) {
+        warnOnce(state, 'no-database', 'a notification goes to the database channel, but the project has no database plugin such as @mavonengine/sqlite, so it isn\'t kept')
+        return
+      }
+      await state.store.add(delivery.recipient, { notificationId: delivery.id, type: delivery.type, data: delivery.payload, createdAt: delivery.sentAt })
+      if (delivery.recipient.type === 'account')
+        await pushUnread(state, delivery.recipient.id)
+    },
+  }
+}
+
+function ownerOf(to: Notifiable): Owner {
+  const id = to.notifiableId()
+  if (id === undefined)
+    throw new Error(`This ${to.notifiableType} has no id, so it has no notifications`)
+  return { type: to.notifiableType, id }
+}
+
 function sendJob(state: NotificationsState) {
   return class SendNotification extends Job<Delivery> {
     static jobName = 'notifications:send'
@@ -237,6 +289,7 @@ function createState(ctx: ServerPluginContext): NotificationsState {
   const state = { ctx, options: parseOptions(ctx.options), channels: new Map(), connections: new Map(), warned: new Set() } as unknown as NotificationsState
   state.channels.set('game', gameChannel(state))
   state.channels.set('mail', mailChannel(state))
+  state.channels.set('database', databaseChannel(state))
   const SendNotification = sendJob(state)
   ctx.queue.register(SendNotification)
 
@@ -278,6 +331,8 @@ function createState(ctx: ServerPluginContext): NotificationsState {
       }
     }
 
+    // Kept first, so a game that marks the toast read finds it stored
+    deliveries.sort((a, b) => Number(b.delivery.channel === 'database') - Number(a.delivery.channel === 'database'))
     for (const { channel, delivery } of deliveries) {
       if (channel.queued && queued !== false)
         await ctx.queue.dispatch(new SendNotification(delivery))
@@ -286,15 +341,83 @@ function createState(ctx: ServerPluginContext): NotificationsState {
     }
   }
 
+  const changed = async (owner: Owner, count: number) => {
+    if (count > 0 && owner.type === 'account')
+      await pushUnread(state, owner.id)
+    return count
+  }
+
   state.api = {
     send: (to, notification) => send(Array.isArray(to) ? to : [to], notification),
     channel: (name, channel) => void state.channels.set(name, channel),
+    stored: async (to, options) => state.store ? state.store.list(ownerOf(to), options) : [],
+    unreadCount: async to => state.store ? state.store.unreadCount(ownerOf(to)) : 0,
+    markRead: async (to, ids) => {
+      const owner = ownerOf(to)
+      return state.store ? changed(owner, await state.store.markRead(owner, ids)) : 0
+    },
+    forget: async (to, ids) => {
+      const owner = ownerOf(to)
+      return state.store ? changed(owner, await state.store.forget(owner, ids)) : 0
+    },
   }
   return state
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function isRequestId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_REQUEST_ID
+}
+
+/** A list or read request from a player's game. It is player input, so only what is asked for well is answered */
+function answer(state: NotificationsState, channel: Channel, accountId: string, kind: 'list' | 'read', raw: unknown) {
+  const request = raw as Partial<ListRequest & ReadRequest> | null
+  if (!request || typeof request !== 'object' || !isRequestId(request.requestId))
+    return
+  const requestId = request.requestId
+  const owner: Owner = { type: 'account', id: accountId }
+  const reply = (result: Omit<NotificationsResult, 'requestId'>) => channel.emit(RESULT_MESSAGE, { requestId, ...result } satisfies NotificationsResult, { reliable: true })
+
+  const store = state.store
+  if (!store) {
+    reply({ unread: 0, error: 'Notifications aren\'t kept: the server has no database' })
+    return
+  }
+
+  const run = async () => {
+    if (kind === 'list') {
+      const limit = typeof request.limit === 'number' ? Math.min(MAX_PAGE, request.limit) : undefined
+      const offset = typeof request.offset === 'number' ? request.offset : undefined
+      const notifications = await store.list(owner, { unread: request.unread === true, limit, offset })
+      reply({ notifications, unread: await store.unreadCount(owner) })
+      return
+    }
+
+    let ids: string[] | undefined
+    if (request.ids !== undefined) {
+      if (!Array.isArray(request.ids) || request.ids.length > MAX_READ_IDS || !request.ids.every(isRequestId)) {
+        reply({ unread: await store.unreadCount(owner), error: `ids must be up to ${MAX_READ_IDS} notification ids` })
+        return
+      }
+      ids = request.ids
+    }
+    const marked = await store.markRead(owner, ids)
+    reply({ marked, unread: await store.unreadCount(owner) })
+    // The account's other games show the new count too
+    if (marked > 0)
+      await pushUnread(state, accountId)
+  }
+
+  run().catch((err) => {
+    state.ctx.logger?.error(`Notifications: could not answer a ${kind} request: ${(err as Error)?.message ?? err}`)
+    reply({ unread: 0, error: 'Could not read the notifications' })
+  })
+}
+
 const plugin = {
   name: 'Notifications',
+  migrations,
   api(ctx: ServerPluginContext): NotificationsApi {
     const state = createState(ctx)
     registry().set(ctx.server, state)
@@ -306,6 +429,23 @@ const plugin = {
       throw new Error('The notifications plugin isn\'t running')
     return state.api.send(to, notification as Notification)
   },
+  setup(ctx: ServerPluginContext) {
+    const state = registry().get(ctx.server)
+    if (!state || !ctx.db)
+      return
+    const store = new NotificationStore(ctx.db, ctx.table('notifications'))
+    state.store = store
+
+    const keepDays = state.options.keepReadDays
+    if (keepDays > 0) {
+      const prune = () => store.prune(new Date(Date.now() - keepDays * DAY_MS).toISOString()).catch((err) => {
+        ctx.logger?.error(`Notifications: could not delete old read notifications: ${(err as Error)?.message ?? err}`)
+      })
+      void prune()
+      state.pruner = setInterval(prune, DAY_MS)
+      state.pruner.unref?.()
+    }
+  },
   onConnection(channel: ServerChannel, _client: unknown, ctx: ServerPluginContext) {
     const identity = ctx.identity(channel)
     const state = registry().get(ctx.server)
@@ -315,6 +455,11 @@ const plugin = {
     if (!open)
       state.connections.set(identity.id, open = new Set())
     open.add(channel)
+
+    channel.on(LIST_MESSAGE, data => answer(state, channel, identity.id, 'list', data))
+    channel.on(READ_MESSAGE, data => answer(state, channel, identity.id, 'read', data))
+    // So the game can show a badge right away
+    pushUnread(state, identity.id).catch(() => {})
   },
   onDisconnect(channel: ServerChannel, ctx: ServerPluginContext) {
     const identity = ctx.identity(channel)
@@ -326,6 +471,8 @@ const plugin = {
       registry().get(ctx.server)!.connections.delete(identity!.id)
   },
   destroy(ctx: ServerPluginContext) {
+    const state = registry().get(ctx.server)
+    clearInterval(state?.pruner)
     registry().delete(ctx.server)
   },
 } satisfies ServerPlugin

@@ -49,7 +49,7 @@
     {
       "package": "@mavonengine/notifications",
       "name": "Notifications",
-      "description": "Notify players and anything else notifiable, in the game and by mail: player.notify(new LevelUp())",
+      "description": "Notify players and anything else notifiable, in the game, by mail and kept to read later: player.notify(new LevelUp())",
       "target": "both",
       "engine": ">=0.0.25",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/notifications",

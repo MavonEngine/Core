@@ -84,7 +84,15 @@ async function start({ options = {}, withMail = true, withAuth = true, extra = [
   await server.start()
 
   const connect = (accountId?: string) => {
-    const channel = { id: `ch-${Math.random()}`, userData: accountId ? { id: accountId } : undefined, emit: vi.fn() }
+    const handlers = new Map<string, (data: unknown) => void>()
+    const channel = {
+      id: `ch-${Math.random()}`,
+      userData: accountId ? { id: accountId } : undefined,
+      emit: vi.fn(),
+      on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)),
+      /** A message from the player's game */
+      send: (event: string, data: unknown) => handlers.get(event)?.(data),
+    }
     server.plugins!.run('onConnection', channel as unknown as ServerChannel, {} as GameObject)
     return channel
   }
@@ -287,8 +295,8 @@ describe('notifications plugin', () => {
 
 describe('notifications options', () => {
   it('fills in the defaults', () => {
-    expect(parseOptions({})).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000] })
-    expect(parseOptions({ verifiedEmailOnly: true, tries: 5, backoffMs: 100 })).toEqual({ verifiedEmailOnly: true, tries: 5, backoffMs: 100 })
-    expect(parseOptions({ verifiedEmailOnly: 'yes', tries: 0, backoffMs: ['x'] })).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000] })
+    expect(parseOptions({})).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000], keepReadDays: 90 })
+    expect(parseOptions({ verifiedEmailOnly: true, tries: 5, backoffMs: 100, keepReadDays: 0 })).toEqual({ verifiedEmailOnly: true, tries: 5, backoffMs: 100, keepReadDays: 0 })
+    expect(parseOptions({ verifiedEmailOnly: 'yes', tries: 0, backoffMs: ['x'], keepReadDays: -1 })).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000], keepReadDays: 90 })
   })
 })

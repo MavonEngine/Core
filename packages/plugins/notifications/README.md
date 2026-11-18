@@ -77,6 +77,58 @@ Sent through [`@mavonengine/mail`](../mail), which queues it, tries it again and
 
 An account's address comes from [`@mavonengine/auth`](../auth). Accounts without an email aren't mailed. Without the mail plugin, or without the auth plugin for accounts, the channel is skipped and the log says so once.
 
+### `database`
+
+Kept in the server's database, for the player to read later, also when they weren't connected. Needs a database plugin such as [`@mavonengine/sqlite`](../sqlite); without one nothing is kept and the log says so once. The plugin's migration creates the table, `notifications_notifications`.
+
+```ts
+export class FriendRequest extends Notification {
+  constructor(private from: string) {
+    super()
+  }
+
+  via() {
+    return ['database', 'game']
+  }
+
+  toDatabase() {
+    return { from: this.from }
+  }
+
+  toGame() {
+    return { from: this.from }
+  }
+}
+```
+
+`toDatabase()` is kept as JSON, up to 64 KB. Each recipient gets a notification of their own, with its own `id`; `notificationId` is the same for every recipient and channel of one `notify()`, and is the `id` of the game's toast of it.
+
+In the browser, the player reads their account's notifications over the game connection, so it needs no login of its own:
+
+```ts
+import { notifications } from '@mavonengine/notifications/client'
+
+const inbox = notifications(game)
+const { notifications: list, unread } = await inbox.stored({ unread: true, limit: 20 })
+await inbox.markRead([list[0].id]) // or a toast's id, or nothing for all of them
+
+inbox.onUnread(count => setBadge(count))
+```
+
+The server tells the game the unread count when it connects and whenever it changes, also when the player read them in another tab: `inbox.unread`, `onUnread()`, and the game event `notifications:unread`. A notification is kept before the game is told of it, so marking a toast read always finds it.
+
+On the server, for any recipient:
+
+```ts
+const inbox = notifications(server)!
+await inbox.stored(account(id), { unread: true, limit: 20, offset: 0 })
+await inbox.unreadCount(guild)
+await inbox.markRead(account(id), ids) // all of them without ids
+await inbox.forget(account(id), ids) // deletes them
+```
+
+Read notifications are deleted `keepReadDays` after they were read, 90 by default. Unread ones are kept.
+
 ### Your own
 
 ```ts
@@ -130,9 +182,10 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 | `verifiedEmailOnly` | `false` | Only mail accounts whose address was confirmed. The auth plugin can't confirm addresses yet, so turning this on mails nobody until it can |
 | `tries` | `3` | How often a queued channel's delivery is tried |
 | `backoffMs` | `[10000, 60000]` | How long to wait before trying again, in ms |
+| `keepReadDays` | `90` | Delete kept notifications this many days after they were read. `0` keeps them |
 
 With more than one notifications plugin, `"notifications": "<package>"` in `mavonengine.json` picks the one `notify()` uses.
 
 ## Not yet
 
-A `database` channel, to keep notifications for players who weren't connected and show them later, with read and unread.
+Notifications kept for other recipients than accounts, like a guild, are only read on the server: the game reads its account's.
