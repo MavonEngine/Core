@@ -6,6 +6,7 @@ import type { FSWatcher } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import type winston from 'winston'
 import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
+import type { QueueOptions } from '../../Queue/Queue'
 import type GameScene from '../../Scene/GameScene'
 import type GameObject from '../../World/GameObject'
 import type { NetDebugSource, SyncSnapshot, SyncStateSummary } from '../Debug/sync'
@@ -29,6 +30,8 @@ import { tableName } from '../../Plugins/Database/tables'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
 import PluginHost from '../../Plugins/PluginHost'
 import { APP_URL_ENV, parseAppUrl, pluginInfos, readConfig } from '../../Plugins/ProjectConfig'
+import DatabaseQueueDriver, { QUEUE_PACKAGE, queueMigrations } from '../../Queue/drivers/DatabaseQueueDriver'
+import Queue from '../../Queue/Queue'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
@@ -120,6 +123,12 @@ export interface ServerOptions {
   appName?: string
 
   /**
+   * The job queue, `server.queue`. Its jobs are kept in the database when the project has a database plugin, else in
+   * memory, and run in this process
+   */
+  queue?: QueueOptions
+
+  /**
    * Project root, the directory with mavonengine.json and `scenes/`. Scene names given to `openScene()` are looked up there.
    * Defaults to `plugins.root`
    */
@@ -207,6 +216,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private database?: { db: Kysely<any>, provider: string }
 
   /**
+   * Jobs to run in the background: `server.queue.dispatch(new MyJob(data))`. Jobs can be dispatched before `start()`;
+   * they start running once it is done, in the database when the project has one.
+   */
+  readonly queue: Queue
+
+  /**
    * Set when the project has an auth plugin. Without `provider` (the plugin was meant to run but doesn't), every
    * client is turned away
    */
@@ -232,6 +247,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.gameSocket = geckos({ authorization: (authorization, request) => this.authorizeConnection(authorization, request) })
     this.logger = logger
     this.options = options ?? {}
+    this.queue = new Queue(logger, this.options.queue)
 
     if (this.options.latencySimulation) {
       this.latencySimulator = new LatencySimulator(this.options.latencySimulation, this.logger)
@@ -727,7 +743,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   /** Packages of the project's plugins, to tell whose a table in the database is */
   databasePlugins(): string[] {
-    return this.pluginInfos().map(info => info.package)
+    return [...this.pluginInfos().map(info => info.package), QUEUE_PACKAGE]
   }
 
   /**
@@ -750,6 +766,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private boot(loaded: LoadedPlugin<ServerPlugin>[]): Promise<void> {
     const host = this.createPluginHost(loaded)
     this.openDatabase(host)
+    this.openQueue()
     // Decided before the migrations, which turn off a plugin whose migration fails: an auth plugin that drops out
     // that way leaves the server turning everyone away instead of letting everyone in
     if (this.expectsAuth(host))
@@ -772,7 +789,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private createPluginHost(plugins: LoadedPlugin<ServerPlugin>[]) {
     // eslint-disable-next-line ts/no-this-alias
     const server = this
-    return new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
+    const host: PluginHost<ServerPlugin, ServerPluginContext> = new PluginHost<ServerPlugin, ServerPluginContext>(plugins, loaded => ({
       package: loaded.package,
       options: loaded.options,
       game: this.game,
@@ -790,13 +807,16 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       get db() {
         return server.db
       },
+      queue: this.queue,
       table: name => tableName(loaded.package, name),
       identity: identityOf,
+      plugin: (pkg: string) => host.api(pkg) as any,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'server')
+    return host
   }
 
   /**
@@ -817,6 +837,35 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.database = { db, provider: provider.package }
     this.logger.info(`Database: ${PluginHost.label(provider)}`)
+  }
+
+  /**
+   * Keep the queue's jobs in the database when there is one, once its tables are migrated. Doesn't hold up the start:
+   * jobs dispatched meanwhile wait for it. When the migration fails the queue stays in memory.
+   */
+  private openQueue() {
+    const wanted = this.options.queue?.driver
+    if (wanted === 'memory')
+      return
+
+    const database = this.database
+    if (!database) {
+      if (wanted === 'database')
+        this.logger.warn('The queue should keep its jobs in the database, but the project has no database plugin such as @mavonengine/sqlite: keeping them in memory')
+      return
+    }
+
+    void this.queue.use(runPluginMigrations(database.db, QUEUE_PACKAGE, queueMigrations).then(
+      (applied) => {
+        if (applied.length)
+          this.logger.info(`Queue: ran migrations ${applied.join(', ')}`)
+        return new DatabaseQueueDriver(database.db)
+      },
+      (err: Error) => {
+        this.logger.error(`Queue: ${err.message}. Keeping its jobs in memory, so they are lost when the server stops`)
+        return undefined
+      },
+    ))
   }
 
   /** Auth plugins among `plugins` */
@@ -966,7 +1015,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
       this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
 
+    this.plugins.exposeApis()
     this.plugins.runAround('setup', asPlugin)
+
+    // After setup(), where plugins register their job classes
+    if (this.options.queue?.work !== false)
+      this.queue.start()
 
     this.http.start()
     this.startMetrics()
@@ -1142,7 +1196,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
-   * Stop the metric sampling and logging timers, the scene watcher and the plugins, then close the database.
+   * Stop the metric sampling and logging timers, the scene watcher, the queue and the plugins, then close the database
+   * once the running jobs and plugins' `destroy()` finished.
    * The returned promise settles once the database is closed, and never rejects.
    */
   stop(): Promise<void> {
@@ -1152,6 +1207,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
+
+    const draining = this.queue.stop()
 
     // Plugins may still be saving in destroy(), so the database is closed after they finished
     const saving = (this.plugins?.collect('destroy') ?? []).map(({ plugin, result }) =>
@@ -1163,9 +1220,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const database = this.database
     this.database = undefined
     if (!database)
-      return Promise.all(saving).then(() => {})
+      return Promise.all([draining, ...saving]).then(() => {})
 
-    return Promise.all(saving)
+    return Promise.all([draining, ...saving])
       .then(() => database.db.destroy())
       .catch((err: Error) => {
         this.logger.error(`Could not close the database: ${err?.message ?? err}`)

@@ -178,6 +178,23 @@ describe('game', () => {
       expect(update).toHaveBeenCalledWith(0.016, expect.anything())
     })
 
+    it('gives plugins each other\'s api, ready in setup() whatever their order', () => {
+      let toast: ((text: string) => void) | undefined
+      const shown: string[] = []
+      Game.usePlugins([
+        { package: 'quests', options: {}, plugin: { setup: (ctx) => {
+          toast = ctx.plugin<{ show(text: string): void }>('toasts')?.show
+          expect(ctx.plugin('missing')).toBeUndefined()
+        } } },
+        { package: 'toasts', options: {}, plugin: { api: () => ({ show: (text: string) => void shown.push(text) }) } },
+      ])
+
+      void new Game([])
+      toast!('Quest done')
+
+      expect(shown).toEqual(['Quest done'])
+    })
+
     it('registers plugin prefabs under the plugin', () => {
       Game.usePlugins([{ package: 'forest', options: {}, plugin: { setup: ctx => ctx.registerPrefab({ name: 'Tree', spawn: vi.fn() }) } }])
 

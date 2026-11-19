@@ -17,6 +17,8 @@ describe('normalizeSnapshot', () => {
     expect(snapshot.tick.latest).toBeNull()
     expect(snapshot.physics).toBeNull()
     expect(snapshot.latencySimulation).toBeNull()
+    // A server older than the queue
+    expect(snapshot.queue).toBeNull()
     expect(snapshot.sampleIntervalMs).toBe(1000)
     expect(snapshot.engineVersion).toBe('unknown')
   })
@@ -79,5 +81,18 @@ describe('normalizeLogs', () => {
 
   it('handles an empty response', () => {
     expect(normalizeLogs(undefined)).toEqual({ entries: [], latestId: 0 })
+  })
+})
+
+describe('normalizeSnapshot queue', () => {
+  it('fills in the queue\'s samples', () => {
+    const snapshot = normalizeSnapshot({ queue: { driver: 'memory', history: [{ timestamp: 1, size: 3 }, null] } })
+
+    expect(snapshot.queue).toEqual({
+      driver: 'memory',
+      working: true,
+      latest: null,
+      history: [{ timestamp: 1, size: 3, running: 0, processed: 0, retried: 0, failed: 0 }],
+    })
   })
 })
