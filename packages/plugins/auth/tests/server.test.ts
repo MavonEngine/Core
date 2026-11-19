@@ -85,6 +85,16 @@ async function registered(server: Awaited<ReturnType<typeof started>>, username 
 }
 
 describe('auth plugin', () => {
+  it('gives other plugins its hooks as its api, with the account\'s email', async () => {
+    const server = await started()
+    const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+    const id = (res.json as { account: { id: string } }).account.id
+
+    const api = plugin.api(server.ctx)
+    expect(api).toBe(server.hooks)
+    expect(await api.account(id)).toMatchObject({ email: 'ada@example.com', emailVerifiedAt: null })
+  })
+
   it('registers a player, logged in, with a session the game connection accepts', async () => {
     const server = await started()
     const { token, account } = await registered(server)

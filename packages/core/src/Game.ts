@@ -145,6 +145,7 @@ export default class Game extends BaseGame {
       scene.on('settingsChanged', (settings: SceneSettings) => this.applySceneSettings(settings))
     })
 
+    this.plugins.exposeApis()
     this.plugins.run('setup')
     this.on('editorBoot', () => this.plugins.run('editor'))
 
@@ -171,7 +172,7 @@ export default class Game extends BaseGame {
   private createPluginHost() {
     // eslint-disable-next-line ts/no-this-alias
     const game = this
-    return new PluginHost<ClientPlugin, ClientPluginContext>(Game.pluginsToLoad, loaded => ({
+    const host: PluginHost<ClientPlugin, ClientPluginContext> = new PluginHost<ClientPlugin, ClientPluginContext>(Game.pluginsToLoad, loaded => ({
       package: loaded.package,
       options: loaded.options,
       game,
@@ -181,11 +182,13 @@ export default class Game extends BaseGame {
       },
       assetUrl: path => `${pluginAssetBase(loaded.package)}${path.replace(LEADING_SLASHES_RE, '')}`,
       registerPrefab: prefab => registerPrefab({ ...prefab, plugin: loaded.package }),
+      plugin: (pkg: string) => host.api(pkg) as any,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
     }), this.logger, 'client')
+    return host
   }
 
   /**
