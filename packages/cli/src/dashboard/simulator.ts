@@ -128,6 +128,8 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
   const cpuHistory: ServerMetricsSnapshot['cpu']['history'] = []
   const bandwidthHistory: ServerMetricsSnapshot['bandwidth']['history'] = []
   const tickHistory: ServerMetricsSnapshot['tick']['history'] = []
+  const queueHistory: NonNullable<ServerMetricsSnapshot['queue']>['history'] = []
+  let queued = 0
 
   const logs: LogLine[] = []
   let previousPlayers = 0
@@ -278,6 +280,16 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         maxCommandsPerTick: playerCount + Math.floor(random() * 3),
       })
 
+      // Jobs come in bursts, e.g. rewards at the end of a round, and are worked off a few a second. Made from the
+      // step rather than random(), which would change what the rest of the simulation draws
+      const dispatched = Math.round(playerCount * 0.3) + (step % 20 === 0 ? 25 : 0)
+      const processed = Math.min(queued + dispatched, 4 + (step % 3))
+      const failed = processed > 0 && step % 13 === 0 ? 1 : 0
+      queued = queued + dispatched - processed
+      if (failed)
+        log('error', 'Job grant-reward failed all 3 tries: Error: reward service unavailable')
+      push(queueHistory, { timestamp: now, size: queued, running: Math.min(queued, 1), processed: processed - failed, retried: step % 7 === 0 ? 1 : 0, failed })
+
       const average = (ms: number) => {
         const recent = cpuHistory.slice(-Math.max(1, Math.round(ms / sampleIntervalMs)))
         return Math.round(recent.reduce((acc, h) => acc + h.cpuPercentage, 0) / recent.length * 100) / 100
@@ -319,6 +331,7 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
           external: 5e6,
         },
         latencySimulation: null,
+        queue: { driver: 'database', working: true, latest: queueHistory.at(-1)!, history: [...queueHistory] },
       }
 
       return snapshot
