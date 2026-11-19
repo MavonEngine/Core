@@ -179,7 +179,7 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 
 | Option | Default | |
 | --- | --- | --- |
-| `verifiedEmailOnly` | `false` | Only mail accounts whose address was confirmed. The auth plugin can't confirm addresses yet, so turning this on mails nobody until it can |
+| `verifiedEmailOnly` | `false` | Only mail accounts whose address was confirmed, with the link the auth plugin mails. Accounts that never confirmed theirs aren't mailed then |
 | `tries` | `3` | How often a queued channel's delivery is tried |
 | `backoffMs` | `[10000, 60000]` | How long to wait before trying again, in ms |
 | `keepReadDays` | `90` | Delete kept notifications this many days after they were read. `0` keeps them |

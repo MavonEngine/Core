@@ -118,7 +118,7 @@ declare module '@mavonengine/core/Plugins/types' {
 }
 
 export interface NotificationsOptions {
-  /** Only mail accounts whose email address was confirmed. Default false: the auth plugin can't confirm addresses yet */
+  /** Only mail accounts whose email address was confirmed, with the link the auth plugin mails. Default false */
   verifiedEmailOnly: boolean
   /** How often a queued channel's delivery is tried. Default 3 */
   tries: number
