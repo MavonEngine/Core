@@ -176,3 +176,43 @@ describe('auth store', () => {
     expect((await store.listAccounts(10, 0)).total).toBe(0)
   })
 })
+
+describe('auth store tokens', () => {
+  const HOUR = 60 * 60 * 1000
+
+  it('keeps only the hash of a token, which works once, until it runs out', async () => {
+    const account = await store.createAccount('Ada', { email: 'ada@example.com' })
+    const token = await store.createToken(account.id, 'verify-email', 'ada@example.com', HOUR)
+    expect(token).toMatch(/^[\w-]{43}$/)
+    expect(await store.db.selectFrom('auth_tokens').select('token_hash').execute()).toEqual([{ token_hash: hashToken(token) }])
+
+    // For one purpose only
+    expect(await store.token(token, 'reset-password')).toBeUndefined()
+    expect(await store.token(token, 'verify-email')).toMatchObject({ accountId: account.id, email: 'ada@example.com' })
+
+    now = new Date(now.getTime() + HOUR)
+    expect(await store.useToken(token, 'verify-email')).toBeUndefined()
+    expect(await store.deleteExpiredTokens()).toBe(1)
+  })
+
+  it('works once, and only the latest of a purpose', async () => {
+    const account = await store.createAccount('Ada', { email: 'ada@example.com' })
+    const first = await store.createToken(account.id, 'reset-password', 'ada@example.com', HOUR)
+    const verify = await store.createToken(account.id, 'verify-email', 'ada@example.com', HOUR)
+    const second = await store.createToken(account.id, 'reset-password', 'ada@example.com', HOUR)
+
+    expect(await store.useToken(first, 'reset-password')).toBeUndefined()
+    expect(await store.useToken(second, 'reset-password')).toMatchObject({ accountId: account.id })
+    expect(await store.useToken(second, 'reset-password')).toBeUndefined()
+    // Another purpose's is left alone
+    expect(await store.token(verify, 'verify-email')).toBeDefined()
+  })
+
+  it('confirms an email only while the account still has it, in any case', async () => {
+    const account = await store.createAccount('Ada', { email: 'Ada@Example.com' })
+    expect(await store.markEmailVerified(account.id, 'other@example.com')).toBe(false)
+    expect(await store.markEmailVerified(account.id, 'ada@example.com')).toBe(true)
+    expect((await store.account(account.id))!.emailVerifiedAt).toBe(now.toISOString())
+    expect((await store.accountByEmail('ADA@example.COM'))!.id).toBe(account.id)
+  })
+})

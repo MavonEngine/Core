@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import plugin, { AUTH_EVENT, AuthRequestError, checkSession, currentAccount, login, logout, playAsGuest, register, STORAGE_KEY } from '../src/client'
+import plugin, { AUTH_EVENT, AuthRequestError, changeEmail, checkSession, currentAccount, login, logout, playAsGuest, register, requestPasswordReset, resendVerification, resetPassword, STORAGE_KEY, verifyEmail } from '../src/client'
 
 const ada = { id: 'acc-1', name: 'Ada' }
 const session = { token: 'tok-1', account: ada, expiresAt: '2026-12-15T00:00:00.000Z' }
@@ -112,5 +112,51 @@ describe('auth client', () => {
 
     localStorage.setItem(STORAGE_KEY, '{not json')
     expect(plugin.authorization()).toBeUndefined()
+  })
+})
+
+describe('auth client email', () => {
+  it('changes the email and keeps the account the server answers with', async () => {
+    answer(200, session)
+    await login('Ada', 'correct horse')
+    answer(200, { account: { ...ada, email: 'ada@new.example.com', emailVerified: false } })
+
+    expect((await changeEmail('ada@new.example.com')).email).toBe('ada@new.example.com')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/email')
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer tok-1')
+    expect(currentAccount()).toEqual({ ...ada, email: 'ada@new.example.com', emailVerified: false })
+    // Still logged in with the same session
+    expect(plugin.authorization()).toBe('Bearer tok-1')
+  })
+
+  it('asks for a new confirmation link, and confirms with a token without being logged in', async () => {
+    answer(200, session)
+    await login('Ada', 'correct horse')
+    answer(202, { sent: true })
+    await resendVerification()
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/verify-email/send')
+
+    answer(200, { account: { ...ada, email: 'ada@example.com', emailVerified: true } })
+    expect((await verifyEmail('link-token')).emailVerified).toBe(true)
+    const [url, init] = fetchMock.mock.calls[2]
+    expect(url).toBe('/api/auth/verify-email')
+    expect(JSON.parse(init.body)).toEqual({ token: 'link-token' })
+    // The token is the proof, not the session
+    expect(init.headers.Authorization).toBeUndefined()
+    expect(currentAccount()?.emailVerified).toBe(true)
+  })
+
+  it('asks for a reset link, and resetting logs this browser in', async () => {
+    answer(202, { sent: true })
+    await requestPasswordReset('ada@example.com')
+    expect(fetchMock.mock.calls[0]).toEqual(['/api/auth/forgot-password', expect.objectContaining({ body: JSON.stringify({ email: 'ada@example.com' }) })])
+
+    answer(200, { ...session, token: 'tok-new' })
+    expect(await resetPassword('link-token', 'brand new horse')).toEqual(ada)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ token: 'link-token', password: 'brand new horse' })
+    expect(plugin.authorization()).toBe('Bearer tok-new')
+
+    answer(400, { error: 'This link doesn\'t work any more' })
+    await expect(resetPassword('old', 'brand new horse')).rejects.toEqual(new AuthRequestError(400, 'This link doesn\'t work any more'))
   })
 })
