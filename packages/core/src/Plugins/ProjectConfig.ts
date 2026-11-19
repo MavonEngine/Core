@@ -45,6 +45,11 @@ export interface PluginManifest {
     /** Shipped only when the prefab is listed in the project's mavonengine.json */
     prefabs?: Record<string, string[]>
   }
+  /**
+   * Directory of files a project may change, relative to the package, e.g. a mail layout. `mavonengine asset:publish
+   * <package>` copies them into the project's `resources/<package>/`, and `ctx.publishedFile()` finds the copy
+   */
+  publish?: string
 }
 
 export interface InstalledPlugin {
@@ -196,6 +201,9 @@ function validateManifest(pkg: string, value: unknown): PluginManifest {
     if (runsOn(manifest.target, side) && typeof manifest[side] !== 'string')
       throw new PluginConfigError(`${pkg}: "mavonengine.${side}" is required for target "${manifest.target}"`)
   }
+
+  if (manifest.publish !== undefined && (typeof manifest.publish !== 'string' || !manifest.publish))
+    throw new PluginConfigError(`${pkg}: "mavonengine.publish" must be a directory of the package`)
 
   return manifest
 }
