@@ -112,6 +112,17 @@ function tickSample(t: AnyRecord) {
   }
 }
 
+function queueSample(q: AnyRecord) {
+  return {
+    timestamp: num(q.timestamp),
+    size: num(q.size),
+    running: num(q.running),
+    processed: num(q.processed),
+    retried: num(q.retried),
+    failed: num(q.failed),
+  }
+}
+
 /**
  * Turn whatever a server returned into a complete snapshot.
  *
@@ -134,6 +145,7 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
   const memory = section(s.memory)
   const physics = isRecord(s.physics) ? s.physics : null
   const latency = isRecord(s.latencySimulation) ? s.latencySimulation : null
+  const queue = isRecord(s.queue) ? s.queue : null
 
   return {
     schemaVersion: num(s.schemaVersion, SUPPORTED_SCHEMA_VERSION) as typeof SUPPORTED_SCHEMA_VERSION,
@@ -197,6 +209,15 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
     },
     latencySimulation: latency
       ? { fixedLatency: num(latency.fixedLatency), jitter: num(latency.jitter), packetLoss: num(latency.packetLoss) }
+      : null,
+    // Servers older than the queue have none
+    queue: queue
+      ? {
+          driver: str(queue.driver, 'unknown'),
+          working: queue.working !== false,
+          latest: isRecord(queue.latest) ? queueSample(queue.latest) : null,
+          history: arr(queue.history, queueSample),
+        }
       : null,
   }
 }

@@ -77,6 +77,30 @@ describe('dashboard view', () => {
     expect(screen.contains('sim-01')).toBe(true)
   })
 
+  it('graphs the queue on the overview, wide and narrow', async () => {
+    const state = await liveState()
+    for (const width of [130, 80]) {
+      const screen = render(state, width, 80)
+      for (const text of ['Queue (database)', 'queued', 'processed', 'failed', 'Running'])
+        expect(screen.contains(text), `${text} at ${width}`).toBe(true)
+    }
+  })
+
+  it('tells when the server doesn\'t work its queue', async () => {
+    const state = await liveState()
+    state.snapshot!.queue!.working = false
+    expect(render(state).contains('Queue (database, not worked here)')).toBe(true)
+  })
+
+  it('leaves the queue out for a server without one', async () => {
+    const state = await liveState()
+    state.snapshot!.queue = null
+    const screen = render(state)
+    expect(screen.contains('Queue (')).toBe(false)
+    for (const title of ['CPU', 'Network', 'Tick', 'World'])
+      expect(screen.contains(title), title).toBe(true)
+  })
+
   it('shows only the players on the players tab', async () => {
     const screen = render(await liveState(), 130, 40, false, 1)
 

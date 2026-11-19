@@ -71,6 +71,8 @@ and state reconciliation.
 - **Engine plugins** — `mavonengine install` adds plugins with their client, server and asset parts;
   `mavonengine build` ships only the assets your game uses
 - **Gamepad support** — Xbox, PlayStation and generic controllers with deadzones, button labels and rumble
+- **Job queue** — Background jobs on the server: `server.queue.dispatch(new MyJob(data))` with retries,
+  backoff, delays and failed jobs. In memory by default, in the database when the project has a database plugin
 - **Monitoring** — `mavonengine dashboard` in the terminal, or the `@mavonengine/http-monitoring` plugin in the
   browser: tick time, CPU, bandwidth, players, logs and HTTP requests
 - **Latency simulation** — Test your netcode against artificial latency, jitter and packet loss
