@@ -123,6 +123,23 @@ The client reloads when the plugins in `mavonengine.json` change. Restart the ga
 | `-y`, `--yes` | | Add plugins to `mavonengine.json` without asking |
 | `--no-register` | | Only install |
 
+## `mavonengine asset:publish`
+
+Copies the files a plugin lets you change into your project, such as the mail plugin's layout:
+
+```sh
+npx @mavonengine/cli asset:publish @mavonengine/mail
+```
+
+They go to `resources/<package>/`, here `resources/@mavonengine/mail/layout.html`. The plugin uses your copy from then on, so change it there and commit it. Files you have already are kept, so publishing again after an update only adds the plugin's new files. `--force` replaces yours with the plugin's.
+
+A plugin offers files with `"publish": "<directory>"` under `mavonengine` in its `package.json`, and finds your copy with `ctx.publishedFile('<file>')`.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+| `--force` | | Replace the files you have with the plugin's |
+
 ## `mavonengine build`
 
 Runs the project's `build` script, then lists what each plugin put into the release. Plugin assets are copied into the client's output under `plugins/<package>/`. Only the shared ones and those of the prefabs in `mavonengine.json` are copied. The client skips loading the others, so a release never requests a file it doesn't contain.

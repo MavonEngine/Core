@@ -7,17 +7,19 @@ import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
+import { parsePublishArgs, PUBLISH_HELP, runPublishCommand } from './commands/publish'
 
 const HELP = `Usage: mavonengine <command> [options]
 
 Commands:
-  create       Create a project from the multiplayer template and start it
-  dashboard    Live terminal dashboard for a running game server
-  dev          Run the project's dev servers (game server and client)
-  install      Install packages and register engine plugins in mavonengine.json
-  plugins      List the plugins that are available to install
-  build        Build the project for release, with the plugin assets it uses
-  mcp          MCP server so AI assistants (any MCP client) can inspect a running game server
+  create         Create a project from the multiplayer template and start it
+  dashboard      Live terminal dashboard for a running game server
+  dev            Run the project's dev servers (game server and client)
+  install        Install packages and register engine plugins in mavonengine.json
+  plugins        List the plugins that are available to install
+  asset:publish  Copy a plugin's files you may change, like the mail layout, into the project
+  build          Build the project for release, with the plugin assets it uses
+  mcp            MCP server so AI assistants (any MCP client) can inspect a running game server
 
 Options:
   -h, --help       Show help
@@ -98,6 +100,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runPluginsCommand(options)
+  }
+
+  if (command === 'asset:publish') {
+    const options = parsePublishArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(PUBLISH_HELP)
+      return 0
+    }
+
+    return runPublishCommand(options)
   }
 
   if (command === 'mcp') {

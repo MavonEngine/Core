@@ -84,6 +84,11 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerP
   /** The game's name: the server's `appName` option, else `appName` in mavonengine.json. Undefined when none is set */
   readonly appName: string | undefined
   /**
+   * The project's copy of a file this plugin publishes (see `publish` in its manifest), e.g. `publishedFile('layout.html')`,
+   * once the project ran `mavonengine asset:publish <package>`. Undefined when it has none, so the plugin uses its own
+   */
+  publishedFile(path: string): string | undefined
+  /**
    * Guard for the plugin's admin routes: `app.post('/api/my-plugin/reset', ctx.requireAdmin, handler)`.
    * It asks for the server's admin token (`adminToken` in its options, or MAVONENGINE_ADMIN_TOKEN) as
    * `Authorization: Bearer <token>`, and without one only lets requests from localhost through.
