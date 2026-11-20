@@ -152,6 +152,21 @@ jobs:
       timeout-minutes: 5
       run: npm run test:mail-e2e
 
+    # Boots the template's game server in dev, which loads scenes/main.json, and in the runner's Chrome: a player
+    # gets the scene and the server's trees, an editor drops out as a player, and saving the scene in the editor
+    # reloads it on the server and in both clients. Last, an editor opened from the main menu without joining
+    - name: Scenes end-to-end test
+      timeout-minutes: 5
+      run: npm run test:scenes-e2e
+
+    - name: Upload scenes end-to-end screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: scenes-e2e-screenshots-${{ matrix.os }}
+        path: e2e/scenes/screenshots
+        if-no-files-found: ignore
+
     # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
     # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
     - name: MCP end-to-end test
