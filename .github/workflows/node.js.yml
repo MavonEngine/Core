@@ -144,6 +144,14 @@ jobs:
       timeout-minutes: 5
       run: npm run test:auth-e2e
 
+    # Boots the template's game server with the built queue, mail, notifications and auth plugins on sqlite, mailing
+    # over SMTP to a small SMTP server in the test: confirming an email and resetting a password with the mailed links,
+    # a notification kept and mailed, a layout published with asset:publish, and a mail that waits on the queue in the
+    # database while the mail server is down, through a restart
+    - name: Mail end-to-end test
+      timeout-minutes: 5
+      run: npm run test:mail-e2e
+
     # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
     # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
     - name: MCP end-to-end test

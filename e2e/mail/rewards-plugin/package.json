@@ -1,0 +1,10 @@
+{
+  "name": "e2e-rewards",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "mavonengine": {
+    "target": "server",
+    "server": "./server.js"
+  }
+}
