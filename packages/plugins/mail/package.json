@@ -1,0 +1,63 @@
+{
+  "name": "@mavonengine/mail",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine plugin: send mail from the game server, queued and retried, through a transport plugin such as @mavonengine/smtp",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MavonEngine/Core.git",
+    "directory": "packages/plugins/mail"
+  },
+  "keywords": [
+    "mavonengine",
+    "mavonengine-plugin",
+    "mail",
+    "email"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "publish"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@mavonengine/core": ">=0.0.25"
+  },
+  "mavonengine": {
+    "target": "server",
+    "server": "./dist/index.js",
+    "publish": "publish",
+    "engine": ">=0.0.25"
+  },
+  "dependencies": {
+    "nodemailer": "^10.3.1"
+  },
+  "devDependencies": {
+    "@geckos.io/server": "^3.1.0",
+    "@mavonengine/core": "*",
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.0",
+    "winston": "^3.17.0"
+  }
+}
