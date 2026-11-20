@@ -25,6 +25,8 @@ export interface MavonEngineConfig {
   database?: string
   /** Package of the auth plugin to use, when more than one is enabled */
   auth?: string
+  /** Package of the notifications plugin to use, when more than one is enabled */
+  notifications?: string
   /**
    * Where the game is, e.g. `https://mygame.com`: what links in mails and the like point to. Plugins get it as
    * `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it

@@ -5,6 +5,7 @@ import type { Kysely } from 'kysely'
 import type { FSWatcher } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import type winston from 'winston'
+import type { Notifiable, NotificationLike, Notifier } from '../../Notifications/Notifiable'
 import type { LoadedPlugin, ServerPlugin, ServerPluginContext, ServerPluginInfo } from '../../Plugins/types'
 import type { QueueOptions } from '../../Queue/Queue'
 import type GameScene from '../../Scene/GameScene'
@@ -25,6 +26,7 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { currentNotifier, setNotifier } from '../../Notifications/Notifiable'
 import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
 import { tableName } from '../../Plugins/Database/tables'
 import { loadServerPlugins } from '../../Plugins/loadServerPlugins'
@@ -113,6 +115,12 @@ export interface ServerOptions {
    * else the first auth plugin
    */
   auth?: string
+
+  /**
+   * Package of the notifications plugin to use, when more than one is enabled. Defaults to `notifications` in
+   * mavonengine.json, else the first notifications plugin
+   */
+  notifications?: string
 
   /**
    * Where the game is, e.g. `https://mygame.com`, for links that leave it, like in mails. Defaults to `appUrl` in
@@ -227,6 +235,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    * client is turned away
    */
   private auth?: { provider?: string }
+
+  /** Package of the notifications plugin, and what this server set as the process's notifier */
+  private notifications?: { provider?: string, notifier: Notifier, warned?: boolean }
 
   protected abstract onConnection(channel: ServerChannel): TClient
   protected abstract onCommand(command: any, delta: number): void
@@ -907,11 +918,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    * The provider of a database or auth among `providers`: the one named `wanted`, else the first. Undefined, with an
    * error, when `wanted` isn't among them, and without one when there are none.
    */
-  private pickProvider(providers: LoadedPlugin<ServerPlugin>[], wanted: string | undefined, kind: 'database' | 'auth', withoutIt: string) {
+  private pickProvider(providers: LoadedPlugin<ServerPlugin>[], wanted: string | undefined, kind: 'database' | 'auth' | 'notifications', withoutIt: string) {
     if (providers.length === 0)
       return undefined
 
-    const title = kind === 'database' ? 'Database' : 'Auth'
+    const title = { database: 'Database', auth: 'Auth', notifications: 'Notifications' }[kind]
     if (wanted) {
       const match = providers.find(plugin => plugin.package === wanted)
       if (!match)
@@ -960,6 +971,42 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     return 500
   }
 
+  /**
+   * Pick the notifications plugin, and make this server the one `notify()` and `player.notify()` send through.
+   * Without one it still is, so they say so in this server's log.
+   */
+  private openNotifications(host: PluginHost<ServerPlugin, ServerPluginContext>) {
+    const providers = host.plugins.filter(plugin => typeof plugin.plugin.notify === 'function')
+    const provider = this.pickProvider(providers, this.options.notifications ?? this.configured('notifications'), 'notifications', 'so no notifications are sent')
+    const notifier: Notifier = (to, notification) => this.sendNotification(to, notification)
+    this.notifications = { provider: provider?.package, notifier }
+    setNotifier(notifier)
+    if (provider)
+      this.logger.info(`Notifications: ${PluginHost.label(provider)}`)
+  }
+
+  private async sendNotification(to: Notifiable[], notification: NotificationLike) {
+    const notifications = this.notifications
+    const provider = notifications?.provider && this.plugins?.plugins.find(plugin => plugin.package === notifications.provider)
+    const ctx = provider && this.plugins?.contextOf(provider.package)
+    if (!provider || !ctx) {
+      if (notifications && !notifications.warned) {
+        notifications.warned = true
+        this.logger.warn('notify(): no notifications are sent, as the project has no notifications plugin such as @mavonengine/notifications')
+      }
+      return
+    }
+
+    // Called directly, like authorize(): a notification that can't be sent is the caller's to hear of, and must not
+    // turn notifications off for everyone
+    await provider.plugin.notify!(to, notification, ctx)
+  }
+
+  /** Package of the notifications plugin `notify()` sends through */
+  get notificationsProvider(): string | undefined {
+    return this.notifications?.provider
+  }
+
   /** Package of the auth plugin that decides who may connect */
   get authProvider(): string | undefined {
     return this.auth?.provider
@@ -980,7 +1027,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     return name || undefined
   }
 
-  private configured(key: 'database' | 'auth' | 'appUrl' | 'appName'): string | undefined {
+  private configured(key: 'database' | 'auth' | 'notifications' | 'appUrl' | 'appName'): string | undefined {
     const root = this.projectRoot
     if (!root)
       return undefined
@@ -1016,6 +1063,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private startServer(host: PluginHost<ServerPlugin, ServerPluginContext>) {
     this.plugins = host
     this.openAuth(host)
+    this.openNotifications(host)
     // Told apart per plugin, so GET /api/game/routes can say which plugin a route comes from
     const asPlugin = (loaded: LoadedPlugin<ServerPlugin>, call: () => void) =>
       this.http.routes.registerAs({ source: 'plugin', plugin: loaded.package }, call)
@@ -1132,11 +1180,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     const database = this.databaseProvider
     const auth = this.authProvider
+    const notifications = this.notificationsProvider
     return infos.map((info) => {
       if (info.package === database)
         info = { ...info, database: true }
       if (info.package === auth)
         info = { ...info, auth: true }
+      if (info.package === notifications)
+        info = { ...info, notifications: true }
       return info
     })
   }
@@ -1207,6 +1258,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    */
   stop(): Promise<void> {
     Server.unwatchSignals(this as unknown as Server<GameObject>)
+    if (this.notifications && currentNotifier() === this.notifications.notifier)
+      setNotifier(undefined)
+    this.notifications = undefined
     this.timers.forEach(timer => clearInterval(timer))
     this.timers = []
 
