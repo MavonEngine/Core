@@ -1,5 +1,5 @@
 import type { ClientPlugin, ClientPluginContext } from '@mavonengine/core/Plugins/types'
-import type { AccountInfo, AuthErrorResponse, SessionResponse } from './protocol'
+import type { AccountInfo, AuthErrorResponse, SessionResponse, TokenResponse } from './protocol'
 import { DEFAULT_PATH } from './protocol'
 
 export type { AccountInfo, SessionResponse } from './protocol'
@@ -109,6 +109,55 @@ export async function logout(): Promise<void> {
  */
 export async function changePassword(current: string, password: string): Promise<void> {
   await call('POST', '/password', { current, password })
+}
+
+/** Keep what the server said of the logged in account, e.g. after its email changed or was confirmed */
+function remember(account: AccountInfo) {
+  const session = read()
+  if (session && session.account.id === account.id)
+    write({ ...session, account })
+}
+
+/**
+ * Change the account's email, or take it away with null. The new one isn't confirmed: the server mails a link to
+ * confirm it, when it can mail. Rejects with an `AuthRequestError`, 409 when another account has it
+ */
+export async function changeEmail(email: string | null): Promise<AccountInfo> {
+  const { account } = (await call<TokenResponse>('POST', '/email', { email }))!
+  remember(account)
+  return account
+}
+
+/** Mail a new link to confirm the account's email. Rejects with an `AuthRequestError`, 429 when one went out a moment ago */
+export async function resendVerification(): Promise<void> {
+  await call('POST', '/verify-email/send')
+}
+
+/**
+ * Confirm the email with the token of a mailed link, for a game with a confirmation page of its own (`verifyUrl` on
+ * the server). Works without being logged in. Rejects with an `AuthRequestError`, 400 for a link that doesn't work
+ */
+export async function verifyEmail(token: string): Promise<AccountInfo> {
+  const { account } = (await call<TokenResponse>('POST', '/verify-email', { token }, ''))!
+  remember(account)
+  return account
+}
+
+/**
+ * Mail a link to reset the password to `email`. Resolves the same whether an account has it or not, so the page
+ * should say "if an account has this email, …". Rejects with an `AuthRequestError`, 429 after too many
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await call('POST', '/forgot-password', { email }, '')
+}
+
+/**
+ * Set a new password with the token of a mailed link, for a game with a reset page of its own (`resetUrl` on the
+ * server). Logs this browser in, and every other device out. Rejects with an `AuthRequestError`, 400 for a link that
+ * doesn't work or a password that can't be used
+ */
+export async function resetPassword(token: string, password: string): Promise<AccountInfo> {
+  return keep((await call<SessionResponse>('POST', '/reset-password', { token, password }, ''))!)
 }
 
 /** The account this browser is logged in as, as it was when it logged in. Undefined when it isn't */

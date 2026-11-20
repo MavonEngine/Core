@@ -10,6 +10,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
  * - `auth_identities`: the ways an account logs in, by provider: `password` with the username, `discord` with the
  *   Discord user id, … One account can have several, a provider's user belongs to one account
  * - `auth_sessions`: logged in clients, by the hash of their token, never the token itself
+ * - `auth_tokens`: links mailed to confirm an email or reset a password, by the hash of their token too. Each is for
+ *   the address it was mailed to, and works once
  *
  * Times are ISO strings, which sort like the times they are on every database.
  */
@@ -17,7 +19,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 export interface Account extends Omit<AccountInfo, 'guest' | 'email'> {
   /** Optional, unique regardless of case. Only shown to the player itself and to admins, never in the game's identity */
   email: string | null
-  /** When the player confirmed the email is theirs, null until then. Nothing sets it before there is a mail plugin */
+  /** When the player confirmed the email is theirs, with a mailed link, null until then. A new email isn't confirmed */
   emailVerifiedAt: string | null
   /** When a session was last started for it: a login, a registration, a guest playing */
   lastLoginAt: string | null
@@ -43,7 +45,18 @@ export interface AccountListing extends Account {
 }
 
 /** Names of the plugin's tables, from `ctx.table()` */
-export type TableNames = (name: 'accounts' | 'identities' | 'sessions') => string
+export type TableNames = (name: 'accounts' | 'identities' | 'sessions' | 'tokens') => string
+
+/** What a mailed link is for */
+export type TokenPurpose = 'verify-email' | 'reset-password'
+
+export interface TokenRow {
+  purpose: TokenPurpose
+  accountId: string
+  /** The address it was mailed to: it only works while the account still has it */
+  email: string
+  expiresAt: string
+}
 
 export const migrations: Record<string, PluginMigration> = {
   '001_init': {
@@ -82,6 +95,19 @@ export const migrations: Record<string, PluginMigration> = {
         .addColumn('last_seen_at', 'varchar(32)', c => c.notNull())
         .execute()
       await db.schema.createIndex(`${table('sessions')}_account`).on(table('sessions')).column('account_id').execute()
+    },
+  },
+  '002_tokens': {
+    async up(db, { table }) {
+      await db.schema.createTable(table('tokens'))
+        .addColumn('token_hash', 'varchar(64)', c => c.primaryKey())
+        .addColumn('purpose', 'varchar(32)', c => c.notNull())
+        .addColumn('account_id', 'varchar(36)', c => c.notNull().references(`${table('accounts')}.id`).onDelete('cascade'))
+        .addColumn('email', 'varchar(254)', c => c.notNull())
+        .addColumn('created_at', 'varchar(32)', c => c.notNull())
+        .addColumn('expires_at', 'varchar(32)', c => c.notNull())
+        .execute()
+      await db.schema.createIndex(`${table('tokens')}_account`).on(table('tokens')).columns(['account_id', 'purpose']).execute()
     },
   },
 }
@@ -158,6 +184,78 @@ export default class AuthStore {
       email_key: email ? emailKey(email) : null,
       email_verified_at: email && verified ? this.now().toISOString() : null,
     }).where('id', '=', id).execute()
+  }
+
+  /** The account with this email, in any case */
+  async accountByEmail(email: string): Promise<Account | undefined> {
+    const row = await this.db.selectFrom(this.table('accounts')).selectAll().where('email_key', '=', emailKey(email)).executeTakeFirst()
+    return row && toAccount(row)
+  }
+
+  /** Mark the account's email confirmed, when it still is `email`. Returns whether it is */
+  async markEmailVerified(id: string, email: string): Promise<boolean> {
+    const result = await this.db.updateTable(this.table('accounts'))
+      .set({ email_verified_at: this.now().toISOString() })
+      .where('id', '=', id)
+      .where('email_key', '=', emailKey(email))
+      .executeTakeFirst()
+    return Number(result.numUpdatedRows) > 0
+  }
+
+  /**
+   * A token for a link to mail to `email`, for `purpose`, working for `lifetimeMs`. Links mailed before for the same
+   * purpose stop working: only the latest does. Only the hash is kept
+   */
+  async createToken(accountId: string, purpose: TokenPurpose, email: string, lifetimeMs: number): Promise<string> {
+    const token = randomBytes(32).toString('base64url')
+    const now = this.now()
+    await this.deleteTokensOf(accountId, purpose)
+    await this.db.insertInto(this.table('tokens')).values({
+      token_hash: hashToken(token),
+      purpose,
+      account_id: accountId,
+      email: email.trim(),
+      created_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + lifetimeMs).toISOString(),
+    }).execute()
+    return token
+  }
+
+  /** What a token is, while it works: right purpose, not run out. Doesn't use it up */
+  async token(token: string, purpose: TokenPurpose): Promise<TokenRow | undefined> {
+    const row = await this.db.selectFrom(this.table('tokens'))
+      .select(['purpose', 'account_id', 'email', 'expires_at'])
+      .where('token_hash', '=', hashToken(token))
+      .where('purpose', '=', purpose)
+      .executeTakeFirst()
+    if (!row || row.expires_at <= this.now().toISOString())
+      return undefined
+    return { purpose: row.purpose, accountId: row.account_id, email: row.email, expiresAt: row.expires_at }
+  }
+
+  /**
+   * Use a token up: what it is, if it worked, and it never works again. Of two uses at once, only one gets it
+   */
+  async useToken(token: string, purpose: TokenPurpose): Promise<TokenRow | undefined> {
+    const found = await this.token(token, purpose)
+    if (!found)
+      return undefined
+    const result = await this.db.deleteFrom(this.table('tokens')).where('token_hash', '=', hashToken(token)).executeTakeFirst()
+    return Number(result.numDeletedRows) === 1 ? found : undefined
+  }
+
+  /** Make the account's links stop working, those for `purpose` or all */
+  async deleteTokensOf(accountId: string, purpose?: TokenPurpose): Promise<void> {
+    let query = this.db.deleteFrom(this.table('tokens')).where('account_id', '=', accountId)
+    if (purpose)
+      query = query.where('purpose', '=', purpose)
+    await query.execute()
+  }
+
+  /** Forget links that ran out. Returns how many */
+  async deleteExpiredTokens(): Promise<number> {
+    const result = await this.db.deleteFrom(this.table('tokens')).where('expires_at', '<=', this.now().toISOString()).executeTakeFirst()
+    return Number(result.numDeletedRows)
   }
 
   /** A guest account becomes a full one, under a name of its own: same id, so what the game kept for it stays */
@@ -287,6 +385,7 @@ export default class AuthStore {
     for (let i = 0; i < ids.length; i += 500) {
       const chunk = ids.slice(i, i + 500)
       await this.db.deleteFrom(this.table('sessions')).where('account_id', 'in', chunk).execute()
+      await this.db.deleteFrom(this.table('tokens')).where('account_id', 'in', chunk).execute()
       await this.db.deleteFrom(this.table('identities')).where('account_id', 'in', chunk).execute()
       await this.db.deleteFrom(this.table('accounts')).where('id', 'in', chunk).execute()
     }

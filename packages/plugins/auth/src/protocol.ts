@@ -27,6 +27,8 @@ export interface AccountInfo {
    * game server and its plugins get. Null when it has none
    */
   email?: string | null
+  /** Whether the player confirmed the email is theirs, with the link mailed to it. Next to `email` only */
+  emailVerified?: boolean
 }
 
 /** What register and login answer with */
@@ -70,4 +72,15 @@ export function passwordProblem(password: unknown): string | undefined {
   if (password.length > MAX_PASSWORD_LENGTH)
     return `A password has at most ${MAX_PASSWORD_LENGTH} characters`
   return undefined
+}
+
+/** How long a link to confirm an email works */
+export const VERIFY_EMAIL_HOURS = 24
+/** How long a link to reset a password works */
+export const RESET_PASSWORD_MINUTES = 60
+
+/** What the token routes answer after confirming an email or setting a new password */
+export interface TokenResponse {
+  /** The account, as the player sees it */
+  account: AccountInfo
 }

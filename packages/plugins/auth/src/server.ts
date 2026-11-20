@@ -1,16 +1,20 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type { AuthorizeResult, Identity, ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { Express, Request, RequestHandler, Response } from 'express'
-import type { AccountInfo, SessionResponse } from './protocol'
+import type { MailLike } from './mails'
+import type { AccountInfo, SessionResponse, TokenResponse } from './protocol'
 import type { Account } from './store'
 import { randomInt } from 'node:crypto'
 import process from 'node:process'
+import { APP_URL_ENV } from '@mavonengine/core/Plugins/ProjectConfig'
+import { resetPasswordMail, verifyEmailMail } from './mails'
+import { resetPasswordPage, sendPage, text, verifyEmailPage } from './pages'
 import { decoyHash, hashPassword, verifyPassword } from './password'
-import { DEFAULT_PATH, emailProblem, PASSWORD_PROVIDER, passwordProblem, usernameProblem } from './protocol'
+import { DEFAULT_PATH, emailProblem, MIN_PASSWORD_LENGTH, PASSWORD_PROVIDER, passwordProblem, RESET_PASSWORD_MINUTES, usernameProblem, VERIFY_EMAIL_HOURS } from './protocol'
 import RateLimit from './rateLimit'
-import AuthStore, { hashToken, migrations } from './store'
+import AuthStore, { emailKey, hashToken, migrations } from './store'
 
-export type { AccountInfo, SessionResponse } from './protocol'
+export type { AccountInfo, SessionResponse, TokenResponse } from './protocol'
 export type { Account, AccountListing } from './store'
 
 export interface AuthOptions {
@@ -38,7 +42,21 @@ export interface AuthOptions {
   loginAttempts: number
   /** How long those failed logins count, in minutes. Default 15 */
   loginWindowMinutes: number
+  /** Mail a link to confirm the email when an account gets one, with a mail plugin. Default true */
+  verifyEmail: boolean
+  /**
+   * The game's own page for confirming an email, with `{token}` where the token goes, e.g.
+   * `https://mygame.com/verify?token={token}`. It sends the token to `POST /verify-email`. Default the plugin's page
+   */
+  verifyUrl?: string
+  /** The same for resetting a password: the page sends the token and new password to `POST /reset-password` */
+  resetUrl?: string
+  /** Password reset mails one address may ask for per hour. Default 5 */
+  resetsPerHour: number
 }
+
+/** Mails one email address gets per hour, of each kind, however many ask: nobody can flood an inbox through the game */
+export const MAILS_PER_ADDRESS_PER_HOUR = 3
 
 export const DEFAULT_OPTIONS: AuthOptions = {
   path: DEFAULT_PATH,
@@ -50,6 +68,8 @@ export const DEFAULT_OPTIONS: AuthOptions = {
   devGuests: false,
   loginAttempts: 10,
   loginWindowMinutes: 15,
+  verifyEmail: true,
+  resetsPerHour: 5,
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -68,9 +88,22 @@ export class AuthError extends Error {
   }
 }
 
+/** A link template: an http(s) URL with `{token}` where the token goes, or undefined */
+function linkTemplate(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.includes('{token}'))
+    return undefined
+  try {
+    const url = new URL(value.replace('{token}', 'token'))
+    return url.protocol === 'https:' || url.protocol === 'http:' ? value : undefined
+  }
+  catch {
+    return undefined
+  }
+}
+
 export function parseOptions(raw: Record<string, unknown> = {}): AuthOptions {
   const positive = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
-  return {
+  const options: AuthOptions = {
     path: typeof raw.path === 'string' && raw.path.startsWith('/') ? raw.path.replace(TRAILING_SLASHES_RE, '') : DEFAULT_OPTIONS.path,
     registration: typeof raw.registration === 'boolean' ? raw.registration : DEFAULT_OPTIONS.registration,
     sessionDays: positive(raw.sessionDays, DEFAULT_OPTIONS.sessionDays),
@@ -80,7 +113,16 @@ export function parseOptions(raw: Record<string, unknown> = {}): AuthOptions {
     devGuests: raw.devGuests === true,
     loginAttempts: Math.floor(positive(raw.loginAttempts, DEFAULT_OPTIONS.loginAttempts)),
     loginWindowMinutes: positive(raw.loginWindowMinutes, DEFAULT_OPTIONS.loginWindowMinutes),
+    verifyEmail: typeof raw.verifyEmail === 'boolean' ? raw.verifyEmail : DEFAULT_OPTIONS.verifyEmail,
+    resetsPerHour: Math.floor(positive(raw.resetsPerHour, DEFAULT_OPTIONS.resetsPerHour)),
   }
+  const verifyUrl = linkTemplate(raw.verifyUrl)
+  if (verifyUrl)
+    options.verifyUrl = verifyUrl
+  const resetUrl = linkTemplate(raw.resetUrl)
+  if (resetUrl)
+    options.resetUrl = resetUrl
+  return options
 }
 
 interface AuthState {
@@ -93,6 +135,10 @@ interface AuthState {
   failedLogins: RateLimit
   /** Guest accounts made per address */
   guestsMade: RateLimit
+  /** Password resets asked for per address */
+  resetRequests: RateLimit
+  /** Mails sent per email address and kind, so nobody floods an inbox */
+  mailsSent: RateLimit
   /** Deletes the guest accounts nobody can reach any more */
   sweeper?: ReturnType<typeof setInterval>
   warnedNoDatabase?: boolean
@@ -116,6 +162,8 @@ function limits(options: AuthOptions) {
   return {
     failedLogins: new RateLimit(options.loginAttempts, options.loginWindowMinutes * 60_000),
     guestsMade: new RateLimit(options.guestsPerHour, HOUR_MS),
+    resetRequests: new RateLimit(options.resetsPerHour, HOUR_MS),
+    mailsSent: new RateLimit(MAILS_PER_ADDRESS_PER_HOUR, HOUR_MS),
   }
 }
 
@@ -140,9 +188,9 @@ function publicAccount(account: Account): AccountInfo {
   return account.guest ? { id: account.id, name: account.name, guest: true } : { id: account.id, name: account.name }
 }
 
-/** What the player itself is told of its account: with its email */
+/** What the player itself is told of its account: with its email, and whether it confirmed it */
 function ownAccount(account: Account): AccountInfo {
-  return { ...publicAccount(account), email: account.email }
+  return { ...publicAccount(account), email: account.email, emailVerified: !!account.email && !!account.emailVerifiedAt }
 }
 
 /** An email from a request or a provider, trimmed, or undefined for none. Throws a 400 for one that can't be used */
@@ -343,6 +391,9 @@ function route(state: AuthState, handle: (req: Request, res: Response) => Promis
   return (req, res) => {
     handle(req, res).catch((err: unknown) => {
       if (err instanceof AuthError) {
+        const retryAfter = (err as { retryAfter?: number }).retryAfter
+        if (retryAfter !== undefined)
+          res.setHeader('Retry-After', String(retryAfter))
         res.status(err.status).json({ error: err.message })
         return
       }
@@ -361,6 +412,99 @@ async function requireSession(state: AuthState, req: Request): Promise<{ token: 
   if (account.disabledAt)
     throw new AuthError(403, 'This account is disabled')
   return { token, account }
+}
+
+/** A request's body as JSON, or as a form the plugin's pages posted. `form` says which, to answer it the same way */
+async function readBody(req: Request): Promise<{ body: Record<string, unknown>, form: boolean }> {
+  if (!String(req.headers['content-type'] ?? '').includes('application/x-www-form-urlencoded'))
+    return { body: await readJson(req), form: false }
+
+  return new Promise((resolve, reject) => {
+    let raw = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk: string) => {
+      raw += chunk
+      if (raw.length > MAX_BODY_BYTES) {
+        reject(new AuthError(413, 'Body too large'))
+        req.destroy()
+      }
+    })
+    req.on('end', () => resolve({ body: Object.fromEntries(new URLSearchParams(raw)), form: true }))
+    req.on('error', reject)
+  })
+}
+
+/** The mail plugin, or a 503 when the project has none: without it, no link can be mailed */
+function mailer(state: AuthState): MailLike {
+  const mail = state.ctx?.plugin?.<MailLike>('@mavonengine/mail')
+  if (!mail)
+    throw new AuthError(503, 'Mail is unavailable: the server has no mail plugin (install @mavonengine/mail)')
+  return mail
+}
+
+/**
+ * Where links in mails point: the game's `appUrl`, from mavonengine.json or MAVONENGINE_APP_URL. Never the request's
+ * Host header in production, which whoever sends the request chooses: a reset link to their own site would hand them
+ * the token. Elsewhere it is used
+ */
+function appUrlFor(state: AuthState, req: Request): string {
+  const appUrl = state.ctx?.appUrl
+  if (appUrl)
+    return appUrl
+  if (process.env.NODE_ENV === 'production')
+    throw new AuthError(503, `Links can't be mailed: set "appUrl" in mavonengine.json, or ${APP_URL_ENV}`)
+  return `${req.protocol}://${req.get('host') ?? 'localhost'}`
+}
+
+/** Throw the 503 linkFor() would, before anything is made for a link that can't be mailed */
+function checkLinks(state: AuthState, req: Request, kind: 'verify' | 'reset') {
+  if (!(kind === 'verify' ? state.options.verifyUrl : state.options.resetUrl))
+    appUrlFor(state, req)
+}
+
+function linkFor(state: AuthState, req: Request, kind: 'verify' | 'reset', token: string): string {
+  const template = kind === 'verify' ? state.options.verifyUrl : state.options.resetUrl
+  if (template)
+    return template.replace('{token}', encodeURIComponent(token))
+  const page = kind === 'verify' ? 'verify-email' : 'reset-password'
+  return `${appUrlFor(state, req)}${state.options.path}/${page}?token=${encodeURIComponent(token)}`
+}
+
+/** Seconds to wait before another mail of `kind` to `email`, after the hour's are sent */
+function mailWait(state: AuthState, kind: string, email: string): number | undefined {
+  return state.mailsSent.blocked(`${kind}|${emailKey(email)}`)
+}
+
+/**
+ * Mail the account a link to confirm its email. Answers once it is queued; the mail plugin sends it. Throws an
+ * AuthError when it can't: no email, already confirmed, no mail plugin, too many mails to the address
+ */
+async function sendVerification(state: AuthState, req: Request, account: Account): Promise<void> {
+  if (!account.email)
+    throw new AuthError(409, 'This account has no email')
+  if (account.emailVerifiedAt)
+    throw new AuthError(409, 'This email is confirmed already')
+  const mail = mailer(state)
+  const wait = mailWait(state, 'verify', account.email)
+  if (wait !== undefined)
+    throw Object.assign(new AuthError(429, `A confirmation mail went out a moment ago, ask again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`), { retryAfter: wait })
+
+  checkLinks(state, req, 'verify')
+  const token = await running(state).createToken(account.id, 'verify-email', account.email, VERIFY_EMAIL_HOURS * HOUR_MS)
+  state.mailsSent.hit(`verify|${emailKey(account.email)}`)
+  await mail.send(verifyEmailMail(account.email, account.name, linkFor(state, req, 'verify', token), state.ctx?.appName))
+}
+
+/** Mail a confirmation link after the account got an email, without failing what it was doing when it can't */
+async function sendVerificationQuietly(state: AuthState, req: Request, account: Account) {
+  if (!state.options.verifyEmail || !account.email || account.emailVerifiedAt || !state.ctx?.plugin?.('@mavonengine/mail'))
+    return
+  try {
+    await sendVerification(state, req, account)
+  }
+  catch (err) {
+    state.ctx?.logger?.warn(`Auth: could not mail ${account.name} a link to confirm their email: ${(err as Error)?.message ?? err}`)
+  }
 }
 
 export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: AuthState) {
@@ -416,6 +560,11 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     })
 
     ctx.logger?.info(`Auth: ${session.account.name} registered${guest ? `, was guest ${guest.name}` : ''}`)
+    if (email) {
+      const account = await store.account(session.account.id)
+      if (account)
+        await sendVerificationQuietly(state, req, account)
+    }
     res.status(201).json(session)
   }))
 
@@ -524,14 +673,202 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
       throw new AuthError(401, 'The current password is wrong')
 
     await store.setSecret(PASSWORD_PROVIDER, identity.externalId, await hashPassword(password as string))
-    // Wherever else it was logged in, maybe by whoever knew the old password, ends. This device stays
+    // Wherever else it was logged in, maybe by whoever knew the old password, ends. This device stays. So do reset
+    // links mailed before
     await store.deleteSessionsOf(account.id, token)
+    await store.deleteTokensOf(account.id, 'reset-password')
     const session = sessionKey(token)
     kick(state, account.id, key => key !== session)
     res.status(204).end()
   }))
 
+  mountEmailApi(app, state)
   mountAdminApi(app, ctx, state)
+}
+
+const LINK_GONE = 'This link doesn\'t work any more: it ran out, was used already, or a newer one was mailed. Ask for a new one in the game.'
+
+/** Email: change it, confirm it with a mailed link, reset a forgotten password with one */
+function mountEmailApi(app: Express, state: AuthState) {
+  const { path } = state.options
+
+  app.post(`${path}/email`, describe({
+    summary: 'Change the email',
+    description: 'With `Authorization: Bearer <token>`, send `{ "email": "..." }`, or `null` to take it away. A new email isn\'t confirmed: with a mail plugin, a link to confirm it is mailed to it. Links mailed before stop working.',
+    response: '`{ account }`. 400 for an email that can\'t be used, 409 when another account has it or for a guest',
+  }), route(state, async (req, res) => {
+    const { account } = await requireSession(state, req)
+    if (account.guest)
+      throw new AuthError(409, 'Register to give the account an email')
+    const { email: raw } = await readJson(req)
+    const email = raw === null ? null : emailFrom(raw)
+    if (email === undefined)
+      throw new AuthError(400, 'That is no email address')
+
+    const store = running(state)
+    if (email && emailKey(email) === (account.email && emailKey(account.email))) {
+      res.json({ account: ownAccount(account) })
+      return
+    }
+    if (email && await store.emailTaken(email, account.id))
+      throw new AuthError(409, 'That email is in use')
+    await store.setEmail(account.id, email).catch(async (err: unknown) => {
+      if (email && await store.emailTaken(email, account.id))
+        throw new AuthError(409, 'That email is in use')
+      throw err
+    })
+    await store.deleteTokensOf(account.id)
+
+    const changed = (await store.account(account.id))!
+    await sendVerificationQuietly(state, req, changed)
+    res.json({ account: ownAccount(changed) })
+  }))
+
+  app.post(`${path}/verify-email/send`, describe({
+    summary: 'Mail a new link to confirm the email',
+    description: `With \`Authorization: Bearer <token>\`. The link works for ${VERIFY_EMAIL_HOURS} hours; the ones mailed before stop working. At most ${MAILS_PER_ADDRESS_PER_HOUR} an hour to one address.`,
+    response: '202. 409 without an email or when it is confirmed already, 429 after too many, 503 without a mail plugin or the game\'s `appUrl`',
+  }), route(state, async (req, res) => {
+    const { account } = await requireSession(state, req)
+    await sendVerification(state, req, account)
+    res.status(202).json({ sent: true })
+  }))
+
+  app.get(`${path}/verify-email`, describe({
+    summary: 'The page a confirmation link opens',
+    description: 'Asks before confirming, as mail scanners open links in mails. Its button posts to `POST /verify-email`.',
+  }), route(state, async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    const found = token && await running(state).token(token, 'verify-email')
+    if (!found) {
+      sendPage(res, 400, 'Confirm your email', text(LINK_GONE, 'error'))
+      return
+    }
+    sendPage(res, 200, 'Confirm your email', verifyEmailPage(`${path}/verify-email`, token, found.email))
+  }))
+
+  app.post(`${path}/verify-email`, describe({
+    summary: 'Confirm the email with the token of a mailed link',
+    description: 'Send `{ "token": "..." }`. Needs no session: the link may be opened in another browser. The token works once, and only while the account still has the address it was mailed to.',
+    response: '`{ account }`. 400 for a token that doesn\'t work (any more)',
+  }), route(state, async (req, res) => {
+    const { body, form } = await readBody(req)
+    const store = running(state)
+    const found = typeof body.token === 'string' && body.token ? await store.useToken(body.token, 'verify-email') : undefined
+    const verified = found && await store.markEmailVerified(found.accountId, found.email)
+    if (!verified) {
+      if (form)
+        sendPage(res, 400, 'Confirm your email', text(LINK_GONE, 'error'))
+      else
+        throw new AuthError(400, LINK_GONE)
+      return
+    }
+
+    const account = (await store.account(found.accountId))!
+    state.ctx?.logger?.info(`Auth: ${account.name} confirmed their email`)
+    if (form)
+      sendPage(res, 200, 'Email confirmed', text(`Thanks, ${found.email} is confirmed. You can close this page and go back to the game.`))
+    else
+      res.json({ account: ownAccount(account) } satisfies TokenResponse)
+  }))
+
+  app.post(`${path}/forgot-password`, describe({
+    summary: 'Mail a link to reset the password',
+    description: `Send \`{ "email": "..." }\`. Answers the same whether an account has that email or not, and before looking, so it doesn't tell which emails have accounts. An account that logs in with a password gets a link that works for ${RESET_PASSWORD_MINUTES} minutes, once. ${state.options.resetsPerHour} an hour from one address, ${MAILS_PER_ADDRESS_PER_HOUR} an hour to one email.`,
+    response: '202. 400 for no email address, 429 after too many, 503 without a mail plugin or the game\'s `appUrl`',
+  }), route(state, async (req, res) => {
+    const { email: raw } = await readJson(req)
+    const email = emailFrom(raw)
+    if (!email)
+      throw new AuthError(400, 'That is no email address')
+
+    const address = addressOf(req)
+    const wait = state.resetRequests.blocked(address)
+    if (wait !== undefined)
+      throw Object.assign(new AuthError(429, `Too many password resets asked for, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`), { retryAfter: wait })
+
+    const store = running(state)
+    const mail = mailer(state)
+    checkLinks(state, req, 'reset')
+    state.resetRequests.hit(address)
+    res.status(202).json({ sent: true })
+
+    // After answering, so how long it takes says nothing about whether the account exists
+    void (async () => {
+      const account = await store.accountByEmail(email)
+      if (!account?.email || account.disabledAt || account.guest)
+        return
+      // Accounts that log in through another service have no password to reset
+      if (!await store.identityOf(account.id, PASSWORD_PROVIDER))
+        return
+      if (mailWait(state, 'reset', account.email) !== undefined)
+        return
+      const token = await store.createToken(account.id, 'reset-password', account.email, RESET_PASSWORD_MINUTES * 60_000)
+      state.mailsSent.hit(`reset|${emailKey(account.email)}`)
+      await mail.send(resetPasswordMail(account.email, account.name, linkFor(state, req, 'reset', token), state.ctx?.appName))
+    })().catch((err: unknown) => {
+      state.ctx?.logger?.error(`Auth: could not mail a password reset link: ${(err as Error)?.message ?? err}`)
+    })
+  }))
+
+  app.get(`${path}/reset-password`, describe({
+    summary: 'The page a password reset link opens',
+    description: 'A form for the new password, posting to `POST /reset-password`.',
+  }), route(state, async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    if (!token || !await running(state).token(token, 'reset-password')) {
+      sendPage(res, 400, 'Reset your password', text(LINK_GONE, 'error'))
+      return
+    }
+    sendPage(res, 200, 'Reset your password', resetPasswordPage(`${path}/reset-password`, token, MIN_PASSWORD_LENGTH))
+  }))
+
+  app.post(`${path}/reset-password`, describe({
+    summary: 'Set a new password with the token of a mailed link',
+    description: 'Send `{ "token": "...", "password": "..." }`. Every session of the account ends and its game connections close; the answer is a new session. The email counts as confirmed, as the link was mailed to it.',
+    response: '`{ token, account, expiresAt }`, logged in. 400 for a token that doesn\'t work (any more) or a password that can\'t be used',
+  }), route(state, async (req, res) => {
+    const { body, form } = await readBody(req)
+    const store = running(state)
+    const token = typeof body.token === 'string' ? body.token : ''
+    const fail = (status: number, message: string, again: boolean) => {
+      if (!form)
+        throw new AuthError(status, message)
+      sendPage(res, status, 'Reset your password', again ? resetPasswordPage(`${path}/reset-password`, token, MIN_PASSWORD_LENGTH, message) : text(message, 'error'))
+    }
+
+    // Checked before using the token up, so a password that can't be used leaves the link working
+    if (!token || !await store.token(token, 'reset-password'))
+      return fail(400, LINK_GONE, false)
+    const problem = passwordProblem(body.password)
+    if (problem)
+      return fail(400, problem, true)
+    if (form && body.confirm !== body.password)
+      return fail(400, 'The two passwords are not the same', true)
+
+    const secret = await hashPassword(body.password as string)
+    const found = await store.useToken(token, 'reset-password')
+    const account = found && await store.account(found.accountId)
+    const identity = account && await store.identityOf(account.id, PASSWORD_PROVIDER)
+    if (!found || !account?.email || emailKey(account.email) !== emailKey(found.email) || !identity)
+      return fail(400, LINK_GONE, false)
+    if (account.disabledAt)
+      return fail(403, 'This account is disabled', false)
+
+    await store.setSecret(PASSWORD_PROVIDER, identity.externalId, secret)
+    await store.markEmailVerified(account.id, found.email)
+    // Whoever was logged in, maybe with the forgotten password, is logged out
+    await store.deleteSessionsOf(account.id)
+    await store.deleteTokensOf(account.id, 'reset-password')
+    kick(state, account.id)
+    state.ctx?.logger?.info(`Auth: ${account.name} reset their password`)
+
+    if (form) {
+      sendPage(res, 200, 'Password changed', text('Your password is changed, and you are logged out everywhere. Go back to the game and log in with it.'))
+      return
+    }
+    res.json(await startSession(state, store, { ...account, emailVerifiedAt: account.emailVerifiedAt ?? new Date().toISOString() }))
+  }))
 }
 
 function mountAdminApi(app: Express, ctx: ServerPluginContext, state: AuthState) {
@@ -614,6 +951,7 @@ async function sweep(state: AuthState) {
     return
   try {
     const expired = await store.deleteExpiredSessions()
+    await store.deleteExpiredTokens()
     const guests = await store.deleteAbandonedGuests()
     if (expired || guests)
       state.ctx?.logger?.info(`Auth: forgot ${expired} expired session${expired === 1 ? '' : 's'} and ${guests} guest account${guests === 1 ? '' : 's'}`)
@@ -652,6 +990,10 @@ export default {
       ctx.logger?.info('Auth: clients without a session get in as guests (devGuests), which a production server doesn\'t allow')
     if (state.options.guests)
       ctx.logger?.info(`Auth: players can play as guests (POST ${state.options.path}/guest)`)
+    if (!ctx.plugin?.('@mavonengine/mail'))
+      ctx.logger?.info('Auth: no mail plugin, so emails aren\'t confirmed and forgotten passwords can\'t be reset. Install @mavonengine/mail for both')
+    else if (!ctx.appUrl && process.env.NODE_ENV === 'production')
+      ctx.logger?.warn(`Auth: set "appUrl" in mavonengine.json (or ${APP_URL_ENV}) so mails can link to the game: until then, no confirmation or password reset mail is sent`)
     await sweep(state)
     state.sweeper = setInterval(() => void sweep(state), HOUR_MS)
     state.sweeper.unref?.()
@@ -691,5 +1033,7 @@ export default {
     state.channels.clear()
     state.failedLogins.clear()
     state.guestsMade.clear()
+    state.resetRequests.clear()
+    state.mailsSent.clear()
   },
 } satisfies ServerPlugin
