@@ -27,11 +27,6 @@ export default class Character extends BasePlayer {
       const { networkState } = useNetworkState()
       networkState.value.players++
     }
-
-    NetworkedEntityFactory.instance.register(this.$typeName, (data) => {
-      const d = data as ReturnType<BasePlayer['serialize']>
-      return new Character(d.id, false, new Vector3(d.position.x, d.position.y, d.position.z))
-    })
   }
 
   /** Called by GameSyncManager when this player sends a chat. */
@@ -83,3 +78,10 @@ export default class Character extends BasePlayer {
     super.destroy()
   }
 }
+
+// Registered on import, not in the constructor: an editor opened from the main menu never builds a player of its
+// own, and without this it couldn't create the other players the server sends. `$typeName` is an instance field
+NetworkedEntityFactory.instance.register('player', (data) => {
+  const d = data as ReturnType<BasePlayer['serialize']>
+  return new Character(d.id, false, new Vector3(d.position.x, d.position.y, d.position.z))
+})

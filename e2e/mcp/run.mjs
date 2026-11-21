@@ -278,7 +278,8 @@ async function main() {
     log('\n== editor network panel')
     await (await waitForEditorUi(editor, errors, problems)).click()
     await editor.getByText('sv_state').first().waitFor({ timeout: 10000 })
-    check(await editor.getByText('Alice').count() === 1, 'the Network panel lists the server\'s packets and the players it syncs')
+    // The editor tab also draws Alice's name label over the character, so look in the panel's table only
+    check(await editor.getByRole('cell', { name: 'Alice', exact: true }).count() === 1, 'the Network panel lists the server\'s packets and the players it syncs')
 
     await editor.getByLabel('Server ghosts').check()
     await editor.getByLabel('Sync radius').check()
