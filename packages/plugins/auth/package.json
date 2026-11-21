@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/auth",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: player accounts, logins and sessions, so the game server knows who connects",
   "license": "MIT",
   "repository": {
@@ -47,7 +47,7 @@
     "lint:fix": "eslint . --fix"
   },
   "peerDependencies": {
-    "@mavonengine/core": ">=0.0.24"
+    "@mavonengine/core": ">=0.0.25"
   },
   "devDependencies": {
     "@mavonengine/core": "*",

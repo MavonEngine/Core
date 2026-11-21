@@ -33,7 +33,7 @@
       "name": "Auth",
       "description": "Player accounts with logins and sessions, so the game server knows who connects",
       "target": "both",
-      "engine": ">=0.0.24",
+      "engine": ">=0.0.25",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/auth/README.md"
     },
