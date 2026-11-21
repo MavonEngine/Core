@@ -64,6 +64,6 @@
     "target": "both",
     "client": "./dist/client.js",
     "server": "./dist/server.js",
-    "engine": ">=0.0.24"
+    "engine": ">=0.0.25"
   }
 }
