@@ -5,11 +5,12 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { updateConfig } from '@mavonengine/core/Plugins/ProjectConfig'
 import AdmZip from 'adm-zip'
 import { formatBytes } from '../dashboard/format'
 import { MCP_CONFIG_FILE, writeMcpConfig } from '../mcp/config'
 
-export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.19-alpha.zip'
+export const TEMPLATE_URL = 'https://github.com/MavonEngine/Core/archive/refs/tags/0.0.20-alpha.zip'
 export const TEMPLATE_SUBPATH = 'packages/multiplayer-template'
 
 export const PROJECT_NAME_RE = /^[\w@./-][\w@./\- ]*$/
@@ -35,6 +36,15 @@ export interface CreateProjectOptions {
   fetch?: typeof globalThis.fetch
   /** Install the dependencies, default true */
   install?: boolean
+}
+
+const NAME_SEPARATORS_RE = /[-_\s]+/
+const PATH_SEPARATORS_RE = /[\\/]/
+
+/** The game's name for mavonengine.json from the project's: `my-game` → `My Game` */
+export function appNameFor(projectName: string): string {
+  const words = projectName.split(PATH_SEPARATORS_RE).at(-1)!.split(NAME_SEPARATORS_RE).filter(Boolean)
+  return words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || projectName
 }
 
 export function projectDirFor(projectName: string, parentDir: string) {
@@ -176,6 +186,14 @@ export async function createProject({ projectName, parentDir, report, signal, te
     pkg.name = projectName
     writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`)
   }
+
+  // The game's name in mails and the like, ctx.appName for plugins. A name the template sets is kept
+  updateConfig(projectDir, (config) => {
+    if (typeof config.appName === 'string' && config.appName.trim())
+      return false
+    config.appName = appNameFor(projectName)
+    return true
+  })
 
   // Lets MCP clients (AI coding assistants) read the running game server through `mavonengine mcp`
   if (writeMcpConfig(projectDir))

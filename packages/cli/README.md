@@ -109,6 +109,12 @@ npx @mavonengine/cli install @acme/forest@^2 file:../my-plugin --yes
 - `prefabs`: the plugin prefabs the project uses. The editor adds a prefab here when you place it, and you can edit the list by hand. Only the assets of these prefabs (plus the plugin's shared assets) go into the release.
 - `options`: passed to the plugin as `ctx.options`.
 
+Next to `plugins`, the file says what goes for the whole project:
+
+- `appUrl`: where the game is, like `https://mygame.com`. Links that leave the game, such as those in mails, point there. Server plugins get it as `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it, for example per deployment.
+- `appName`: the game's name, in mails and in the browser tab: `%MAVONENGINE_APP_NAME%` in the client's `index.html` becomes it, in dev and in the build (`MavonEngine` without one). Server plugins get it as `ctx.appName`.
+- `database`, `auth`, `notifications`: which plugin to use when more than one of that kind is enabled.
+
 The client reloads when the plugins in `mavonengine.json` change. Restart the game server to load a new server plugin. Without an interactive terminal it only installs, unless `--yes` is given.
 
 | Option | Default | |
@@ -116,6 +122,23 @@ The client reloads when the plugins in `mavonengine.json` change. Restart the ga
 | `--cwd <dir>` | current directory | Where to start looking for the project |
 | `-y`, `--yes` | | Add plugins to `mavonengine.json` without asking |
 | `--no-register` | | Only install |
+
+## `mavonengine asset:publish`
+
+Copies the files a plugin lets you change into your project, such as the mail plugin's layout:
+
+```sh
+npx @mavonengine/cli asset:publish @mavonengine/mail
+```
+
+They go to `resources/<package>/`, here `resources/@mavonengine/mail/layout.html`. The plugin uses your copy from then on, so change it there and commit it. Files you have already are kept, so publishing again after an update only adds the plugin's new files. `--force` replaces yours with the plugin's.
+
+A plugin offers files with `"publish": "<directory>"` under `mavonengine` in its `package.json`, and finds your copy with `ctx.publishedFile('<file>')`.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+| `--force` | | Replace the files you have with the plugin's |
 
 ## `mavonengine build`
 

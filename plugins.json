@@ -33,9 +33,27 @@
       "name": "Auth",
       "description": "Player accounts with logins and sessions, so the game server knows who connects",
       "target": "both",
-      "engine": ">=0.0.24",
+      "engine": ">=0.0.25",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/auth/README.md"
+    },
+    {
+      "package": "@mavonengine/mail",
+      "name": "Mail",
+      "description": "Send mail from the game server, queued and retried, over SMTP or any nodemailer transport",
+      "target": "server",
+      "engine": ">=0.0.25",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/mail",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/mail/README.md"
+    },
+    {
+      "package": "@mavonengine/notifications",
+      "name": "Notifications",
+      "description": "Notify players and anything else notifiable, in the game, by mail and kept to read later: player.notify(new LevelUp())",
+      "target": "both",
+      "engine": ">=0.0.25",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/notifications",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/notifications/README.md"
     }
   ]
 }

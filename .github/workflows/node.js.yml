@@ -7,6 +7,8 @@ on:
     branches: [ "main", "dev" ]
 
 jobs:
+  # Installs, builds, runs the unit tests, lint and typechecks once per OS, then hands the built workspace to the
+  # end-to-end jobs below, which run in parallel
   build:
 
     runs-on: ${{ matrix.os }}
@@ -57,6 +59,14 @@ jobs:
       run: npm run typecheck
       working-directory: ./packages/plugins/sqlite
 
+    - name: Typecheck mail plugin
+      run: npm run typecheck
+      working-directory: ./packages/plugins/mail
+
+    - name: Typecheck notifications plugin
+      run: npm run typecheck
+      working-directory: ./packages/plugins/notifications
+
     # Run the built file directly: npm ci runs before the build, so npm skipped
     # linking the `mavonengine` bin (its target didn't exist yet) and npx would
     # fall back to looking it up on the registry
@@ -101,65 +111,94 @@ jobs:
       run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"
       working-directory: ./packages/multiplayer-template
 
-    # Installs e2e/plugin/hello-plugin into the template with `mavonengine install`, then checks it on the
-    # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
-    # install, since a real one would replace the npm-linked @mavonengine/core
-    - name: Plugin end-to-end test
-      timeout-minutes: 5
-      run: npm run test:plugin-e2e
+    # Links don't survive an archive on every OS: this records and removes them, the e2e jobs put them back.
+    # Fails if the template doesn't use the local build of core, cli and editor
+    - name: Pack the built workspace
+      shell: bash
+      run: |
+        node e2e/ci-workspace.mjs save
+        tar -cf workspace.tar --exclude=.git --exclude=workspace.tar .
 
-    # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
-    # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
-    - name: Monitoring dashboard end-to-end test
-      timeout-minutes: 5
-      run: npm run test:monitoring-e2e
+    - name: Upload the built workspace
+      uses: actions/upload-artifact@v4
+      with:
+        name: workspace-${{ matrix.os }}
+        path: workspace.tar
+        retention-days: 1
 
-    - name: Upload monitoring dashboard screenshots
+  e2e:
+    name: e2e ${{ matrix.test.name }} (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+
+    strategy:
+      # One failing test doesn't cancel the others
+      fail-fast: false
+      matrix:
+        node-version: [24.x]
+        os: [ubuntu-latest, windows-latest]
+        test:
+          # Installs e2e/plugin/hello-plugin into the template with `mavonengine install`, then checks it on the
+          # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
+          # install, since a real one would replace the npm-linked @mavonengine/core
+          - { name: plugin, dir: plugin }
+          # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
+          # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
+          - { name: monitoring, dir: http-monitoring }
+          # Boots the template's game server with the built @mavonengine/sqlite and a plugin that migrates and writes:
+          # the database file, ctx.db, GET /api/game/database, the data after a restart, and the server without the plugin
+          - { name: sqlite, dir: sqlite }
+          # Boots the template's game server with a stub auth plugin and sends geckos' connection request the way a client
+          # does: refused tokens get the plugin's status, the right one its identity, and a missing auth plugin locks everyone out.
+          # Then the built @mavonengine/auth on sqlite: register, connect as the account, a restart, disabling the account.
+          # Last, in the runner's Chrome: a tab without a session is refused, a registered player and a guest join the game
+          - { name: auth, dir: auth }
+          # Boots the template's game server with the built queue, mail, notifications and auth plugins on sqlite, mailing
+          # over SMTP to a small SMTP server in the test: confirming an email and resetting a password with the mailed links,
+          # a notification kept and mailed, a layout published with asset:publish, and a mail that waits on the queue in the
+          # database while the mail server is down, through a restart
+          - { name: mail, dir: mail }
+          # Boots the template's game server in dev, which loads scenes/main.json, and in the runner's Chrome: a player
+          # gets the scene and the server's trees, an editor drops out as a player, and saving the scene in the editor
+          # reloads it on the server and in both clients. Last, an editor opened from the main menu without joining
+          - { name: scenes, dir: scenes }
+          # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
+          # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
+          - { name: mcp, dir: mcp }
+          # The template aliases core and the editor to their src/, so nothing above loads their dist/. This runs
+          # the template against the built packages, like a project that installed them, and opens the editor
+          - { name: editor-dist, dir: editor-dist }
+
+    steps:
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Download the built workspace
+      uses: actions/download-artifact@v4
+      with:
+        name: workspace-${{ matrix.os }}
+
+    # Puts the links back and fails if the template doesn't resolve core, cli and editor to the local build
+    - name: Unpack the built workspace
+      shell: bash
+      run: |
+        tar -xf workspace.tar
+        rm workspace.tar
+        node e2e/ci-workspace.mjs restore
+
+    - name: End-to-end test
+      timeout-minutes: 5
+      run: npm run test:${{ matrix.test.name }}-e2e
+
+    - name: Upload screenshots
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: monitoring-e2e-screenshots-${{ matrix.os }}
-        path: e2e/http-monitoring/screenshots
-        if-no-files-found: ignore
-
-    # Boots the template's game server with the built @mavonengine/sqlite and a plugin that migrates and writes:
-    # the database file, ctx.db, GET /api/game/database, the data after a restart, and the server without the plugin
-    - name: SQLite end-to-end test
-      timeout-minutes: 5
-      run: npm run test:sqlite-e2e
-
-    # Boots the template's game server with a stub auth plugin and sends geckos' connection request the way a client
-    # does: refused tokens get the plugin's status, the right one its identity, and a missing auth plugin locks everyone out.
-    # Then the built @mavonengine/auth on sqlite: register, connect as the account, a restart, disabling the account.
-    # Last, in the runner's Chrome: a tab without a session is refused, a registered player and a guest join the game
-    - name: Auth end-to-end test
-      timeout-minutes: 5
-      run: npm run test:auth-e2e
-
-    # Boots the template's game server in dev, joins in the runner's Chrome and drives `mavonengine mcp`
-    # over stdio like an AI assistant: server and client tools, the dev bridge and compare_entity
-    - name: MCP end-to-end test
-      timeout-minutes: 5
-      run: npm run test:mcp-e2e
-
-    - name: Upload MCP end-to-end screenshots
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: mcp-e2e-screenshots-${{ matrix.os }}
-        path: e2e/mcp/screenshots
-        if-no-files-found: ignore
-
-    # The template aliases core and the editor to their src/, so nothing above loads their dist/. This runs
-    # the template against the built packages, like a project that installed them, and opens the editor
-    - name: Editor dist end-to-end test
-      timeout-minutes: 5
-      run: npm run test:editor-dist-e2e
-
-    - name: Upload editor dist end-to-end screenshots
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: editor-dist-e2e-screenshots-${{ matrix.os }}
-        path: e2e/editor-dist/screenshots
+        name: ${{ matrix.test.name }}-e2e-screenshots-${{ matrix.os }}
+        path: e2e/${{ matrix.test.dir }}/screenshots
         if-no-files-found: ignore

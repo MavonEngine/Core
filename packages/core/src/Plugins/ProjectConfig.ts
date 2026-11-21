@@ -25,6 +25,15 @@ export interface MavonEngineConfig {
   database?: string
   /** Package of the auth plugin to use, when more than one is enabled */
   auth?: string
+  /** Package of the notifications plugin to use, when more than one is enabled */
+  notifications?: string
+  /**
+   * Where the game is, e.g. `https://mygame.com`: what links in mails and the like point to. Plugins get it as
+   * `ctx.appUrl`. `MAVONENGINE_APP_URL` overrides it
+   */
+  appUrl?: string
+  /** The game's name, e.g. in mails and their layout. Plugins get it as `ctx.appName` */
+  appName?: string
   [key: string]: unknown
 }
 
@@ -45,6 +54,11 @@ export interface PluginManifest {
     /** Shipped only when the prefab is listed in the project's mavonengine.json */
     prefabs?: Record<string, string[]>
   }
+  /**
+   * Directory of files a project may change, relative to the package, e.g. a mail layout. `mavonengine asset:publish
+   * <package>` copies them into the project's `resources/<package>/`, and `ctx.publishedFile()` finds the copy
+   */
+  publish?: string
 }
 
 export interface InstalledPlugin {
@@ -75,6 +89,26 @@ export interface ReleaseAsset {
 const TARGETS: PluginTarget[] = ['client', 'server', 'both']
 
 export class PluginConfigError extends Error {}
+
+/** Overrides `appUrl` in mavonengine.json, e.g. per deployment */
+export const APP_URL_ENV = 'MAVONENGINE_APP_URL'
+
+const TRAILING_SLASHES_RE = /\/+$/
+
+/** An http(s) URL without its trailing slash, or undefined for anything else */
+export function parseAppUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim())
+    return undefined
+  try {
+    const url = new URL(value.trim())
+    if (url.protocol !== 'https:' && url.protocol !== 'http:')
+      return undefined
+  }
+  catch {
+    return undefined
+  }
+  return value.trim().replace(TRAILING_SLASHES_RE, '')
+}
 
 export function configPath(root: string): string {
   return join(root, CONFIG_FILE)
@@ -196,6 +230,9 @@ function validateManifest(pkg: string, value: unknown): PluginManifest {
     if (runsOn(manifest.target, side) && typeof manifest[side] !== 'string')
       throw new PluginConfigError(`${pkg}: "mavonengine.${side}" is required for target "${manifest.target}"`)
   }
+
+  if (manifest.publish !== undefined && (typeof manifest.publish !== 'string' || !manifest.publish))
+    throw new PluginConfigError(`${pkg}: "mavonengine.publish" must be a directory of the package`)
 
   return manifest
 }

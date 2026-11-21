@@ -123,3 +123,28 @@ export function snapshotFiles(paths) {
     }
   }
 }
+
+/** How long the editor's UI may take to load: it is built from source by the dev server, next to a game that renders in software */
+const EDITOR_UI_TIMEOUT = 120000
+
+/**
+ * The editor exists as soon as `.` is pressed, its UI only once the dev server has built it and React has drawn it.
+ * Waits for one of its tabs. Fails with what the page reported when that doesn't happen, instead of a bare timeout
+ */
+export async function waitForEditorUi(page, tabName, errors, problems = []) {
+  const started = Date.now()
+  const tab = page.getByRole('tab', { name: tabName })
+
+  while (true) {
+    if (await tab.count() > 0)
+      break
+    if (errors.length)
+      throw new Error(`the editor's UI did not load:\n  ${errors.join('\n  ')}`)
+    if (Date.now() - started > EDITOR_UI_TIMEOUT)
+      throw new Error(`the editor's UI was not there after ${EDITOR_UI_TIMEOUT / 1000}s${problems.length ? `:\n  ${problems.slice(-20).join('\n  ')}` : ', and the page reported nothing'}`)
+    await delay(500)
+  }
+
+  log(`  the editor's UI took ${((Date.now() - started) / 1000).toFixed(1)}s to load`)
+  return tab
+}

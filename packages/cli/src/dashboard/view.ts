@@ -633,12 +633,23 @@ function waiting(ui: Container, theme: Theme, state: DashboardState) {
 }
 
 function wideLayout(ui: Container, theme: Theme, state: DashboardState, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
-  ui.grid({ columns: ['1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
-    grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
-    grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
-    grid.panel({ title: 'Tick' }, p => tickPanel(p, theme, snapshot))
-    grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
-  })
+  if (snapshot.queue) {
+    ui.grid({ columns: ['1fr', '1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
+      grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
+      grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
+      grid.panel({ title: 'Tick' }, p => tickPanel(p, theme, snapshot))
+      grid.panel({ title: queueTitle(snapshot.queue!), colSpan: 2 }, p => queuePanel(p, theme, snapshot.queue!))
+      grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
+    })
+  }
+  else {
+    ui.grid({ columns: ['1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
+      grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
+      grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
+      grid.panel({ title: 'Tick' }, p => tickPanel(p, theme, snapshot))
+      grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
+    })
+  }
 
   ui.row({ size: '1fr' }, (row) => {
     playersPanel(row, theme, snapshot, view, transparent)
@@ -650,6 +661,8 @@ function narrowLayout(ui: Container, theme: Theme, state: DashboardState, snapsh
   ui.panel({ title: 'CPU', size: 9 }, p => cpuPanel(p, theme, snapshot))
   ui.panel({ title: 'Network', size: 9 }, p => networkPanel(p, theme, snapshot))
   ui.panel({ title: 'Tick', size: 9 }, p => tickPanel(p, theme, snapshot))
+  if (snapshot.queue)
+    ui.panel({ title: queueTitle(snapshot.queue), size: 9 }, p => queuePanel(p, theme, snapshot.queue!))
   ui.panel({ title: 'World', size: 11 }, p => worldPanel(p, theme, snapshot))
   playersPanel(ui, theme, snapshot, view, transparent)
   logsPanel(ui, theme, state, view)
@@ -725,6 +738,47 @@ function tickPanel(ui: Container, theme: Theme, { tick, tickRate }: ServerMetric
   ui.keyValues([
     { label: 'Ticks/s', value: `${latest?.ticksPerSecond ?? 0} / ${tickRate}`, color: (latest?.ticksPerSecond ?? 0) < tickRate * 0.9 ? theme.danger : undefined },
     { label: 'Commands/s', value: `${latest?.commandsPerSecond ?? 0} (max ${latest?.maxCommandsPerTick ?? 0}/tick)` },
+  ], { spread: true })
+}
+
+type QueueMetrics = NonNullable<ServerMetricsSnapshot['queue']>
+
+/** `Queue (database)`, and says so when this server doesn't run its jobs */
+export function queueTitle(queue: QueueMetrics): string {
+  return `Queue (${queue.driver}${queue.working ? '' : ', not worked here'})`
+}
+
+/** Jobs over the whole history: what the panel's totals show */
+export function queueTotals(queue: QueueMetrics): { processed: number, failed: number, retried: number } {
+  return queue.history.reduce((sum, s) => ({ processed: sum.processed + s.processed, failed: sum.failed + s.failed, retried: sum.retried + s.retried }), { processed: 0, failed: 0, retried: 0 })
+}
+
+function queuePanel(ui: Container, theme: Theme, queue: QueueMetrics) {
+  const latest = queue.latest
+  const totals = queueTotals(queue)
+  const seconds = Math.round(queue.history.length > 1 ? (queue.history.at(-1)!.timestamp - queue.history[0].timestamp) / 1000 : 0)
+  const window = seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`
+
+  ui.multiGraph([
+    { label: 'queued', values: queue.history.map(s => s.size), color: theme.graph[0] },
+    { label: 'processed', values: queue.history.map(s => s.processed), color: theme.graph[1] },
+    { label: 'failed', values: queue.history.map(s => s.failed), color: theme.danger },
+  ], {
+    min: 0,
+    max: Math.max(4, ...queue.history.map(s => Math.max(s.size, s.processed, s.failed))),
+    axis: true,
+    axisFormat: v => String(Math.round(v)),
+    legend: true,
+    legendAlign: 'right',
+    size: '1fr',
+  })
+
+  ui.keyValues([
+    { label: 'Queued', value: String(latest?.size ?? 0), color: theme.graph[0] },
+    { label: 'Running', value: String(latest?.running ?? 0) },
+    { label: `Processed ${window}`, value: String(totals.processed), color: theme.graph[1] },
+    { label: `Retried ${window}`, value: String(totals.retried), color: totals.retried ? theme.warning : undefined },
+    { label: `Failed ${window}`, value: String(totals.failed), color: totals.failed ? theme.danger : undefined },
   ], { spread: true })
 }
 

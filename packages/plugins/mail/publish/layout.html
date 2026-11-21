@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  The layout every HTML mail of the game is sent in. Change it in your project after
+  `npx mavonengine asset:publish @mavonengine/mail`: the copy in resources/@mavonengine/mail/ is used from then on.
+
+  {{ name }} is filled in escaped, {{{ name }}} as it is. What there is:
+    content    the mail's html (or its text, made into paragraphs)       use {{{ content }}}
+    subject    the mail's subject
+    preheader  the line inboxes show next to the subject, when the mail has one
+    appName    the game's name, "appName" in mavonengine.json, else the sender's name
+    appUrl     where the game is, "appUrl" in mavonengine.json, for a link back to it
+    year       this year
+  and everything under "layoutData" in the mail plugin's options, e.g. "footer" or "url".
+
+  Mail clients ignore <style> in <head> and most of modern CSS: keep to tables and inline styles.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>{{ subject }}</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f2f3f5; -webkit-text-size-adjust: 100%;">
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0;">{{ preheader }}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f2f3f5;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
+            <tr>
+              <td style="padding: 0 8px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; font-weight: 700; color: #1d1f24;">
+                {{ appName }}
+              </td>
+            </tr>
+            <tr>
+              <td style="background-color: #ffffff; border-radius: 8px; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #2b2e35;">
+                {{{ content }}}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 16px 8px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #6b7080;">
+                {{ footer }}
+                <br>
+                &copy; {{ year }} {{ appName }}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

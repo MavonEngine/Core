@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { chromium } from 'playwright-core'
-import { base, check, cli, log, PORT, run, startServer, template } from '../helpers.mjs'
+import { base, check, cli, log, PORT, run, startServer, template, waitForEditorUi } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const screenshots = join(here, 'screenshots')
@@ -47,31 +47,6 @@ function watchPage(page, name, problems) {
     if (response.status() >= 400)
       problems.push(`${name} ${response.status()}: ${response.url()}`)
   })
-}
-
-/** How long the editor's UI may take to load: it is built from source by the dev server, next to a game that renders in software */
-const EDITOR_UI_TIMEOUT = 120000
-
-/**
- * The editor exists as soon as `.` is pressed, its UI only once the dev server has built it and React has drawn it.
- * Fails with what the page reported when that doesn't happen, instead of a bare timeout
- */
-async function waitForEditorUi(page, errors, problems) {
-  const started = Date.now()
-  const tab = page.getByRole('tab', { name: 'Network' })
-
-  while (true) {
-    if (await tab.count() > 0)
-      break
-    if (errors.length)
-      throw new Error(`the editor's UI did not load:\n  ${errors.join('\n  ')}`)
-    if (Date.now() - started > EDITOR_UI_TIMEOUT)
-      throw new Error(`the editor's UI was not there after ${EDITOR_UI_TIMEOUT / 1000}s${problems.length ? `:\n  ${problems.slice(-20).join('\n  ')}` : ', and the page reported nothing'}`)
-    await delay(500)
-  }
-
-  log(`  the editor's UI took ${((Date.now() - started) / 1000).toFixed(1)}s to load`)
-  return tab
 }
 
 /** Everything that helps to tell why a run failed, since CI can't be looked at afterwards */
@@ -276,9 +251,10 @@ async function main() {
     check((await data('client_network', { clientId: editorId })).network.editorMode === true, 'and the editor tab by its id')
 
     log('\n== editor network panel')
-    await (await waitForEditorUi(editor, errors, problems)).click()
+    await (await waitForEditorUi(editor, 'Network', errors, problems)).click()
     await editor.getByText('sv_state').first().waitFor({ timeout: 10000 })
-    check(await editor.getByText('Alice').count() === 1, 'the Network panel lists the server\'s packets and the players it syncs')
+    // The editor tab also draws Alice's name label over the character, so look in the panel's table only
+    check(await editor.getByRole('cell', { name: 'Alice', exact: true }).count() === 1, 'the Network panel lists the server\'s packets and the players it syncs')
 
     await editor.getByLabel('Server ghosts').check()
     await editor.getByLabel('Sync radius').check()

@@ -8,7 +8,7 @@ import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
-import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
+import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
 export { PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
@@ -67,8 +67,27 @@ export interface MavonEnginePluginsOptions {
   devBridge?: boolean
 }
 
+/** Where index.html wants the game's name, `appName` in mavonengine.json: `<title>%MAVONENGINE_APP_NAME%</title>` */
+export const APP_NAME_PLACEHOLDER = '%MAVONENGINE_APP_NAME%'
+
+/** What the placeholder becomes without an `appName` */
+export const DEFAULT_APP_NAME = 'MavonEngine'
+
+const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }
+const HTML_SPECIAL_RE = /[&<>"']/g
+
+/** `html` with every placeholder of the game's name filled in, escaped */
+export function fillAppName(html: string, appName: string | undefined): string {
+  if (!html.includes(APP_NAME_PLACEHOLDER))
+    return html
+  const name = (appName?.trim() || DEFAULT_APP_NAME).replace(HTML_SPECIAL_RE, char => HTML_ESCAPES[char])
+  return html.split(APP_NAME_PLACEHOLDER).join(name)
+}
+
 /**
  * Vite plugin for MavonEngine engine plugins:
+ * - fills in the game's name, `appName` in mavonengine.json, where index.html has `%MAVONENGINE_APP_NAME%`, in dev
+ *   and in the build
  * - `virtual:mavonengine/plugins` exports the client entries of the plugins enabled in mavonengine.json
  * - in dev, serves plugin assets under `/plugins/<package>/` and records the prefabs the editor places
  * - in dev, lists the project's plugins with their version and readme for the editor's Plugins view
@@ -139,16 +158,29 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       return generatePluginsModule(plugins, shipped)
     },
 
-    transformIndexHtml() {
-      if (!devBridge || config.command !== 'serve')
-        return undefined
+    transformIndexHtml: {
+      // Before Vite's own %…% replacement, so it never sees the placeholder
+      order: 'pre',
+      handler(html) {
+        // Read for every page in dev, so a changed name shows on the next reload; once in a build
+        let appName: string | undefined
+        const root = projectRoot()
+        if (root) {
+          try {
+            const configured = readConfig(root).appName
+            appName = typeof configured === 'string' ? configured : undefined
+          }
+          catch (err) {
+            warn(`Could not read the game's name: ${(err as Error).message}`)
+          }
+        }
 
-      // First in <head> so it also catches errors thrown while the game starts
-      return [{
-        tag: 'script',
-        attrs: { type: 'module', src: `${config.base}@id/__x00__${VIRTUAL_DEV_BRIDGE_ID}` },
-        injectTo: 'head-prepend',
-      }]
+        const tags = devBridge && config.command === 'serve'
+          // First in <head> so it also catches errors thrown while the game starts
+          ? [{ tag: 'script', attrs: { type: 'module', src: `${config.base}@id/__x00__${VIRTUAL_DEV_BRIDGE_ID}` }, injectTo: 'head-prepend' as const }]
+          : []
+        return { html: fillAppName(html, appName), tags }
+      },
     },
 
     configureServer(server) {

@@ -85,6 +85,16 @@ async function registered(server: Awaited<ReturnType<typeof started>>, username 
 }
 
 describe('auth plugin', () => {
+  it('gives other plugins its hooks as its api, with the account\'s email', async () => {
+    const server = await started()
+    const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+    const id = (res.json as { account: { id: string } }).account.id
+
+    const api = plugin.api(server.ctx)
+    expect(api).toBe(server.hooks)
+    expect(await api.account(id)).toMatchObject({ email: 'ada@example.com', emailVerifiedAt: null })
+  })
+
   it('registers a player, logged in, with a session the game connection accepts', async () => {
     const server = await started()
     const { token, account } = await registered(server)
@@ -132,7 +142,7 @@ describe('auth plugin', () => {
       const guest = (await server.request('POST', '/guest')).json
 
       const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
-      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: 'ada@example.com' })
+      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: 'ada@example.com', emailVerified: false })
     })
 
     it('comes from a login plugin\'s profile, when no other account has it', async () => {
@@ -367,7 +377,7 @@ describe('auth plugin', () => {
 
       const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse' } })
       expect(res.status).toBe(201)
-      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: null })
+      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: null, emailVerified: false })
       // Both the new session and the guest's own now connect as the full account
       expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
       expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
@@ -396,7 +406,7 @@ describe('auth plugin', () => {
       const guest = await asGuest(server)
 
       const linked = await server.hooks.signIn('discord', '123', { name: 'ada_discord' }, { linkTo: guest.account.id })
-      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord', email: null })
+      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord', email: null, emailVerified: false })
       expect((await server.hooks.signIn('discord', '123')).account.id).toBe(guest.account.id)
     })
 
