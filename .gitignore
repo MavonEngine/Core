@@ -31,3 +31,5 @@ e2e/http-monitoring/screenshots
 e2e/scenes/screenshots
 e2e/mcp/screenshots
 e2e/editor-dist/screenshots
+.ci-links.json
+/workspace.tar
