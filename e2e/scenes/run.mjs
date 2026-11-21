@@ -18,7 +18,7 @@ import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { base, check, log, run, snapshotFiles, startServer, template } from '../helpers.mjs'
+import { base, check, log, run, snapshotFiles, startServer, template, waitForEditorUi } from '../helpers.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const screenshots = join(here, 'screenshots')
@@ -102,7 +102,8 @@ async function main() {
     check(true, 'the editor shows the other player live, from the server')
     check(await editor.evaluate(() => window.Game.activeScene.getEntries().filter(e => e.object).length) === 3, 'the editor keeps the scene it was playing in')
     check(await editor.evaluate(() => window.Game.activeScene.isDirty()) === false, 'opening the editor leaves the scene unchanged')
-    await editor.getByRole('tab', { name: 'Scene' }).click()
+    // The console errors so far may be harmless (a missing favicon), so they are only reported if the UI never shows up
+    await (await waitForEditorUi(editor, 'Scene', [], errors)).click()
     await editor.getByText('Forest').waitFor()
     check(await editor.getByText('server', { exact: true }).isVisible(), 'the Scene panel marks the tree field as server-built')
     await editor.screenshot({ path: join(screenshots, '1-editor.png') })
