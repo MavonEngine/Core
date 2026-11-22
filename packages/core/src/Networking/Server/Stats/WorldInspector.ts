@@ -31,6 +31,45 @@ export interface WorldInspectorSource {
 
 const isPlayer = (entity: unknown) => entity instanceof Player
 
+/** The server's headless three.js scene graph: what is in `game.scene` */
+export interface SceneGraphStats {
+  /** Every Object3D below the scene, not the scene itself */
+  objects: number
+  /** How many of each `type`, e.g. `{ Mesh: 3, Group: 1 }`, most first */
+  byType: Record<string, number>
+  meshes: number
+  /** Of the meshes' geometries */
+  triangles: number
+  lights: number
+}
+
+/** The server's Rapier world, null when the game runs without physics */
+export interface PhysicsStats {
+  bodies: number
+  dynamic: number
+  fixed: number
+  kinematic: number
+  sleeping: number
+  colliders: number
+  gravity: { x: number, y: number, z: number }
+  /** Seconds per physics step */
+  timestep: number
+}
+
+interface MeshLike {
+  isMesh?: boolean
+  isLight?: boolean
+  type: string
+  geometry?: { index?: { count: number } | null, getAttribute?(name: string): { count: number } | undefined }
+}
+
+function trianglesOf(geometry: MeshLike['geometry']): number {
+  if (!geometry)
+    return 0
+  const count = geometry.index?.count ?? geometry.getAttribute?.('position')?.count ?? 0
+  return Math.floor(count / 3)
+}
+
 /**
  * Read-only views of the server's scene and the entities in its world, served on the dev endpoints.
  */
@@ -47,6 +86,57 @@ export default class WorldInspector {
       file: this.source.activeSceneFile ?? null,
       watching: this.source.sceneWatched,
     }
+  }
+
+  /** Counts of what the server's three.js scene graph holds */
+  sceneGraph(): SceneGraphStats {
+    const stats: SceneGraphStats = { objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 }
+    const root = this.source.game.scene
+    root?.traverse((node) => {
+      if (node === root)
+        return
+      const object = node as unknown as MeshLike
+      stats.objects++
+      stats.byType[object.type] = (stats.byType[object.type] ?? 0) + 1
+      if (object.isMesh) {
+        stats.meshes++
+        stats.triangles += trianglesOf(object.geometry)
+      }
+      if (object.isLight)
+        stats.lights++
+    })
+    stats.byType = Object.fromEntries(Object.entries(stats.byType).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])))
+    return stats
+  }
+
+  /** Counts of the server's physics world, null without one */
+  physics(): PhysicsStats | null {
+    const world = this.source.game.physicsWorld
+    if (!world)
+      return null
+
+    const stats: PhysicsStats = {
+      bodies: 0,
+      dynamic: 0,
+      fixed: 0,
+      kinematic: 0,
+      sleeping: 0,
+      colliders: world.colliders.len(),
+      gravity: { x: world.gravity.x, y: world.gravity.y, z: world.gravity.z },
+      timestep: world.timestep,
+    }
+    world.bodies.forEach((body) => {
+      stats.bodies++
+      if (body.isDynamic())
+        stats.dynamic++
+      else if (body.isFixed())
+        stats.fixed++
+      else if (body.isKinematic())
+        stats.kinematic++
+      if (body.isSleeping())
+        stats.sleeping++
+    })
+    return stats
   }
 
   entities(query: EntityQuery = {}): EntityList {

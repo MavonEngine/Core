@@ -401,6 +401,38 @@ export default defineServerPlugin({
 
 A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
 
+### Admin panel pages
+
+The game server serves an admin panel at `/admin/`: one layout with a sidebar, behind a login that takes the [admin token](#admin-token) as the password (any user name). The engine adds Overview, Routes and Plugins pages. A plugin adds its own with `ctx.admin.page()`, and it shows up in the sidebar under **Plugins**, with the links it gives listed below it:
+
+```ts
+export default defineServerPlugin({
+  http(app, ctx) {
+    ctx.admin.page({
+      path: 'chat', // /admin/chat/
+      label: 'Chat',
+      icon: 'chat', // dashboard, activity, routes, plugin, database, users, logs, settings, chart, mail, chat, bell or lock
+      children: [
+        { label: 'Live', href: '#live' }, // an anchor on the page
+        { label: 'Mutes', href: 'mutes', render: () => '<p>…</p>' }, // a sub page, /admin/chat/mutes/
+      ],
+      render: req => ({
+        html: '<div class="adm-page">…</div>',
+        styles: [ctx.admin.url('chat/style.css')],
+        scripts: [ctx.admin.url('chat/app.js')],
+      }),
+    })
+
+    // Every route under the panel's path is behind its login already
+    app.get(ctx.admin.url('chat/api/messages'), (_req, res) => res.json({ messages: [] }))
+  },
+})
+```
+
+The page's HTML goes into the layout as is: escape whatever came from players with `escapeHtml()` from `@mavonengine/core/Networking/Server/Admin/AdminPanel`. Inline scripts are blocked by the page's Content-Security-Policy, so ship script files. The layout's colors are CSS custom properties (`--surface`, `--border`, `--primary`, …), and it has helpers for pages: `adm-page`, `adm-cards`, `adm-card`, `adm-table`, `adm-badge`. `ctx.admin.addLogin((user, password) => …)` lets more people log in than whoever has the token, such as the users of an htpasswd file.
+
+Without an admin token the panel only answers localhost, and in production it stays off until the server has a token or a plugin added a login. Move it with `admin: { path: '/ops' }` in the server's options, or turn it off with `admin: { enabled: false }`.
+
 ### Authenticating players
 
 An auth plugin decides who may connect, before a client gets a player. [`@mavonengine/auth`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/auth) is one, with accounts, passwords and sessions; write your own for anything else. Its client entry gives the token the game connects with, and its server entry's `authorize()` checks it:

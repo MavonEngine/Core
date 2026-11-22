@@ -107,6 +107,32 @@ describe('auth store', () => {
     expect(await store.setDisabled('nobody', true)).toBe(false)
   })
 
+  it('searches accounts by name, email, username or id, and filters guests and disabled ones', async () => {
+    const ada = await store.createAccount('Ada Lovelace', { email: 'Ada@Example.com' })
+    await store.addIdentity({ provider: 'password', externalId: 'countess_1', accountId: ada.id, secret: 'x' })
+    const bob = await store.createAccount('Bob')
+    await store.setDisabled(bob.id, true)
+    const guest = await store.createAccount('Guest-1', { guest: true })
+    await store.createSession(guest.id, DAY)
+
+    const names = async (query: Parameters<AuthStore['listAccounts']>[2]) => (await store.listAccounts(10, 0, query)).accounts.map(a => a.name).sort()
+    expect(await names({ search: 'lovelace' })).toEqual(['Ada Lovelace'])
+    expect(await names({ search: 'example.COM' })).toEqual(['Ada Lovelace'])
+    expect(await names({ search: 'countess_' })).toEqual(['Ada Lovelace'])
+    expect(await names({ search: bob.id })).toEqual(['Bob'])
+    // LIKE's wildcards are taken as text
+    expect(await names({ search: '%' })).toEqual([])
+    expect(await names({ search: '_' })).toEqual(['Ada Lovelace'])
+    expect(await names({ filter: 'guests' })).toEqual(['Guest-1'])
+    expect(await names({ filter: 'disabled' })).toEqual(['Bob'])
+    expect(await names({ filter: 'disabled', search: 'ada' })).toEqual([])
+    expect((await store.listAccounts(10, 0, { search: 'ada' })).total).toBe(1)
+
+    const [listed] = (await store.listAccounts(10, 0, { search: 'ada' })).accounts
+    expect(listed.username).toBe('countess_1')
+    expect(await store.stats()).toEqual({ accounts: 3, guests: 1, disabled: 1, sessions: 1 })
+  })
+
   it('makes guest accounts and turns them into full ones with the same id', async () => {
     const guest = await store.createAccount('Guest-1234', { guest: true })
     expect(guest.guest).toBe(true)

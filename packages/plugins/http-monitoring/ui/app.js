@@ -3,6 +3,7 @@
 // never as HTML: player names, log lines and request paths are not trusted.
 
 import {
+  accountLabel,
   appendFeed,
   backoff,
   formatBytes,
@@ -11,6 +12,10 @@ import {
   formatPercent,
   formatRate,
   formatTime,
+  queueTitle,
+  queueTotals,
+  queueWindow,
+  showAccounts,
   showNames,
   sortedPlayers,
   statusClass,
@@ -261,7 +266,10 @@ function renderTabs() {
   const active = currentTab()
   for (const tab of TABS) {
     $(`tab-${tab}`).hidden = tab !== active
+    // Not there inside the admin panel, whose sidebar links to the tabs instead
     const link = document.querySelector(`[data-tab="${tab}"]`)
+    if (!link)
+      continue
     if (tab === active)
       link.setAttribute('aria-current', 'page')
     else
@@ -337,6 +345,8 @@ function renderOverview(snapshot) {
     { label: 'Commands/s', value: `${latest?.commandsPerSecond ?? 0} (max ${latest?.maxCommandsPerTick ?? 0}/tick)` },
   ])
 
+  renderQueue(snapshot.queue)
+
   // World
   values($('world-values'), [
     { label: 'Players', value: String(players.length), cls: 'primary' },
@@ -352,6 +362,39 @@ function renderOverview(snapshot) {
   $('overview-players').replaceChildren(playersTable(players, false))
 }
 
+/**
+ * The job queue next to World, like the CLI: queued, processed and failed jobs over time, and the totals of the
+ * graph's window. A server without a queue, or older than it, keeps the two-column overview.
+ */
+function renderQueue(queue) {
+  $('overview-grid').classList.toggle('with-queue', !!queue)
+  $('queue-panel').hidden = !queue
+  if (!queue)
+    return
+
+  $('queue-title').textContent = queueTitle(queue)
+  const series = [
+    { label: 'queued', values: queue.history.map(s => s.size), color: 'var(--graph-0)' },
+    { label: 'processed', values: queue.history.map(s => s.processed), color: 'var(--graph-1)' },
+    { label: 'failed', values: queue.history.map(s => s.failed), color: 'var(--danger)' },
+  ]
+  legend($('queue-legend'), series)
+  chart($('queue-chart'), series, {
+    max: Math.max(4, ...queue.history.map(s => Math.max(s.size, s.processed, s.failed))),
+    format: v => String(Math.round(v)),
+  })
+
+  const totals = queueTotals(queue)
+  const window = queueWindow(queue)
+  values($('queue-values'), [
+    { label: 'Queued', value: String(queue.latest?.size ?? 0), cls: 'primary' },
+    { label: 'Running', value: String(queue.latest?.running ?? 0) },
+    { label: `Processed ${window}`, value: String(totals.processed), cls: 'success' },
+    { label: `Retried ${window}`, value: String(totals.retried), cls: totals.retried ? 'warning' : undefined },
+    { label: `Failed ${window}`, value: String(totals.failed), cls: totals.failed ? 'danger' : undefined },
+  ])
+}
+
 function playersTable(players, selectable) {
   const rows = sortedPlayers(players)
   if (rows.length === 0)
@@ -360,6 +403,7 @@ function playersTable(players, selectable) {
   const columns = [
     ...(showNames(rows) ? [{ title: 'Name', render: p => p.displayName }] : []),
     { title: 'ID', render: p => p.id },
+    ...(showAccounts(rows) ? [{ title: 'Account', render: p => accountLabel(p.account), cls: p => p.account?.guest ? 'warning' : '' }] : []),
     { title: 'X', num: true, render: p => p.position.x.toFixed(2) },
     { title: 'Y', num: true, render: p => p.position.y.toFixed(2) },
     { title: 'Z', num: true, render: p => p.position.z.toFixed(2) },
@@ -397,6 +441,7 @@ function renderPlayers(snapshot) {
   $('player-details-title').textContent = selected.displayName
   values($('player-details-values'), [
     { label: 'ID', value: selected.id },
+    { label: 'Account', value: selected.account ? `${accountLabel(selected.account)} · ${selected.account.id}` : 'none', cls: selected.account?.guest ? 'warning' : undefined },
     { label: 'Connected', value: formatDuration(selected.connectedFor) },
     { label: 'IP', value: connection ? connection.address ?? 'pending' : '—', cls: 'primary' },
     { label: 'RTT', value: connection?.rttMs != null ? formatMs(connection.rttMs) : '—' },

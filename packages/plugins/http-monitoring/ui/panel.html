@@ -1,0 +1,96 @@
+<!-- The dashboard, put into the standalone page (index.html) or the admin panel's layout -->
+<div class="monitoring">
+  <header class="header">
+    {{BRAND}}
+    <span class="muted" id="source"></span>
+    <span class="header-stat"><span class="muted">uptime</span> <span id="uptime">—</span></span>
+    <span class="header-stat"><span class="muted">engine</span> <span id="engine">—</span></span>
+    <span class="spacer"></span>
+    <span id="status" class="status connecting">CONNECTING</span>
+  </header>
+
+  <div id="latency" class="banner" hidden></div>
+  <div id="notice" class="notice" hidden></div>
+
+  {{TABS}}
+
+  <main>
+    <section id="tab-overview" class="tab">
+      <div class="grid" id="overview-grid">
+        <article class="panel">
+          <h2>CPU</h2>
+          <div class="chart" id="cpu-chart"></div>
+          <div class="meters" id="cpu-meters"></div>
+        </article>
+        <article class="panel">
+          <h2>Network <span class="legend" id="net-legend"></span></h2>
+          <div class="chart" id="net-chart"></div>
+          <dl class="values spread" id="net-values"></dl>
+        </article>
+        <article class="panel">
+          <h2>Tick <span class="legend" id="tick-legend"></span></h2>
+          <div class="chart" id="tick-chart"></div>
+          <div id="tick-meter"></div>
+          <dl class="values spread" id="tick-values"></dl>
+        </article>
+        <article class="panel queue-panel" id="queue-panel" hidden>
+          <h2><span id="queue-title">Queue</span> <span class="legend" id="queue-legend"></span></h2>
+          <div class="chart" id="queue-chart"></div>
+          <dl class="values spread" id="queue-values"></dl>
+        </article>
+        <article class="panel">
+          <h2>World</h2>
+          <dl class="values" id="world-values"></dl>
+          <div class="grow"></div>
+          <div id="heap-meter"></div>
+        </article>
+      </div>
+      <div class="row">
+        <article class="panel scroll">
+          <h2 id="overview-players-title">Players</h2>
+          <div class="table-wrap" id="overview-players"></div>
+        </article>
+        <article class="panel scroll">
+          <h2>Logs</h2>
+          <div class="log" id="overview-logs"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="tab-players" class="tab" hidden>
+      <div class="row players-row">
+        <article class="panel scroll">
+          <h2 id="players-title">Players</h2>
+          <div class="table-wrap" id="players"></div>
+        </article>
+        <aside class="panel details" id="player-details" hidden>
+          <h2 id="player-details-title"></h2>
+          <dl class="values" id="player-details-values"></dl>
+          <p class="muted" id="player-details-note" hidden>No live connection (a bot, or an older server)</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-logs" class="tab" hidden>
+      <article class="panel scroll fill">
+        <h2 id="logs-title">Logs</h2>
+        <div class="log" id="logs"></div>
+      </article>
+    </section>
+
+    <section id="tab-http" class="tab" hidden>
+      <article class="panel scroll fill">
+        <h2 id="requests-title">HTTP requests</h2>
+        <div class="table-wrap" id="requests"></div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer muted">
+    <span><kbd>1</kbd>–<kbd>4</kbd> tabs</span>
+    <span><kbd>r</kbd> refresh</span>
+    <span id="footer-players" hidden><kbd>↑</kbd> <kbd>↓</kbd> select player, <kbd>Esc</kbd> clear</span>
+    <span class="spacer"></span>
+    <span id="updated"></span>
+  </footer>
+</div>

@@ -6,6 +6,7 @@ import type winston from 'winston'
 import type BaseGame from '../BaseGame'
 import type Game from '../Game'
 import type { AuthorizeResult, Identity } from '../Networking/identity'
+import type { AdminApi } from '../Networking/Server/Admin/types'
 import type Server from '../Networking/Server/Server'
 import type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 import type { PrefabDefinition } from '../Prefab/PrefabRegistry'
@@ -18,6 +19,7 @@ import type GameObject from '../World/GameObject'
 import type { PluginMigration } from './Database/migrate'
 
 export type { AuthorizeResult, Identity } from '../Networking/identity'
+export type { AdminApi, AdminIcon, AdminLogin, AdminNavLink, AdminPage, AdminPageContent, AdminRender } from '../Networking/Server/Admin/types'
 export type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 export type { MigrationTools, PluginMigration } from './Database/migrate'
 
@@ -100,6 +102,11 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerP
   /** The same token for a plugin that checks it itself, e.g. as a password. Prefer `requireAdmin` for routes */
   readonly adminToken: AdminToken
   /**
+   * The server's admin panel under `/admin`: add a page with its sidebar entry and sub links, in the shared layout.
+   * Routes under `ctx.admin.url()` sit behind its login. See `AdminApi`
+   */
+  readonly admin: AdminApi
+  /**
    * The server's database, a Kysely instance (https://kysely.dev), or undefined when the project has no database
    * plugin such as `@mavonengine/sqlite`. Ready in `setup()`, after the plugin's `migrations` ran.
    * Keep to the plugin's own tables, named with `table()`. Shared by all plugins: don't destroy it.
@@ -169,6 +176,12 @@ export interface ClientPlugin extends PluginBase<ClientPluginContext> {
    * `authorization`; the first plugin that returns a string is used. Return undefined to send none.
    */
   authorization?(ctx: ClientPluginContext): string | undefined
+  /**
+   * Connecting to the game server failed. `status` is the HTTP status it turned the client away with, e.g. 401 from
+   * its auth plugin for a session it doesn't know, undefined when it couldn't be reached. Called on every plugin, e.g.
+   * so an auth plugin forgets a session the server no longer takes and the next connection goes without it
+   */
+  onConnectError?(error: { message: string, status?: number }, ctx: ClientPluginContext): void
   /** Called when the editor boots (dev only) */
   editor?(ctx: EditorPluginContext): void
 }

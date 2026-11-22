@@ -54,6 +54,7 @@ describe('httpServer', () => {
 
       expect(res.status).toBe(200)
       expect(routes.map(route => `${route.method} ${route.path}`)).toEqual([
+        'GET /admin/{*page}',
         'GET /api/game/health',
         'GET /api/game/metrics',
         'GET /api/game/logs',
@@ -62,7 +63,7 @@ describe('httpServer', () => {
         'GET /api/game/plugins',
       ])
       expect(routes.every(route => route.source === 'engine' && route.summary && route.auth)).toBe(true)
-      expect(routes[2].query).toHaveProperty('after')
+      expect(routes.find(route => route.path === '/api/game/logs')!.query).toHaveProperty('after')
       expect(routes.some(route => route.devOnly)).toBe(false)
     })
 
