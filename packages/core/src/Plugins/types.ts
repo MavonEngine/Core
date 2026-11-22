@@ -176,6 +176,12 @@ export interface ClientPlugin extends PluginBase<ClientPluginContext> {
    * `authorization`; the first plugin that returns a string is used. Return undefined to send none.
    */
   authorization?(ctx: ClientPluginContext): string | undefined
+  /**
+   * Connecting to the game server failed. `status` is the HTTP status it turned the client away with, e.g. 401 from
+   * its auth plugin for a session it doesn't know, undefined when it couldn't be reached. Called on every plugin, e.g.
+   * so an auth plugin forgets a session the server no longer takes and the next connection goes without it
+   */
+  onConnectError?(error: { message: string, status?: number }, ctx: ClientPluginContext): void
   /** Called when the editor boots (dev only) */
   editor?(ctx: EditorPluginContext): void
 }
