@@ -1,13 +1,19 @@
 import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugins/types'
 import type { DispatchOptions } from '@mavonengine/core/Queue/Queue'
+import type { Express } from 'express'
+import type { DevInbox } from './devInbox'
 import type { Address, MailAddress, MailInput, MailMessage } from './message'
 import type { MailTransport, NodemailerTransport, SentMail } from './transports'
+import { join } from 'node:path'
 import process from 'node:process'
 import Job from '@mavonengine/core/Queue/Job'
+import { DEV_INBOX_PAGE, DEV_INBOX_THEME_JS, DEV_INBOX_THEME_SCRIPT, devInboxTransport, devInboxWanted, proxyToInbox, refuseInboxUpgrades, registerInboxPage, startDevInbox } from './devInbox'
 import { LAYOUT_FILE, LayoutFile, renderLayout, textToHtml } from './layout'
 import { formatAddress, MailError, parseAddress, toMessage } from './message'
 import { logTransport, nodemailerTransport } from './transports'
 
+export type { DevInbox, DevInboxOptions } from './devInbox'
+export { DEV_INBOX_CSP, devInboxTransport, devInboxWanted, loadMailDev, proxyToInbox, startDevInbox } from './devInbox'
 export { DEFAULT_LAYOUT_PATH, escapeHtml, LAYOUT_FILE, renderLayout, textToHtml } from './layout'
 
 export type { Address, MailAddress, MailInput, MailMessage } from './message'
@@ -57,9 +63,21 @@ export interface MailOptions {
   layout: boolean
   /** More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` */
   layoutData: Record<string, string>
+  /**
+   * In development, while no SMTP server or transport is set up, send mail to a MailDev inbox shown in the admin
+   * panel (`/admin/mail/`) instead of only writing it to the log. Needs `maildev` installed, e.g. as a dev
+   * dependency. Never in production or tests. Default true
+   */
+  devInbox: boolean
 }
 
-const DEFAULTS: MailOptions = { queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} }
+const DEFAULTS: MailOptions = { queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: false }
+
+/** Transports nobody receives mail from, so mail doesn't need a sender */
+const NOWHERE_TRANSPORTS = new Set(['log', 'maildev'])
+
+/** Sender of mail in the dev inbox that names none */
+const DEV_FROM = 'game@localhost'
 
 export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = process.env): MailOptions {
   const options: MailOptions = {
@@ -71,6 +89,7 @@ export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.Proc
       : DEFAULTS.backoffMs,
     layout: typeof raw.layout === 'boolean' ? raw.layout : DEFAULTS.layout,
     layoutData: {},
+    devInbox: devInboxWanted(raw.devInbox, env),
   }
 
   if (raw.layoutData && typeof raw.layoutData === 'object') {
@@ -194,6 +213,12 @@ interface MailState {
   /** Whether a layout that couldn't be read was logged */
   layoutFailed?: boolean
   api: MailApi
+  /** MailDev, when the dev inbox is wanted: undefined once it turned out the project doesn't have it */
+  inbox?: Promise<DevInbox | undefined>
+  /** Its web port, once it runs */
+  inboxPort?: number
+  /** Where its UI is served, `/admin/mail/inbox` */
+  inboxPath?: string
 }
 
 const STATES = Symbol.for('mavonengine.mail.states')
@@ -248,7 +273,7 @@ function applyLayout(state: MailState, message: MailMessage, preheader?: string)
 
 async function deliver(state: MailState, message: MailMessage): Promise<MailResult> {
   const transport = state.transport
-  if (!message.from && transport.name !== 'log')
+  if (!message.from && !NOWHERE_TRANSPORTS.has(transport.name))
     throw new MailError(`No sender: set "from" in the options of ${PACKAGE} or ${FROM_ENV}`)
 
   const sent = await transport.send(message) as SentMail | undefined
@@ -281,12 +306,16 @@ function createState(ctx: ServerPluginContext): MailState {
 
   const layout = new LayoutFile(() => ctx.publishedFile?.(LAYOUT_FILE))
   const state = { ctx, options, from, transport, layout } as MailState
+
+  if (!options.smtp && options.devInbox)
+    openDevInbox(state)
+
   const SendMail = sendMailJob(state)
   ctx.queue.register(SendMail)
 
   const send = async (input: MailInput, sendOptions: SendOptions = {}, mailableQueued?: boolean): Promise<MailResult> => {
     const message = toMessage(input, state.from)
-    if (!message.from && state.transport.name !== 'log')
+    if (!message.from && !NOWHERE_TRANSPORTS.has(state.transport.name))
       throw new MailError(`No sender: set "from" in the options of ${PACKAGE} or ${FROM_ENV}`)
     if (input.layout ?? state.options.layout)
       applyLayout(state, message, input.preheader)
@@ -343,6 +372,39 @@ function createState(ctx: ServerPluginContext): MailState {
   return state
 }
 
+/**
+ * Start MailDev and send mail into it until another transport is set up. Falls back to the log when the project
+ * doesn't have maildev or it can't start.
+ */
+function openDevInbox(state: MailState) {
+  const { ctx } = state
+  const fallback = state.transport
+  // Without an admin panel (a core from before it), MailDev's UI is at the root of its own port
+  state.inboxPath = ctx.admin ? ctx.admin.url(`${DEV_INBOX_PAGE}/inbox`) : ''
+  state.inbox = startDevInbox({
+    basePath: state.inboxPath,
+    mailDirectory: ctx.projectRoot ? join(ctx.projectRoot, '.mavonengine', 'maildev') : undefined,
+  })
+  const transport = devInboxTransport(state.inbox, fallback, () => DEV_FROM)
+  state.transport = transport
+
+  state.inbox.then((inbox) => {
+    if (!inbox) {
+      ctx.logger?.info(`Mail: install maildev (npm i -D maildev) to see the mail the game sends in a dev inbox in the admin panel. Until then it is written to the log`)
+      if (state.transport === transport)
+        state.transport = fallback
+      return
+    }
+    state.inboxPort = inbox.webPort
+    const where = ctx.admin ? `${ctx.admin.url(DEV_INBOX_PAGE)}/ in the admin panel` : `http://127.0.0.1:${inbox.webPort}/`
+    ctx.logger?.info(`Mail: no transport set up, mail goes to the dev inbox at ${where}`)
+  }, (err: unknown) => {
+    ctx.logger?.error(`Mail: the dev inbox (MailDev) could not start, writing mail to the log: ${(err as Error)?.message ?? err}`)
+    if (state.transport === transport)
+      state.transport = fallback
+  })
+}
+
 export default {
   name: 'Mail',
   api(ctx: ServerPluginContext): MailApi {
@@ -354,12 +416,29 @@ export default {
     const state = registry().get(ctx.server)
     if (!state)
       return
+    if (state.transport.name === 'maildev')
+      return
     if (state.transport.name === 'log')
       ctx.logger?.info(`Mail: no transport set up yet, mail is written to the log. Set "smtp" in the options of ${PACKAGE}, or call useTransport()`)
     else
       ctx.logger?.info(`Mail: sending through ${state.transport.name}`)
     if (!state.from)
       ctx.logger?.warn(`Mail: no sender set. Set "from" in the options of ${PACKAGE} or ${FROM_ENV}, or mail needs one of its own`)
+  },
+  http(app: Express, ctx: ServerPluginContext) {
+    const state = registry().get(ctx.server)
+    if (!state?.inbox || !ctx.admin || !state.inboxPath)
+      return
+
+    const inboxPath = state.inboxPath
+    registerInboxPage(ctx.admin, inboxPath)
+    // Under the admin panel's path, so behind its login
+    const themeScript = `${inboxPath}/${DEV_INBOX_THEME_SCRIPT}`
+    app.get(themeScript, (_req, res) => void res.type('text/javascript').send(DEV_INBOX_THEME_JS))
+    app.use(inboxPath, proxyToInbox(() => state.inboxPort, { headScript: themeScript }))
+    refuseInboxUpgrades(ctx.server.http?.server, inboxPath)
+    // The inbox polls for new mail, which would bury everything else on the dashboard's HTTP tab
+    ctx.server.requests?.ignorePrefix?.(`${inboxPath}/`)
   },
   async destroy(ctx: ServerPluginContext) {
     const state = registry().get(ctx.server)
@@ -368,5 +447,7 @@ export default {
     // stop() again only waits for the jobs that run
     await ctx.queue.stop()
     await state?.transport.close?.()
+    const inbox = await state?.inbox?.catch(() => undefined)
+    await inbox?.stop().catch(() => {})
   },
 } satisfies ServerPlugin

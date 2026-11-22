@@ -208,11 +208,19 @@ describe('mail plugin', () => {
 
 describe('mail options', () => {
   it('fills in the defaults, and keeps what makes sense', () => {
-    expect(parseOptions({}, {})).toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} })
+    expect(parseOptions({}, {})).toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: true })
     expect(parseOptions({ queued: false, queue: 'mail', tries: 5.7, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' } }, {}))
-      .toEqual({ queued: false, queue: 'mail', tries: 5, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' }, layout: true, layoutData: {} })
+      .toEqual({ queued: false, queue: 'mail', tries: 5, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' }, layout: true, layoutData: {}, devInbox: true })
     expect(parseOptions({ queued: 'yes', queue: '', tries: 0, backoffMs: ['x'], smtp: { port: 25 } }, {}))
-      .toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {} })
+      .toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: true })
+  })
+
+  it('wants the dev inbox in development only, unless it is turned off', () => {
+    expect(parseOptions({}, {}).devInbox).toBe(true)
+    expect(parseOptions({}, { NODE_ENV: 'development' }).devInbox).toBe(true)
+    expect(parseOptions({}, { NODE_ENV: 'production' }).devInbox).toBe(false)
+    expect(parseOptions({}, { NODE_ENV: 'test' }).devInbox).toBe(false)
+    expect(parseOptions({ devInbox: false }, {}).devInbox).toBe(false)
   })
 
   it('takes the sender and the SMTP URL from the environment over the options', () => {

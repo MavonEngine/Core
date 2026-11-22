@@ -40,7 +40,8 @@
     "lint:fix": "eslint . --fix"
   },
   "peerDependencies": {
-    "@mavonengine/core": ">=0.0.25"
+    "@mavonengine/core": ">=0.0.25",
+    "maildev": "^3.0.0"
   },
   "mavonengine": {
     "target": "server",
@@ -54,10 +55,17 @@
   "devDependencies": {
     "@geckos.io/server": "^3.1.0",
     "@mavonengine/core": "*",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
+    "maildev": "^3.0.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",
     "vitest": "^5.1.0",
     "winston": "^3.17.0"
+  },
+  "peerDependenciesMeta": {
+    "maildev": {
+      "optional": true
+    }
   }
 }

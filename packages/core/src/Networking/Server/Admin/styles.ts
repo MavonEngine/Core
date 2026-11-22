@@ -422,6 +422,15 @@ body.adm {
   gap: 0.75rem;
 }
 
+/* A whole tool in the content area, e.g. a dev inbox: <iframe class="adm-frame" src="…"> */
+.adm-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--background);
+}
+
 /* ---------------------------------------------------------------- Small screens */
 
 @media (max-width: 800px) {

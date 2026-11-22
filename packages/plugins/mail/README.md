@@ -197,6 +197,23 @@ mail(server)!.useTransport(memory)
 expect(memory.sent[0].subject).toBe('Welcome, Ada!')
 ```
 
+## Dev inbox
+
+In development, mail the game sends can go to a [MailDev](https://maildev.github.io/maildev/) inbox in the game server's admin panel instead of only to the log. Install MailDev as a dev dependency:
+
+```sh
+npm i -D maildev
+```
+
+Then open `http://localhost:8050/admin/mail/`. Every mail the game sends shows up there as it arrives, with its html, text, headers and source. Nothing leaves your machine, and the mail needs no sender. The mail is kept in `.mavonengine/maildev`, so it is still there after the dev server restarts.
+
+How it works:
+- MailDev runs inside the game server, its SMTP and web servers on free ports of this machine only.
+- Its UI is proxied from `/admin/mail/inbox/` behind the admin panel's login, and it starts dark, like the panel.
+- Its live updates use HTTP polling rather than a WebSocket, which would get past the login.
+
+It is used only while no SMTP server or transport is set up, and only in development: never with `NODE_ENV=production` or in tests. Without `maildev` installed, mail is written to the log as before. Turn it off with `"devInbox": false`.
+
 ## Options
 
 Set them under the plugin in `mavonengine.json`. All are optional.
@@ -211,6 +228,7 @@ Set them under the plugin in `mavonengine.json`. All are optional.
 | `backoffMs` | `[10000, 60000]` | How long to wait before trying again, in ms: one number, or one per retry, the last repeating |
 | `layout` | `true` | Send mail in the [layout](#layout) |
 | `layoutData` | `{}` | More values for the layout, e.g. `{ "footer": "You get this because you play My Game." }` |
+| `devInbox` | `true` | In development, send mail to the [dev inbox](#dev-inbox) while no transport is set up |
 
 | Environment | |
 | --- | --- |
