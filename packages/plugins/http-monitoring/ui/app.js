@@ -261,7 +261,10 @@ function renderTabs() {
   const active = currentTab()
   for (const tab of TABS) {
     $(`tab-${tab}`).hidden = tab !== active
+    // Not there inside the admin panel, whose sidebar links to the tabs instead
     const link = document.querySelector(`[data-tab="${tab}"]`)
+    if (!link)
+      continue
     if (tab === active)
       link.setAttribute('aria-current', 'page')
     else

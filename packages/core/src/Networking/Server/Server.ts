@@ -13,6 +13,7 @@ import type GameObject from '../../World/GameObject'
 import type { NetDebugSource, SyncSnapshot, SyncStateSummary } from '../Debug/sync'
 import type { AuthorizeResult, Identity } from '../identity'
 import type NetworkedActor from '../NetworkedActor'
+import type { AdminPanelOptions } from './Admin/AdminPanel'
 import type { CommandPacket, IncomingClientCommandPacket, StatePacket } from './Commands'
 import type { ClientOptions } from './Http/ClientMiddleware'
 import type { MetricsEndpointOptions } from './Http/HttpServer'
@@ -72,6 +73,12 @@ export interface ServerOptions {
    * Without one, admin routes only answer requests from localhost.
    */
   adminToken?: string
+
+  /**
+   * The admin panel under `/admin`: a layout with a sidebar that the engine and plugins add pages to. Behind the admin
+   * token, as the password of the browser's login prompt. Off in production until the server has a token
+   */
+  admin?: AdminPanelOptions
 
   /**
    * Serve the game client from the HTTP server: the source through Vite when `dev` is set, the built files otherwise.
@@ -281,6 +288,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       net: this,
       plugins: () => this.pluginInfos(),
       database: new DatabaseInspector(this),
+      admin: this.options.admin,
+      appName: () => this.appName,
     })
 
     this.gameSocket.onConnection((channel) => {
@@ -820,6 +829,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       },
       requireAdmin: this.http.requireAdmin,
       adminToken: this.http.adminToken,
+      admin: this.http.admin.forPlugin(loaded.package),
       get db() {
         return server.db
       },

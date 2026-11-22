@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import AdminPanel from '@mavonengine/core/Networking/Server/Admin/AdminPanel'
 import express from 'express'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import plugin, { createHttpMonitoring, mountMonitoring, resolveOptions } from '../src/index'
@@ -51,7 +52,7 @@ async function serve(options: Record<string, unknown> = {}, { env = {}, server =
 
 describe('resolveOptions', () => {
   it('has defaults and normalizes the path', () => {
-    expect(resolveOptions({}, dir, {})).toEqual({ path: '/monitoring', realm: 'MavonEngine monitoring', pollIntervalMs: 1000, credentials: undefined })
+    expect(resolveOptions({}, dir, {})).toEqual({ path: '/monitoring', realm: 'MavonEngine monitoring', pollIntervalMs: 1000, standalone: false, credentials: undefined })
     expect(resolveOptions({ path: 'ops/stats/' }, dir, {}).path).toBe('/ops/stats')
   })
 
@@ -229,6 +230,84 @@ describe('dashboard', () => {
       expect.stringContaining('isn\'t supported (use bcrypt: htpasswd -B)'),
       expect.stringContaining('has no usable users, nobody can log in'),
     ])
+  })
+})
+
+/** Mount the dashboard on an app with core's admin panel, as a server with one hands it to plugins */
+async function serveInAdmin(options: Record<string, unknown> = {}, { env = {}, adminToken }: { env?: Record<string, string>, adminToken?: string } = {}) {
+  const app = express()
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const token = { configured: !!adminToken, matches: (candidate: string) => !!adminToken && candidate === adminToken }
+  const panel = new AdminPanel({ adminToken: token, production: () => env.NODE_ENV === 'production' })
+  panel.mount(app)
+  const server = fakeServer()
+  const mounted = mountMonitoring(app, { server: server as any, logger: logger as any, options, projectRoot: dir, adminToken: token, admin: panel.forPlugin('@mavonengine/http-monitoring') }, env)
+  app.use((_req, res) => void res.status(200).send('game'))
+
+  listener = app.listen(0, '127.0.0.1')
+  await new Promise(r => listener!.once('listening', r))
+  const base = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`
+  return { mounted, logger, server, panel, get: (path: string, headers: Record<string, string> = {}) => fetch(`${base}${path}`, { headers, redirect: 'manual' }) }
+}
+
+describe('in the admin panel', () => {
+  it('is a page of the panel with its tabs in the sidebar, behind the panel\'s login', async () => {
+    const { get, mounted, server, logger } = await serveInAdmin({ pollIntervalMs: 2000 }, { adminToken: 'secret' })
+    const auth = { Authorization: basic('admin', 'secret') }
+
+    expect(mounted).toBe(true)
+    expect(logger.info).toHaveBeenCalledWith('Monitoring dashboard at /admin/monitoring/ in the admin panel')
+    expect((await get('/admin/monitoring/')).status).toBe(401)
+
+    const html = await (await get('/admin/monitoring/', auth)).text()
+    expect(html).toContain('class="adm-sidebar"')
+    expect(html).toContain('href="/admin/monitoring/#players" data-hash="players"')
+    expect(html).toContain('data-poll-interval="2000"')
+    expect(html).toContain('<script type="module" src="/admin/monitoring/app.js"></script>')
+    expect(html).toContain('id="tab-overview"')
+    // The sidebar has the tabs, and the panel the brand
+    expect(html).not.toContain('class="tabs"')
+    expect(html).not.toContain('{{')
+
+    expect((await get('/admin/monitoring/style.css', auth)).headers.get('content-type')).toContain('text/css')
+    expect(await (await get('/admin/monitoring/api/metrics', auth)).json()).toMatchObject({ engineVersion: '0.0.22' })
+    expect((await get('/admin/monitoring/api/metrics')).status).toBe(401)
+    expect(server.requests!.ignorePrefix).toHaveBeenCalledWith('/admin/monitoring/api/')
+  })
+
+  it('sends the old address to the panel and keeps its data endpoints, behind the same login', async () => {
+    const { get } = await serveInAdmin({}, { adminToken: 'secret' })
+
+    const res = await get('/monitoring/')
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/admin/monitoring/')
+    expect((await get('/monitoring/api/metrics')).status).toBe(401)
+    expect((await get('/monitoring/api/metrics', { Authorization: 'Bearer secret' })).status).toBe(200)
+  })
+
+  it('lets the htpasswd users into the panel', async () => {
+    writeFileSync(join(dir, '.htpasswd'), BOB)
+    const { get } = await serveInAdmin({ htpasswd: '.htpasswd' }, { env: { NODE_ENV: 'production' } })
+
+    expect((await get('/admin/', { Authorization: basic('bob', 'hunter2') })).status).toBe(200)
+    expect((await get('/admin/monitoring/', { Authorization: basic('bob', 'hunter2') })).status).toBe(200)
+    expect((await get('/admin/monitoring/', { Authorization: basic('bob', 'wrong') })).status).toBe(401)
+  })
+
+  it('keeps a page of its own when asked to', async () => {
+    const { get, panel } = await serveInAdmin({ standalone: true }, { adminToken: 'secret' })
+
+    const html = await (await get('/monitoring/', { Authorization: basic('admin', 'secret') })).text()
+    expect(html).toContain('class="tabs"')
+    expect(html).toContain('<span class="brand">MavonEngine</span>')
+    expect(panel.list().map(page => page.path)).not.toContain('monitoring')
+  })
+
+  it('stays off in production without a login, like the panel', async () => {
+    const { get, mounted } = await serveInAdmin({}, { env: { NODE_ENV: 'production' } })
+
+    expect(mounted).toBe(false)
+    expect(await (await get('/admin/monitoring/')).text()).toBe('game')
   })
 })
 

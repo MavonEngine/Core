@@ -6,6 +6,7 @@ import type winston from 'winston'
 import type BaseGame from '../BaseGame'
 import type Game from '../Game'
 import type { AuthorizeResult, Identity } from '../Networking/identity'
+import type { AdminApi } from '../Networking/Server/Admin/types'
 import type Server from '../Networking/Server/Server'
 import type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 import type { PrefabDefinition } from '../Prefab/PrefabRegistry'
@@ -18,6 +19,7 @@ import type GameObject from '../World/GameObject'
 import type { PluginMigration } from './Database/migrate'
 
 export type { AuthorizeResult, Identity } from '../Networking/identity'
+export type { AdminApi, AdminIcon, AdminLogin, AdminNavLink, AdminPage, AdminPageContent, AdminRender } from '../Networking/Server/Admin/types'
 export type { Notifiable, NotificationLike } from '../Notifications/Notifiable'
 export type { MigrationTools, PluginMigration } from './Database/migrate'
 
@@ -99,6 +101,11 @@ export interface ServerPluginContext extends PluginContextBase<BaseGame, ServerP
   readonly requireAdmin: RequestHandler
   /** The same token for a plugin that checks it itself, e.g. as a password. Prefer `requireAdmin` for routes */
   readonly adminToken: AdminToken
+  /**
+   * The server's admin panel under `/admin`: add a page with its sidebar entry and sub links, in the shared layout.
+   * Routes under `ctx.admin.url()` sit behind its login. See `AdminApi`
+   */
+  readonly admin: AdminApi
   /**
    * The server's database, a Kysely instance (https://kysely.dev), or undefined when the project has no database
    * plugin such as `@mavonengine/sqlite`. Ready in `setup()`, after the plugin's `migrations` ran.

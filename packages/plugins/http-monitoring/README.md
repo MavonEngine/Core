@@ -8,7 +8,7 @@ A [MavonEngine](https://mavonengine.com) plugin that serves the game server dash
 npx @mavonengine/cli install @mavonengine/http-monitoring
 ```
 
-Then open `http://<your server>:8050/monitoring/`.
+Then open `http://<your server>:8050/admin/monitoring/`: the dashboard is a page of the game server's admin panel, with its tabs in the panel's sidebar. `/monitoring/` leads there. On a `@mavonengine/core` from before the admin panel, or with `standalone: true`, it is served as a page of its own at `/monitoring/`.
 
 ## Logging in
 
@@ -20,7 +20,7 @@ MAVONENGINE_ADMIN_TOKEN=… npm start
 
 or `adminToken` in the server's options. In the browser's login prompt, enter the token as the password; the user name can be anything. Tools can send it as `Authorization: Bearer <token>` instead.
 
-**An htpasswd file** adds a login per person next to that. Create it with Apache's `htpasswd`; bcrypt (`-B`) is the strongest hash it supports:
+**An htpasswd file** adds a login per person next to that. In the admin panel, its users log in to the whole panel. Create it with Apache's `htpasswd`; bcrypt (`-B`) is the strongest hash it supports:
 
 ```sh
 htpasswd -cB .htpasswd alice
@@ -53,9 +53,10 @@ Set in `mavonengine.json` under `plugins["@mavonengine/http-monitoring"].options
 
 | Option | Default | |
 | --- | --- | --- |
-| `path` | `/monitoring` | Where the dashboard is served. Can't be `/` |
+| `path` | `/monitoring` | Where the standalone dashboard is served, and in the admin panel the address that leads there. Can't be `/` |
+| `standalone` | `false` | Serve the dashboard as a page of its own at `path` instead of in the admin panel |
 | `htpasswd` | `$MAVONENGINE_MONITORING_HTPASSWD` | htpasswd file, relative to the project root |
-| `realm` | `MavonEngine monitoring` | Shown in the browser's login prompt |
+| `realm` | `MavonEngine monitoring` | Shown in the browser's login prompt of the standalone dashboard |
 | `pollIntervalMs` | `1000` | How often the page fetches new data, at least 250 |
 
 ## Without mavonengine.json
@@ -74,8 +75,8 @@ All of them are behind the login.
 
 | Path | |
 | --- | --- |
-| `/monitoring/` | The dashboard |
-| `/monitoring/api/metrics` | The server's metrics snapshot, as `GET /api/game/metrics` |
+| `/admin/monitoring/` | The dashboard in the admin panel (`/monitoring/` when standalone) |
+| `/monitoring/api/metrics` (also under `/admin/monitoring/`) | The server's metrics snapshot, as `GET /api/game/metrics` |
 | `/monitoring/api/logs?after=<id>` | Log entries after `id`. 404 when `metrics.logBufferSize` is 0 |
 | `/monitoring/api/requests?after=<id>` | HTTP requests after `id`. 404 when `metrics.requestLogSize` is 0 |
 

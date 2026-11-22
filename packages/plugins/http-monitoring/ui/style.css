@@ -45,6 +45,14 @@ body {
   display: none !important;
 }
 
+/* The dashboard, as the whole page or in the admin panel's content area */
+.monitoring {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .muted {
   color: var(--muted);
 }

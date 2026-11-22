@@ -3,6 +3,7 @@ import type { Server as NodeServer } from 'node:http'
 import type winston from 'winston'
 import type { AdminToken, ServerPluginInfo } from '../../../Plugins/types'
 import type { NetDebugSource } from '../../Debug/sync'
+import type { AdminPanelOptions } from '../Admin/AdminPanel'
 import type DatabaseInspector from '../Stats/DatabaseInspector'
 import type LogBuffer from '../Stats/LogBuffer'
 import type RequestLog from '../Stats/RequestLog'
@@ -16,6 +17,8 @@ import process from 'node:process'
 import express from 'express'
 import { parseEntityQuery } from '../../../Dev/inspect'
 import { parseNetRecordQuery } from '../../Debug/NetRecorder'
+import AdminPanel from '../Admin/AdminPanel'
+import { registerEnginePages } from '../Admin/enginePages'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../Stats/DatabaseInspector'
 import { devEndpointsEnabled } from '../Stats/WorldInspector'
 import { devClientMiddleware, staticClientMiddleware } from './ClientMiddleware'
@@ -70,6 +73,10 @@ export interface HttpServerOptions {
   plugins?(): ServerPluginInfo[]
   /** Serves the database's tables and rows on GET /api/game/database/* when given, to whoever has the admin token */
   database?: DatabaseInspector
+  /** The admin panel under `/admin`, see `AdminPanel` */
+  admin?: AdminPanelOptions
+  /** The game's name, shown in the admin panel */
+  appName?(): string | undefined
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -98,6 +105,12 @@ export default class HttpServer {
 
   /** Checks a candidate against the admin token without giving the token away, for logins that take it as a password */
   readonly adminToken: AdminToken
+
+  /**
+   * The admin panel: a layout with a sidebar under `/admin` that the engine and plugins add pages to
+   * (`ctx.admin.page()` in a plugin). Everything under its path sits behind its login.
+   */
+  readonly admin: AdminPanel
 
   private port: number
   private adminSecret?: string
@@ -141,8 +154,15 @@ export default class HttpServer {
     this.plugins = options.plugins
     this.database = options.database
     this.routes = new RouteCatalog(app)
+    this.admin = new AdminPanel({ adminToken: this.adminToken, logger, appName: options.appName }, options.admin)
 
     this.routes.registerAs({ source: 'engine' }, () => {
+      this.admin.mount(app)
+      registerEnginePages(this.admin, {
+        health: () => this.metrics.health(),
+        routes: () => this.routes.list(),
+        plugins: this.plugins,
+      })
       this.registerHealthEndpoint()
       this.registerMetricsEndpoint()
       this.registerLogsEndpoint()
@@ -172,6 +192,8 @@ export default class HttpServer {
     this.requests?.attach(this.listener)
 
     this.logger.info(`Visit game server status: http://localhost:${this.port}/api/game/health`)
+    if (this.admin.enabled)
+      this.logger.info(`Admin panel: http://localhost:${this.port}${this.admin.path}/`)
   }
 
   /**
