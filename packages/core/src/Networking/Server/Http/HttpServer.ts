@@ -162,6 +162,7 @@ export default class HttpServer {
         health: () => this.metrics.health(),
         routes: () => this.routes.list(),
         plugins: this.plugins,
+        inspector: this.inspector,
       })
       this.registerHealthEndpoint()
       this.registerMetricsEndpoint()

@@ -232,11 +232,13 @@ body.adm {
 
 .adm-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
   gap: 1rem;
 }
 
 .adm-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -420,6 +422,47 @@ body.adm {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* Key and value pairs: <dl class="adm-values"><dt>Name</dt><dd>Value</dd></dl> */
+.adm-values {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1rem;
+  margin: 0;
+}
+
+.adm-values dt {
+  color: var(--muted);
+}
+
+.adm-values dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Cards side by side, as many as fit */
+.adm-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.adm-sections .adm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.adm-section-title {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* A whole tool in the content area, e.g. a dev inbox: <iframe class="adm-frame" src="…"> */

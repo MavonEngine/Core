@@ -140,3 +140,35 @@ describe('worldInspector', () => {
     expect(inspector.entity('nope')).toBeNull()
   })
 })
+
+describe('scene graph and physics stats', () => {
+  it('counts the objects of the headless three.js scene by type, with meshes, triangles and lights', async () => {
+    const { BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Scene } = await import('three')
+    const scene = new Scene()
+    const group = new Group()
+    // A box: 12 triangles, indexed
+    group.add(new Mesh(new BoxGeometry(), new MeshBasicMaterial()), new Mesh(new BoxGeometry(), new MeshBasicMaterial()))
+    scene.add(group, new PointLight())
+    const inspector = new WorldInspector({ game: { scene } as unknown as BaseGame, sceneWatched: false })
+
+    expect(inspector.sceneGraph()).toEqual({ objects: 4, byType: { Mesh: 2, Group: 1, PointLight: 1 }, meshes: 2, triangles: 24, lights: 1 })
+    expect(new WorldInspector({ game: {} as BaseGame, sceneWatched: false }).sceneGraph()).toEqual({ objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 })
+  })
+
+  it('counts the physics world\'s bodies by kind, and is null without one', async () => {
+    const RAPIER = (await import('@dimforge/rapier3d-compat')).default
+    await RAPIER.init()
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
+    const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+    world.createCollider(RAPIER.ColliderDesc.cuboid(10, 0.1, 10), ground)
+    world.createCollider(RAPIER.ColliderDesc.ball(0.5), world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 2, 0)))
+    world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased())
+    world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()).sleep()
+
+    const stats = new WorldInspector({ game: { physicsWorld: world } as unknown as BaseGame, sceneWatched: false }).physics()
+    expect(stats).toMatchObject({ bodies: 4, dynamic: 2, fixed: 1, kinematic: 1, colliders: 2, gravity: { x: 0, y: -9.81, z: 0 } })
+    expect(stats!.sleeping).toBeGreaterThanOrEqual(1)
+    expect(stats!.timestep).toBeCloseTo(1 / 60)
+    expect(new WorldInspector({ game: {} as BaseGame, sceneWatched: false }).physics()).toBeNull()
+  })
+})

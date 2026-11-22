@@ -201,4 +201,38 @@ describe('adminPanel', () => {
 
     expect(() => new AdminPanel({ adminToken: { configured: false, matches: () => false } }, { path: '/' })).toThrow('site root')
   })
+
+  it('shows the runtime, the server scene graph and physics on the Overview', async () => {
+    const { registerEnginePages } = await import('../../../../src/Networking/Server/Admin/enginePages')
+    const { REVISION } = await import('three')
+    const health = () => ({ serverTime: 'now', uptime: 75, players: 2, world: { entities: 9 }, physics: { bodies: 3 } })
+    const inspector = {
+      sceneGraph: () => ({ objects: 5, byType: { Mesh: 3, Group: 2 }, meshes: 3, triangles: 36, lights: 0 }),
+      physics: () => ({ bodies: 3, dynamic: 2, fixed: 1, kinematic: 0, sleeping: 1, colliders: 4, gravity: { x: 0, y: -9.81, z: 0 }, timestep: 1 / 60 }),
+    }
+    const { get } = await serve({ setup: panel => registerEnginePages(panel, { health, routes: () => [], inspector }) })
+
+    const html = await (await get('/admin/')).text()
+    expect(html).toContain(`<dt>Three.js</dt><dd>r${REVISION}</dd>`)
+    // Rapier isn't initialised in this test, so its version can't be read: in use, without one
+    expect(html).toContain('<dt>Rapier</dt><dd>in use</dd>')
+    expect(html).toContain('<h2>Server scene graph (three.js)</h2>')
+    expect(html).toContain('<dt>Triangles</dt><dd>36</dd>')
+    expect(html).toContain('<dt>Gravity</dt><dd>0, -9.81, 0</dd>')
+    expect(html).toContain('<dt>Timestep</dt><dd>16.67 ms</dd>')
+    // No Scene card or Scene objects table
+    expect(html).not.toContain('<h2>Scene</h2>')
+    expect(html).not.toContain('Scene objects')
+  })
+
+  it('says so on the Overview without physics', async () => {
+    const { registerEnginePages } = await import('../../../../src/Networking/Server/Admin/enginePages')
+    const health = () => ({ serverTime: 'now', uptime: 5, players: 0, world: { entities: 0 }, physics: {} })
+    const inspector = { sceneGraph: () => ({ objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 }), physics: () => null }
+    const { get } = await serve({ setup: panel => registerEnginePages(panel, { health, routes: () => [], inspector }) })
+
+    const html = await (await get('/admin/')).text()
+    expect(html).toContain('<dt>Rapier</dt><dd><span class="adm-muted">not used on the server</span></dd>')
+    expect(html).toContain('The server runs without a physics world.')
+  })
 })
