@@ -5,11 +5,11 @@ import type Logger from '../../../Utils/Logger'
 import type { LayoutNavGroup, LayoutNavItem } from './layout'
 import type { AdminApi, AdminLogin, AdminNavLink, AdminPage, AdminPageContent } from './types'
 import { Buffer } from 'node:buffer'
-import { readFileSync } from 'node:fs'
 import process from 'node:process'
 import express from 'express'
 import { describeAuth, describeRoute } from '../Http/RouteCatalog'
 import { ADMIN_SCRIPT, escapeHtml, renderLayout } from './layout'
+import { ADMIN_CSS } from './styles'
 
 export type { AdminApi, AdminIcon, AdminLogin, AdminNavLink, AdminPage, AdminPageContent, AdminRender } from './types'
 export { escapeHtml }
@@ -57,9 +57,6 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'no-referrer',
   'Content-Security-Policy': 'default-src \'self\'; img-src \'self\' data:; frame-ancestors \'none\'; base-uri \'none\'; form-action \'self\'',
 }
-
-/** Read next to this file: src/ in development, dist/ once built (the build copies .css files) */
-const ADMIN_CSS = readFileSync(new URL('./admin.css', import.meta.url), 'utf8')
 
 const trimSlashes = (path: string) => path.replace(EDGE_SLASHES_RE, '')
 

@@ -1,8 +1,11 @@
-/*
- * The admin panel's layout. The colors are those of the mavonengine CLI dashboard's dark theme,
- * and pages can use the same custom properties and the .adm-* helpers below.
+/**
+ * The admin panel's stylesheet. Kept in code rather than a .css file next to it, because game servers bundle the
+ * engine (e.g. with tsup), and a file read relative to this module would then be looked for next to the bundle.
+ *
+ * The colors are those of the mavonengine CLI dashboard's dark theme, and pages can use the same custom properties
+ * and the .adm-* helpers.
  */
-:root {
+export const ADMIN_CSS = `:root {
   --background: #05070a;
   --surface: #0a0e14;
   --surface-raised: #111821;
@@ -316,6 +319,109 @@ body.adm {
   color: var(--danger);
 }
 
+.adm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.adm-toolbar .adm-spacer {
+  flex: 1;
+}
+
+.adm-input {
+  min-width: 14rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.adm-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.adm-button,
+.adm a.adm-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.adm-button:hover {
+  border-color: var(--primary);
+}
+
+.adm-button-primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.adm-button-danger {
+  color: var(--danger);
+}
+
+.adm-button-danger:hover {
+  border-color: var(--danger);
+}
+
+.adm-button[disabled],
+.adm a.adm-button[aria-disabled='true'] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* A form that is only a button, e.g. in a table row */
+.adm-inline-form {
+  display: inline;
+  margin: 0;
+}
+
+.adm-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.adm-nowrap {
+  white-space: nowrap;
+}
+
+.adm-small {
+  font-size: 11px;
+}
+
+.adm-notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.adm-notice.adm-danger {
+  border-left-color: var(--danger);
+}
+
+.adm-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 /* ---------------------------------------------------------------- Small screens */
 
 @media (max-width: 800px) {
@@ -343,3 +449,4 @@ body.adm {
     background: rgb(0 0 0 / 50%);
   }
 }
+`

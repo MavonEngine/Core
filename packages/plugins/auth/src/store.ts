@@ -2,6 +2,7 @@ import type { PluginMigration } from '@mavonengine/core/Plugins/types'
 import type { Kysely } from 'kysely'
 import type { AccountInfo } from './protocol'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { sql } from 'kysely'
 
 /**
  * The plugin's tables:
@@ -41,8 +42,29 @@ export interface IdentityRow {
 export interface AccountListing extends Account {
   /** Providers it logs in with */
   providers: string[]
+  /** The name it logs in with a password, null when it has no password */
+  username: string | null
   sessions: number
 }
+
+/** Which accounts `listAccounts()` returns */
+export interface AccountQuery {
+  /** Part of the name, email or username, in any case, or the whole id */
+  search?: string
+  /** Only guests, or only disabled accounts */
+  filter?: 'guests' | 'disabled'
+}
+
+export interface AccountStats {
+  accounts: number
+  guests: number
+  disabled: number
+  /** Sessions that haven't run out */
+  sessions: number
+}
+
+/** Escapes LIKE's wildcards with `!`, which every database takes as an ESCAPE character */
+const LIKE_SPECIAL_RE = /[!%_]/g
 
 /** Names of the plugin's tables, from `ctx.table()` */
 export type TableNames = (name: 'accounts' | 'identities' | 'sessions' | 'tokens') => string
@@ -393,14 +415,35 @@ export default class AuthStore {
   }
 
   /** A page of accounts, newest first, with how they log in and how many sessions they have */
-  async listAccounts(limit: number, offset: number): Promise<{ accounts: AccountListing[], total: number }> {
-    const rows = await this.db.selectFrom(this.table('accounts')).selectAll().orderBy('created_at', 'desc').orderBy('id').limit(limit).offset(offset).execute()
-    const total = await this.db.selectFrom(this.table('accounts')).select(eb => eb.fn.countAll().as('count')).executeTakeFirstOrThrow()
+  async listAccounts(limit: number, offset: number, query: AccountQuery = {}): Promise<{ accounts: AccountListing[], total: number }> {
+    const accounts = this.table('accounts')
+    const search = query.search?.trim()
+    const where = (qb: any) => {
+      let q = qb
+      if (query.filter === 'guests')
+        q = q.where('guest', '=', 1)
+      else if (query.filter === 'disabled')
+        q = q.where('disabled_at', 'is not', null)
+      if (search) {
+        const pattern = `%${search.toLowerCase().replace(LIKE_SPECIAL_RE, c => `!${c}`)}%`
+        const usernames = this.db.selectFrom(this.table('identities')).select('account_id').where('provider', '=', 'password').where(sql<boolean>`external_id like ${pattern} escape '!'`)
+        q = q.where((eb: any) => eb.or([
+          eb('id', '=', search),
+          sql<boolean>`lower(name) like ${pattern} escape '!'`,
+          sql<boolean>`email_key like ${pattern} escape '!'`,
+          eb('id', 'in', usernames),
+        ]))
+      }
+      return q
+    }
+
+    const rows = await where(this.db.selectFrom(accounts).selectAll()).orderBy('created_at', 'desc').orderBy('id').limit(limit).offset(offset).execute() as Record<string, any>[]
+    const total = await where(this.db.selectFrom(accounts).select((eb: any) => eb.fn.countAll().as('count'))).executeTakeFirstOrThrow() as { count: unknown }
     const ids = rows.map(row => row.id as string)
     if (ids.length === 0)
       return { accounts: [], total: Number(total.count) }
 
-    const identities = await this.db.selectFrom(this.table('identities')).select(['account_id', 'provider']).where('account_id', 'in', ids).execute()
+    const identities = await this.db.selectFrom(this.table('identities')).select(['account_id', 'provider', 'external_id']).where('account_id', 'in', ids).execute()
     const sessions = await this.db.selectFrom(this.table('sessions'))
       .select(['account_id', eb => eb.fn.countAll().as('count')])
       .where('account_id', 'in', ids)
@@ -410,11 +453,27 @@ export default class AuthStore {
 
     return {
       total: Number(total.count),
-      accounts: rows.map(row => ({
-        ...toAccount(row),
-        providers: identities.filter(identity => identity.account_id === row.id).map(identity => identity.provider as string).sort(),
-        sessions: Number(sessions.find(session => session.account_id === row.id)?.count ?? 0),
-      })),
+      accounts: rows.map((row) => {
+        const own = identities.filter(identity => identity.account_id === row.id)
+        return {
+          ...toAccount(row),
+          providers: own.map(identity => identity.provider as string).sort(),
+          username: (own.find(identity => identity.provider === 'password')?.external_id as string | undefined) ?? null,
+          sessions: Number(sessions.find(session => session.account_id === row.id)?.count ?? 0),
+        }
+      }),
+    }
+  }
+
+  /** How many accounts, guests, disabled accounts and live sessions there are */
+  async stats(): Promise<AccountStats> {
+    const count = async (query: any) => Number((await query.select((eb: any) => eb.fn.countAll().as('count')).executeTakeFirstOrThrow()).count)
+    const accounts = this.db.selectFrom(this.table('accounts'))
+    return {
+      accounts: await count(accounts),
+      guests: await count(accounts.where('guest', '=', 1)),
+      disabled: await count(accounts.where('disabled_at', 'is not', null)),
+      sessions: await count(this.db.selectFrom(this.table('sessions')).where('expires_at', '>', this.now().toISOString())),
     }
   }
 }

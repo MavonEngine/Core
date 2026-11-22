@@ -7,6 +7,7 @@ import type { Account } from './store'
 import { randomInt } from 'node:crypto'
 import process from 'node:process'
 import { APP_URL_ENV } from '@mavonengine/core/Plugins/ProjectConfig'
+import { mountAdminPages } from './admin'
 import { resetPasswordMail, verifyEmailMail } from './mails'
 import { resetPasswordPage, sendPage, text, verifyEmailPage } from './pages'
 import { decoyHash, hashPassword, verifyPassword } from './password'
@@ -15,7 +16,7 @@ import RateLimit from './rateLimit'
 import AuthStore, { emailKey, hashToken, migrations } from './store'
 
 export type { AccountInfo, SessionResponse, TokenResponse } from './protocol'
-export type { Account, AccountListing } from './store'
+export type { Account, AccountListing, AccountQuery, AccountStats } from './store'
 
 export interface AuthOptions {
   /** Where the routes are. Default `/api/auth` */
@@ -999,7 +1000,22 @@ export default {
     state.sweeper.unref?.()
   },
   http(app: Express, ctx: ServerPluginContext) {
-    mountAuthApi(app, ctx, stateOf(ctx.server))
+    const state = stateOf(ctx.server)
+    mountAuthApi(app, ctx, state)
+
+    // Missing on a @mavonengine/core from before the admin panel
+    if (ctx.admin) {
+      const hooks = auth(ctx.server)
+      mountAdminPages(app, ctx.admin, {
+        store: () => state.store,
+        disable: id => hooks.disable(id),
+        enable: id => hooks.enable(id),
+        endSessions: id => hooks.endSessions(id),
+        online: id => state.channels.get(id)?.size ?? 0,
+        onlineTotal: () => [...state.channels.values()].reduce((sum, channels) => sum + channels.size, 0),
+        logger: ctx.logger,
+      })
+    }
   },
   authorize(authorization: string | undefined, _request: unknown, ctx: ServerPluginContext) {
     return authorizeConnection(stateOf(ctx.server), authorization, ctx)
