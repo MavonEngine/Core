@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendFeed, backoff, formatBytes, formatDuration, formatMs, formatRate, showNames, sortedPlayers, statusClass, trimMessage } from '../ui/format.js'
+import { accountLabel, appendFeed, backoff, formatBytes, formatDuration, formatMs, formatRate, queueTitle, queueTotals, queueWindow, showAccounts, showNames, sortedPlayers, statusClass, trimMessage } from '../ui/format.js'
 
 describe('format', () => {
   it('formats like the CLI dashboard', () => {
@@ -38,5 +38,28 @@ describe('format', () => {
 
   it('backs off like the CLI', () => {
     expect([0, 1, 2, 3, 4, 5].map(f => backoff(1000, f))).toEqual([1000, 2000, 4000, 8000, 10000, 10000])
+  })
+
+  it('labels accounts like the CLI, guests marked', () => {
+    expect(accountLabel(null)).toBe('—')
+    expect(accountLabel(undefined)).toBe('—')
+    expect(accountLabel({ id: 'a1', name: 'Ada' })).toBe('Ada')
+    expect(accountLabel({ id: 'g1', name: 'Guest-12', guest: true })).toBe('Guest-12 (guest)')
+    expect(accountLabel({ id: 'a2' })).toBe('a2')
+    // The column only shows when someone has an account, as on a server without auth, or older than accounts
+    expect(showAccounts([{ account: null }, {}])).toBe(false)
+    expect(showAccounts([{ account: null }, { account: { id: 'a1' } }])).toBe(true)
+  })
+
+  it('titles and totals the queue like the CLI', () => {
+    const sample = (timestamp: number, processed: number, retried: number, failed: number) => ({ timestamp, size: 0, running: 0, processed, retried, failed })
+    const queue = { driver: 'database', working: true, latest: null, history: [sample(0, 2, 0, 0), sample(30_000, 3, 1, 1), sample(90_000, 1, 0, 2)] }
+
+    expect(queueTitle(queue)).toBe('Queue (database)')
+    expect(queueTitle({ ...queue, driver: 'memory', working: false })).toBe('Queue (memory, not worked here)')
+    expect(queueTotals(queue)).toEqual({ processed: 6, retried: 1, failed: 3 })
+    expect(queueWindow(queue)).toBe('2m')
+    expect(queueWindow({ ...queue, history: queue.history.slice(0, 2) })).toBe('30s')
+    expect(queueWindow({ ...queue, history: [] })).toBe('0s')
   })
 })

@@ -93,3 +93,33 @@ export function trimMessage(message) {
 export function backoff(intervalMs, failures, maxMs = 10000) {
   return failures === 0 ? intervalMs : Math.min(intervalMs * 2 ** failures, Math.max(maxMs, intervalMs))
 }
+
+/** An account in a table cell: its name, marked when it is a guest. A dash without one, like the CLI */
+export function accountLabel(account) {
+  if (!account)
+    return '—'
+  const name = account.name ?? account.id
+  return account.guest ? `${name} (guest)` : name
+}
+
+/** Whether to show the Account column: only when some player has an account, so servers without auth look as before */
+export function showAccounts(players) {
+  return players.some(p => p.account)
+}
+
+/** `Queue (database)`, and says so when this server doesn't run its jobs */
+export function queueTitle(queue) {
+  return `Queue (${queue.driver}${queue.working ? '' : ', not worked here'})`
+}
+
+/** Jobs over the whole history: what the panel's totals show */
+export function queueTotals(queue) {
+  return queue.history.reduce((sum, s) => ({ processed: sum.processed + s.processed, failed: sum.failed + s.failed, retried: sum.retried + s.retried }), { processed: 0, failed: 0, retried: 0 })
+}
+
+/** How long the queue's history spans, `45s` or `2m`, for the totals' labels */
+export function queueWindow(queue) {
+  const { history } = queue
+  const seconds = Math.round(history.length > 1 ? (history.at(-1).timestamp - history[0].timestamp) / 1000 : 0)
+  return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`
+}
