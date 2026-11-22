@@ -23,9 +23,9 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
@@ -120,7 +120,7 @@ jobs:
         tar -cf workspace.tar --exclude=.git --exclude=workspace.tar .
 
     - name: Upload the built workspace
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: workspace-${{ matrix.os }}
         path: workspace.tar
@@ -174,12 +174,12 @@ jobs:
 
     steps:
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
 
     - name: Download the built workspace
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: workspace-${{ matrix.os }}
 
@@ -197,7 +197,7 @@ jobs:
 
     - name: Upload screenshots
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.test.name }}-e2e-screenshots-${{ matrix.os }}
         path: e2e/${{ matrix.test.dir }}/screenshots
