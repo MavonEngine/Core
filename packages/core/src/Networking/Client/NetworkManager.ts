@@ -57,10 +57,13 @@ export interface ConnectError {
   statusText?: string
 }
 
+function clientPlugins(): PluginHost<ClientPlugin, ClientPluginContext> | undefined {
+  return (Game.instance() as { plugins?: PluginHost<ClientPlugin, ClientPluginContext> }).plugins
+}
+
 /** The `Authorization` header the client plugins give, from the first that returns one */
 function pluginAuthorization(): string | undefined {
-  const plugins = (Game.instance() as { plugins?: PluginHost<ClientPlugin, ClientPluginContext> }).plugins
-  return plugins?.collect('authorization').find(({ result }) => typeof result === 'string')?.result
+  return clientPlugins()?.collect('authorization').find(({ result }) => typeof result === 'string')?.result
 }
 
 export default class NetworkManager extends EventEmitter {
@@ -115,6 +118,7 @@ export default class NetworkManager extends EventEmitter {
         this._connectError = failed
         Game.instance().logger?.error(`Socket error: ${failed.message}`)
         this.net.event('connect_error', { info: { status: failed.status ?? null, message: failed.message } })
+        clientPlugins()?.run('onConnectError', { message: failed.message, status: failed.status })
         this.onConnectError(failed)
         this.trigger('connectError', failed)
         return

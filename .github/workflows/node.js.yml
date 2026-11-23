@@ -23,9 +23,9 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
@@ -75,6 +75,8 @@ jobs:
         node dist/index.js --version
         node dist/index.js --help
         node dist/index.js dashboard --help
+        node dist/index.js doctor --help
+        node dist/index.js upgrade --help
       working-directory: ./packages/cli
 
     - name: npm link core locally
@@ -120,7 +122,7 @@ jobs:
         tar -cf workspace.tar --exclude=.git --exclude=workspace.tar .
 
     - name: Upload the built workspace
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: workspace-${{ matrix.os }}
         path: workspace.tar
@@ -145,6 +147,9 @@ jobs:
           # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
           # install, since a real one would replace the npm-linked @mavonengine/core
           - { name: plugin, dir: plugin }
+          # Generates a plugin in the template with `mavonengine make:plugin`, typechecks it, then checks that the dev
+          # server runs its TypeScript server entry as it is and Vite compiles its client entry, without a build step
+          - { name: make-plugin, dir: make-plugin }
           # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
           # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
           - { name: monitoring, dir: http-monitoring }
@@ -171,15 +176,23 @@ jobs:
           # The template aliases core and the editor to their src/, so nothing above loads their dist/. This runs
           # the template against the built packages, like a project that installed them, and opens the editor
           - { name: editor-dist, dir: editor-dist }
+          # `mavonengine doctor` on the template, against a fake npm registry in the test that knows a newer core and two
+          # versions of a fixture plugin: a plugin made for a newer core fails it and gets pointed to the version that fits,
+          # the game server warns about it and loads it anyway, and a registry that can't be reached is only a warning
+          - { name: doctor, dir: doctor }
+          # `mavonengine upgrade` on the template turned back into a project from before core 0.0.22, with the doctor test's
+          # fake registry and npm as a recorder: the dry run changes nothing, --yes installs the registry's versions, writes
+          # and records both migrations and passes doctor, a second run has nothing to do, and the client builds with its title
+          - { name: upgrade, dir: upgrade }
 
     steps:
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
 
     - name: Download the built workspace
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: workspace-${{ matrix.os }}
 
@@ -197,7 +210,7 @@ jobs:
 
     - name: Upload screenshots
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.test.name }}-e2e-screenshots-${{ matrix.os }}
         path: e2e/${{ matrix.test.dir }}/screenshots

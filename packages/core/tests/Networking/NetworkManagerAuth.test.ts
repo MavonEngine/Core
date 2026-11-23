@@ -27,7 +27,7 @@ vi.mock('@geckos.io/client', () => ({
 
 vi.mock('@dimforge/rapier3d-compat', () => ({ version: vi.fn().mockReturnValue('0.0.0') }))
 
-function useClientPlugins(plugins: { authorization?(): string | undefined }[]) {
+function useClientPlugins(plugins: { authorization?(): string | undefined, onConnectError?(error: unknown): void }[]) {
   const game = BaseGame.instance() as unknown as { plugins?: unknown }
   game.plugins = new PluginHost(plugins.map((plugin, i) => ({ package: `p${i}`, options: {}, plugin })), () => ({}), null, 'client')
 }
@@ -74,6 +74,20 @@ describe('network manager auth', () => {
 
     socket.userData = { id: 'acc-1', name: 'alice' }
     expect(network.identity).toEqual({ id: 'acc-1', name: 'alice' })
+    network.destroy()
+  })
+
+  it('tells the client plugins when connecting failed, so an auth plugin can forget a session the server turned away', () => {
+    const onConnectError = vi.fn()
+    useClientPlugins([{}, { onConnectError }])
+    const network = new NetworkManager({})
+
+    socket.connect!({ message: 'Connection failed with status code 401.', status: 401, statusText: 'Unauthorized' })
+    expect(onConnectError).toHaveBeenCalledWith({ message: 'Connection failed with status code 401.', status: 401 }, {})
+
+    // Not when it connects
+    socket.connect!()
+    expect(onConnectError).toHaveBeenCalledTimes(1)
     network.destroy()
   })
 })

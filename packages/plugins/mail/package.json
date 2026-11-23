@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/mail",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: send mail from the game server, queued and retried, through a transport plugin such as @mavonengine/smtp",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,8 @@
     "lint:fix": "eslint . --fix"
   },
   "peerDependencies": {
-    "@mavonengine/core": ">=0.0.25"
+    "@mavonengine/core": ">=0.0.25",
+    "maildev": "^3.0.0"
   },
   "mavonengine": {
     "target": "server",
@@ -48,13 +49,20 @@
     "publish": "publish",
     "engine": ">=0.0.25"
   },
+  "peerDependenciesMeta": {
+    "maildev": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "nodemailer": "^10.3.1"
   },
   "devDependencies": {
     "@geckos.io/server": "^3.1.0",
     "@mavonengine/core": "*",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
+    "maildev": "^3.0.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",
     "vitest": "^5.1.0",

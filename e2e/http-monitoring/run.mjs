@@ -2,12 +2,13 @@
  * End-to-end test for @mavonengine/http-monitoring, run against packages/multiplayer-template:
  *
  * 1. registers the plugin in mavonengine.json with an htpasswd file holding a bcrypt user
- * 2. boots the game server with NODE_ENV=production, where the dashboard requires a login
- * 3. checks the login over HTTP: none and a wrong password are refused, the right one is let in
- * 4. opens the dashboard in Chrome, waits for live data and goes through all four tabs,
+ * 2. boots the game server with NODE_ENV=production, where the admin panel requires a login
+ * 3. checks the login over HTTP: none and a wrong password are refused, the htpasswd user is let into the admin
+ *    panel, and the dashboard's old address leads there
+ * 4. opens the dashboard in the admin panel in Chrome, waits for live data and goes through all four tabs,
  *    failing on any console error (CSP violations included) or page error
  *
- * Needs Chrome installed (GitHub's ubuntu and windows runners have it), core and the plugin built,
+ * Needs Chrome installed (GitHub's ubuntu and windows runners have it, or set MAVONENGINE_E2E_CHROME to a Chromium), core and the plugin built,
  * and the template's dependencies installed. Screenshots go to e2e/http-monitoring/screenshots.
  * The template is restored afterwards, also on failure.
  *
@@ -28,6 +29,8 @@ const PLUGIN = '@mavonengine/http-monitoring'
 const USER = 'e2e'
 const PASSWORD = 'correct horse battery staple'
 const basic = (user, password) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`
+/** Where the dashboard is: a page of the game server's admin panel */
+const DASHBOARD = '/admin/monitoring/'
 
 async function main() {
   const configPath = join(template, 'mavonengine.json')
@@ -52,20 +55,26 @@ async function main() {
     log('\n== production server')
     server = await startServer({ NODE_ENV: 'production' })
     check(server.output().includes(`Plugin loaded: HTTP monitoring (${PLUGIN}) (server)`), 'the server loads the plugin')
-    check(server.output().includes('Monitoring dashboard at /monitoring/, login with a user from'), 'the dashboard is on, behind the htpasswd login')
+    check(server.output().includes(`Monitoring dashboard at ${DASHBOARD} in the admin panel`), 'the dashboard is a page of the admin panel')
 
     log('\n== login')
-    const anonymous = await fetch(`${base}/monitoring/`)
+    const anonymous = await fetch(`${base}${DASHBOARD}`)
     check(anonymous.status === 401, 'no login: 401')
-    check(anonymous.headers.get('www-authenticate')?.startsWith('Basic realm="MavonEngine monitoring"'), 'the browser is asked to log in')
-    check(await status('/monitoring/', { headers: { Authorization: basic(USER, 'wrong') } }) === 401, 'wrong password: 401')
-    check(await status('/monitoring/api/metrics') === 401, 'the data endpoints need the login too')
-    const metrics = await (await fetch(`${base}/monitoring/api/metrics`, { headers: { Authorization: basic(USER, PASSWORD) } })).json()
-    check(metrics.schemaVersion === 1 && typeof metrics.engineVersion === 'string', 'the right login gets the metrics')
-    check(server.output().includes(`Monitoring: failed login for "${USER}"`), 'the failed login is logged')
+    check(anonymous.headers.get('www-authenticate')?.startsWith('Basic realm="MavonEngine admin"'), 'the browser is asked to log in to the admin panel')
+    check(await status(DASHBOARD, { headers: { Authorization: basic(USER, 'wrong') } }) === 401, 'wrong password: 401')
+    check(await status(`${DASHBOARD}api/metrics`) === 401, 'the data endpoints need the login too')
+    const metrics = await (await fetch(`${base}${DASHBOARD}api/metrics`, { headers: { Authorization: basic(USER, PASSWORD) } })).json()
+    check(metrics.schemaVersion === 1 && typeof metrics.engineVersion === 'string', 'the htpasswd user gets the metrics')
+    check(await status('/admin/', { headers: { Authorization: basic(USER, PASSWORD) } }) === 200, 'and into the rest of the admin panel')
+    check(server.output().includes(`Admin: failed login for "${USER}"`), 'the failed login is logged')
+
+    const old = await fetch(`${base}/monitoring/`, { redirect: 'manual' })
+    check(old.status === 302 && old.headers.get('location') === DASHBOARD, 'the old address leads to the admin panel')
+    check(await status('/monitoring/api/metrics') === 401 && await status('/monitoring/api/metrics', { headers: { Authorization: basic(USER, PASSWORD) } }) === 200, 'its data endpoints still answer, behind the same login')
 
     log('\n== browser')
-    browser = await chromium.launch({ channel: 'chrome', headless: true })
+    const chrome = process.env.MAVONENGINE_E2E_CHROME ? { executablePath: process.env.MAVONENGINE_E2E_CHROME } : { channel: 'chrome' }
+    browser = await chromium.launch({ ...chrome, headless: true })
     const context = await browser.newContext({ httpCredentials: { username: USER, password: PASSWORD }, viewport: { width: 1400, height: 900 } })
     page = await context.newPage()
     const errors = []
@@ -75,9 +84,11 @@ async function main() {
     })
     page.on('pageerror', error => errors.push(error.message))
 
-    await page.goto(`${base}/monitoring/`)
+    await page.goto(`${base}${DASHBOARD}`)
     await page.locator('#status').filter({ hasText: 'LIVE' }).waitFor({ timeout: 15000 })
     check(true, 'the dashboard goes live')
+    check(await page.locator('.adm-sidebar .adm-link[aria-current="page"]').textContent() === 'Monitoring', 'in the admin panel\'s layout, open in its sidebar')
+    check((await page.locator('.adm-subnav a').allTextContents()).join(',') === 'Overview,Players,Logs,HTTP', 'with the dashboard\'s tabs below it')
     check(await page.locator('#engine').textContent() === metrics.engineVersion, 'the header shows the engine version')
     check(await page.locator('#source').textContent() === new URL(base).host, 'the header shows the server')
     check(await page.locator('#world-values dd').first().textContent() === String(metrics.players.length), 'the World panel shows the player count')
@@ -100,8 +111,8 @@ async function main() {
     await page.keyboard.press('4')
     await page.locator('#requests table').waitFor({ timeout: 5000 })
     const paths = await page.locator('#requests td.path').allTextContents()
-    check(paths.includes('/monitoring/'), 'key 4 opens the HTTP tab, which lists the page load')
-    check(!paths.some(path => path.startsWith('/monitoring/api/')), 'the dashboard\'s own polling stays out of the HTTP tab')
+    check(paths.includes(DASHBOARD), 'key 4 opens the HTTP tab, which lists the page load')
+    check(!paths.some(path => path.startsWith(`${DASHBOARD}api/`)), 'the dashboard\'s own polling stays out of the HTTP tab')
     await page.screenshot({ path: join(screenshots, 'http.png') })
 
     check(errors.length === 0, `no console or page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`)

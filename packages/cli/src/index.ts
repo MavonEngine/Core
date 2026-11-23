@@ -4,10 +4,13 @@ import { BUILD_HELP, parseBuildArgs, runBuildCommand } from './commands/build'
 import { CREATE_HELP, parseCreateArgs, runCreateCommand } from './commands/create'
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
+import { DOCTOR_HELP, parseDoctorArgs, runDoctorCommand } from './commands/doctor'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
+import { MAKE_PLUGIN_HELP, parseMakePluginArgs, runMakePluginCommand } from './commands/make'
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
 import { parsePublishArgs, PUBLISH_HELP, runPublishCommand } from './commands/publish'
+import { parseUpgradeArgs, runUpgradeCommand, UPGRADE_HELP } from './commands/upgrade'
 
 const HELP = `Usage: mavonengine <command> [options]
 
@@ -18,7 +21,10 @@ Commands:
   install        Install packages and register engine plugins in mavonengine.json
   plugins        List the plugins that are available to install
   asset:publish  Copy a plugin's files you may change, like the mail layout, into the project
+  make:plugin    Create a plugin inside the project, linked and registered in mavonengine.json
   build          Build the project for release, with the plugin assets it uses
+  doctor         Check Node, the @mavonengine packages, mavonengine.json and the plugins
+  upgrade        Move to the latest @mavonengine/core and plugins that fit it, then migrate the project
   mcp            MCP server so AI assistants (any MCP client) can inspect a running game server
 
 Options:
@@ -113,6 +119,17 @@ async function main(argv: string[]): Promise<number> {
     return runPublishCommand(options)
   }
 
+  if (command === 'make:plugin') {
+    const options = parseMakePluginArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(MAKE_PLUGIN_HELP)
+      return 0
+    }
+
+    return runMakePluginCommand(options)
+  }
+
   if (command === 'mcp') {
     const options = parseMcpArgs(args)
 
@@ -122,6 +139,28 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runMcpCommand(options)
+  }
+
+  if (command === 'doctor') {
+    const options = parseDoctorArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(DOCTOR_HELP)
+      return 0
+    }
+
+    return runDoctorCommand(options)
+  }
+
+  if (command === 'upgrade') {
+    const options = parseUpgradeArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(UPGRADE_HELP)
+      return 0
+    }
+
+    return runUpgradeCommand(options)
   }
 
   if (command === 'build') {

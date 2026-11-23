@@ -22,12 +22,15 @@
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint:fix --workspaces --if-present",
     "test:plugin-e2e": "node e2e/plugin/run.mjs",
+    "test:make-plugin-e2e": "node e2e/make-plugin/run.mjs",
     "test:monitoring-e2e": "node e2e/http-monitoring/run.mjs",
     "test:sqlite-e2e": "node e2e/sqlite/run.mjs",
     "test:auth-e2e": "node e2e/auth/run.mjs",
     "test:mail-e2e": "node e2e/mail/run.mjs",
     "test:scenes-e2e": "node e2e/scenes/run.mjs",
     "test:mcp-e2e": "node e2e/mcp/run.mjs",
-    "test:editor-dist-e2e": "node e2e/editor-dist/run.mjs"
+    "test:editor-dist-e2e": "node e2e/editor-dist/run.mjs",
+    "test:doctor-e2e": "node e2e/doctor/run.mjs",
+    "test:upgrade-e2e": "node e2e/upgrade/run.mjs"
   }
 }

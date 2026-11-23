@@ -45,6 +45,14 @@ body {
   display: none !important;
 }
 
+/* The dashboard, as the whole page or in the admin panel's content area */
+.monitoring {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -165,6 +173,15 @@ main {
   gap: 1em;
 }
 
+.grid.with-queue {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Next to World, like the CLI's overview */
+.grid.with-queue .queue-panel {
+  grid-column: span 2;
+}
+
 .row {
   display: flex;
   gap: 1em;
@@ -198,6 +215,8 @@ main {
 
 .panel h2 {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 1em;
   justify-content: space-between;
   margin: 0;
   font-size: 13px;
@@ -275,7 +294,8 @@ main {
 
 .legend {
   display: flex;
-  gap: 1em;
+  flex-wrap: wrap;
+  gap: 0 1em;
   font-weight: 400;
   color: var(--muted);
 }
@@ -345,6 +365,10 @@ main {
 
 .values.spread {
   grid-template-columns: auto 1fr auto 1fr;
+}
+
+.queue-panel .values.spread {
+  grid-template-columns: repeat(3, auto 1fr);
 }
 
 /* Tables */
@@ -436,8 +460,13 @@ tr.selected {
 }
 
 @media (max-width: 900px) {
-  .grid {
+  .grid,
+  .grid.with-queue {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid.with-queue .queue-panel {
+    grid-column: auto;
   }
 
   .row {
@@ -448,7 +477,8 @@ tr.selected {
     flex: none;
   }
 
-  .values.spread {
+  .values.spread,
+  .queue-panel .values.spread {
     grid-template-columns: auto 1fr;
   }
 }

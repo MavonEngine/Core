@@ -140,6 +140,28 @@ A plugin offers files with `"publish": "<directory>"` under `mavonengine` in its
 | `--cwd <dir>` | current directory | Where to start looking for the project |
 | `--force` | | Replace the files you have with the plugin's |
 
+## `mavonengine make:plugin`
+
+Creates a plugin inside the project you are in, ready to load:
+
+```sh
+npx @mavonengine/cli make:plugin forest
+npx @mavonengine/cli make:plugin @acme/forest --target server
+```
+
+It writes `plugins/<name>/` (without the scope) with a `package.json` that has the [`mavonengine` manifest](#writing-a-plugin), `src/client.ts` and/or `src/server.ts` with every hook stubbed, a `tsconfig.json` and a README. Then it adds `plugins/*` to the `workspaces` in `package.json` (pnpm gets a `link:` dependency instead), adds the plugin to `mavonengine.json` and runs the package manager's install, which links it into `node_modules`.
+
+The manifest points at the TypeScript sources, so there is no build step: Vite compiles the client entry and Node 24 strips the types of the server entry. That means the server entry takes only syntax Node can strip (no `enum`s or parameter properties) and imports its own files with `.ts` extensions, which the generated `tsconfig.json` enforces. The client reloads when its entry changes; restart the game server for changes to the server entry. To publish the plugin to npm later, build it to `dist/` like the [first-party plugins](https://github.com/MavonEngine/Core/tree/main/packages/plugins) and point the manifest there.
+
+It refuses a name that is already in `mavonengine.json`, installed, or a directory that exists, and never overwrites a file.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--target <side>` | `both` | `client`, `server` or `both` |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+| `--no-register` | | Leave `mavonengine.json` alone |
+| `--no-install` | | Don't run the package manager to link it |
+
 ## `mavonengine build`
 
 Runs the project's `build` script, then lists what each plugin put into the release. Plugin assets are copied into the client's output under `plugins/<package>/`. Only the shared ones and those of the prefabs in `mavonengine.json` are copied. The client skips loading the others, so a release never requests a file it doesn't contain.
@@ -151,6 +173,89 @@ npx @mavonengine/cli build
 | Option | Default | |
 | --- | --- | --- |
 | `--cwd <dir>` | current directory | Where to start looking for the project |
+
+## `mavonengine doctor`
+
+Checks the project you are in and says what to do about what it finds. It changes nothing.
+
+```sh
+npx @mavonengine/cli doctor
+```
+
+```
+MavonEngine project at ~/games/my-game (npm, @mavonengine/core 0.0.25)
+
+Environment
+  ✓ Node 24.4.0                 needs >=24
+  ✓ @mavonengine/cli 0.0.6
+  i @mavonengine/core 0.0.25    0.0.26 is out
+
+mavonengine.json
+  ✓ mavonengine.json  2 plugins
+  ✗ appUrl "mygame.com"         is not an http(s) URL
+      → e.g. "appUrl": "https://mygame.com"
+
+Plugins
+  ✓ @mavonengine/chat 0.0.3     core >=0.0.22
+  ✗ @mavonengine/auth 0.2.0     made for @mavonengine/core >=0.0.26, the project has 0.0.25
+      → mavonengine install @mavonengine/auth@0.1.1
+
+2 errors, 0 warnings
+```
+
+- **Environment**: the Node version, against what the CLI and the installed `@mavonengine/core` need. Then each `@mavonengine/*` package in `package.json`: whether it is installed and matches the range there (or `npm install` is due), and whether a newer one is out.
+- **mavonengine.json**: whether it can be read, an `appUrl` that isn't an http(s) URL, a `database`, `auth` or `notifications` that names a plugin that isn't in `plugins` or is turned off, entries of the wrong shape, and settings it doesn't know (typos).
+- **Migrations**: the [`upgrade`](#mavonengine-upgrade) migrations the project's core has that the project hasn't had yet.
+- **Plugins**: each plugin in `mavonengine.json` must be installed, a MavonEngine plugin, and built (its entries exist). It also needs the assets of the prefabs in use, and has to be made for the project's core. A plugin's supported core is `engine` in its `mavonengine` field, or else its `@mavonengine/core` peer dependency. When a plugin doesn't fit, doctor looks through the versions published on npm for the newest one that does and names it. A plugin that is installed but not in `mavonengine.json` is pointed out too.
+
+The game server and the Vite plugin also check `engine` when they load plugins. A plugin made for another core still loads, with a warning that points here.
+
+Version lookups go to the npm registry (`npm_config_registry` when set, else registry.npmjs.org) and send it the names of the project's `@mavonengine/*` packages and plugins. `--offline` leaves that out. When the registry can't be reached, that is one warning and the rest is checked anyway.
+
+The exit code is 1 when something is wrong (✗), 0 otherwise. With `--strict` warnings (!) fail too, notes (i) never do. `--json` prints the findings for CI and scripts.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--offline` | | Don't ask the npm registry |
+| `--strict` | | Fail on warnings too |
+| `--json` | | Print the findings as JSON |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+
+## `mavonengine upgrade`
+
+Moves the project to the latest `@mavonengine/core`, with plugins that work with it, then makes the changes to the project's files that the new core needs.
+
+```sh
+npx @mavonengine/cli upgrade --dry-run   # see what would happen
+npx @mavonengine/cli upgrade
+```
+
+1. **Packages.** `@mavonengine/core` goes to its latest version on the npm registry, or to `--to <version>`. Each plugin goes to its newest version whose `engine` range takes that core. The other `@mavonengine/*` packages go to their newest version whose `@mavonengine/core` peer range takes it. Packages are never moved down, and packages from `file:`, git or another source are left alone. When a plugin has no version for the new core, the upgrade stops before installing anything: pick an older core with `--to`, remove the plugin, or pass `--force`. The packages are installed with the project's package manager. Each stays in `dependencies` or `devDependencies`, and pinned versions stay pinned.
+2. **Migrations.** These come from the core that is now installed, so the new core decides what to migrate. Each one is shown as a diff before anything is written. Applied migrations are recorded in `migrations` in `mavonengine.json` and never offered again, even when you undo one on purpose. When a migration adds a dependency, the package manager installs it.
+3. **Doctor.** [`mavonengine doctor`](#mavonengine-doctor) checks the result, and the exit code is doctor's.
+
+| Migration | What it changes |
+| --- | --- |
+| `0.0.22-dev-script` | `npm run dev` starts `mavonengine dev`. The old `dev` script becomes `dev:server`, and `@mavonengine/cli` becomes a dev dependency |
+| `0.0.25-app-name-title` | `index.html`'s `<title>` becomes `%MAVONENGINE_APP_NAME%`. The title it had becomes `appName` in `mavonengine.json`, so the tab still says the same |
+
+The upgrade asks before installing and before writing; `--yes` skips both questions, and without a terminal `--yes` is required. It won't start with uncommitted changes in git, so its changes can be reviewed and undone on their own; `--allow-dirty` overrides that. After installing packages yourself, `--only-migrations` runs only steps 2 and 3.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--to <version>` | latest | The `@mavonengine/core` version to move to |
+| `--only-migrations` | | Leave the packages alone |
+| `--dry-run` | | Show what would happen, change nothing |
+| `-y`, `--yes` | | Don't ask |
+| `--force` | | Upgrade even when a plugin has no version for the new core |
+| `--allow-dirty` | | Start with uncommitted changes |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+
+### Writing a migration
+
+Migrations are in `packages/core/src/Migrations/migrations.ts`, oldest first. Each has an `id` of `<since>-<name>` that never changes once released, the first core version it is for (`since`), and a one-line `description`. `applies` says whether the project still needs it, and `run` changes the project. Both read and write only through `ctx.files`, so the change can be shown before it is written. A migration must leave a project it has already run on alone.
+
+A CI check (`.github/workflows/migrations.yml`, running `scripts/check-migrations.mjs`) asks for a migration when a pull request changes the multiplayer template's project files. It watches the `package.json` files (scripts, workspaces, and which dependencies there are, but not their versions, which every release bumps), the config files and `client/index.html`. Game code, the README and the lockfile don't count. The check passes when the pull request adds a migration, or when its description says `[no migration]` because existing projects don't need the change.
 
 ## `mavonengine dashboard`
 
@@ -322,7 +427,7 @@ To let `compare_entity` match your own player with the server's, set `game.local
 
 ## Writing a plugin
 
-A plugin is an npm package with a `mavonengine` field in its `package.json`:
+[`mavonengine make:plugin`](#mavonengine-makeplugin) sets one up in your project. A plugin is an npm package with a `mavonengine` field in its `package.json`:
 
 ```json
 {
@@ -400,6 +505,38 @@ export default defineServerPlugin({
 ```
 
 A plugin that takes the token some other way, such as the password of a login, checks it with `ctx.adminToken.matches(candidate)`, without ever seeing the token.
+
+### Admin panel pages
+
+The game server serves an admin panel at `/admin/`: one layout with a sidebar, behind a login that takes the [admin token](#admin-token) as the password (any user name). The engine adds Overview, Routes and Plugins pages. A plugin adds its own with `ctx.admin.page()`, and it shows up in the sidebar under **Plugins**, with the links it gives listed below it:
+
+```ts
+export default defineServerPlugin({
+  http(app, ctx) {
+    ctx.admin.page({
+      path: 'chat', // /admin/chat/
+      label: 'Chat',
+      icon: 'chat', // dashboard, activity, routes, plugin, database, users, logs, settings, chart, mail, chat, bell or lock
+      children: [
+        { label: 'Live', href: '#live' }, // an anchor on the page
+        { label: 'Mutes', href: 'mutes', render: () => '<p>…</p>' }, // a sub page, /admin/chat/mutes/
+      ],
+      render: req => ({
+        html: '<div class="adm-page">…</div>',
+        styles: [ctx.admin.url('chat/style.css')],
+        scripts: [ctx.admin.url('chat/app.js')],
+      }),
+    })
+
+    // Every route under the panel's path is behind its login already
+    app.get(ctx.admin.url('chat/api/messages'), (_req, res) => res.json({ messages: [] }))
+  },
+})
+```
+
+The page's HTML goes into the layout as is: escape whatever came from players with `escapeHtml()` from `@mavonengine/core/Networking/Server/Admin/AdminPanel`. Inline scripts are blocked by the page's Content-Security-Policy, so ship script files. The layout's colors are CSS custom properties (`--surface`, `--border`, `--primary`, …), and it has helpers for pages: `adm-page`, `adm-cards`, `adm-card`, `adm-table`, `adm-badge`. `ctx.admin.addLogin((user, password) => …)` lets more people log in than whoever has the token, such as the users of an htpasswd file.
+
+Without an admin token the panel only answers localhost, and in production it stays off until the server has a token or a plugin added a login. Move it with `admin: { path: '/ops' }` in the server's options, or turn it off with `admin: { enabled: false }`.
 
 ### Authenticating players
 
