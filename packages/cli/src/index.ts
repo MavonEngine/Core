@@ -6,6 +6,7 @@ import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
 import { DOCTOR_HELP, parseDoctorArgs, runDoctorCommand } from './commands/doctor'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
+import { MAKE_PLUGIN_HELP, parseMakePluginArgs, runMakePluginCommand } from './commands/make'
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
 import { parsePublishArgs, PUBLISH_HELP, runPublishCommand } from './commands/publish'
@@ -20,6 +21,7 @@ Commands:
   install        Install packages and register engine plugins in mavonengine.json
   plugins        List the plugins that are available to install
   asset:publish  Copy a plugin's files you may change, like the mail layout, into the project
+  make:plugin    Create a plugin inside the project, linked and registered in mavonengine.json
   build          Build the project for release, with the plugin assets it uses
   doctor         Check Node, the @mavonengine packages, mavonengine.json and the plugins
   upgrade        Move to the latest @mavonengine/core and plugins that fit it, then migrate the project
@@ -115,6 +117,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runPublishCommand(options)
+  }
+
+  if (command === 'make:plugin') {
+    const options = parseMakePluginArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(MAKE_PLUGIN_HELP)
+      return 0
+    }
+
+    return runMakePluginCommand(options)
   }
 
   if (command === 'mcp') {
