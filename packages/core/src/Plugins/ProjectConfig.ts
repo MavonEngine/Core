@@ -1,6 +1,7 @@
 import type { PluginInfo, PluginOptions, PluginTarget } from './types'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { engineCompat } from './compat.js'
 
 /**
  * Node only: reads and writes mavonengine.json and the plugin manifests in node_modules.
@@ -34,6 +35,8 @@ export interface MavonEngineConfig {
   appUrl?: string
   /** The game's name, e.g. in mails and their layout. Plugins get it as `ctx.appName` */
   appName?: string
+  /** The `mavonengine upgrade` migrations the project has had, by id */
+  migrations?: string[]
   [key: string]: unknown
 }
 
@@ -218,6 +221,21 @@ export function findPackageDir(root: string, pkg: string): string | undefined {
   }
 }
 
+/** The version of an installed package, found like `findPackageDir` does */
+export function installedPackageVersion(root: string, pkg: string): string | undefined {
+  const dir = findPackageDir(root, pkg)
+  if (!dir)
+    return undefined
+
+  try {
+    const version = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version
+    return typeof version === 'string' ? version : undefined
+  }
+  catch {
+    return undefined
+  }
+}
+
 function validateManifest(pkg: string, value: unknown): PluginManifest {
   if (!value || typeof value !== 'object')
     throw new PluginConfigError(`${pkg}: "mavonengine" in package.json must be an object`)
@@ -272,11 +290,14 @@ export function assetsDir(plugin: InstalledPlugin): string {
 
 /**
  * The enabled plugins in mavonengine.json that run on `side`, in config order.
- * Plugins that are missing or invalid are skipped and reported in `warnings`.
+ * Plugins that are missing or invalid are skipped and reported in `warnings`. Plugins made for another
+ * @mavonengine/core are loaded, and reported in `incompatible`.
  */
-export function enabledPlugins(root: string, side: 'client' | 'server'): { plugins: EnabledPlugin[], warnings: string[] } {
+export function enabledPlugins(root: string, side: 'client' | 'server'): { plugins: EnabledPlugin[], warnings: string[], incompatible: string[] } {
   const plugins: EnabledPlugin[] = []
   const warnings: string[] = []
+  const incompatible: string[] = []
+  const coreVersion = installedPackageVersion(root, '@mavonengine/core')
 
   for (const [pkg, entry] of Object.entries(readConfig(root).plugins)) {
     if (entry?.enabled === false)
@@ -299,6 +320,10 @@ export function enabledPlugins(root: string, side: 'client' | 'server'): { plugi
     if (!runsOn(installed.manifest.target, side))
       continue
 
+    // Loaded anyway: the range may be too strict, and `mavonengine doctor` says what to do about it
+    if (engineCompat(installed.manifest.engine, coreVersion) === 'incompatible')
+      incompatible.push(`${pkg}${installed.version ? ` ${installed.version}` : ''} is made for @mavonengine/core ${installed.manifest.engine}, the project has ${coreVersion}, run 'mavonengine doctor'`)
+
     const entryPath = resolveInside(installed.dir, installed.manifest[side]!)
     if (!entryPath || !existsSync(entryPath)) {
       warnings.push(`${pkg}: ${side} entry ${installed.manifest[side]} not found, is the plugin built?`)
@@ -313,7 +338,7 @@ export function enabledPlugins(root: string, side: 'client' | 'server'): { plugi
     })
   }
 
-  return { plugins, warnings }
+  return { plugins, warnings, incompatible }
 }
 
 /**

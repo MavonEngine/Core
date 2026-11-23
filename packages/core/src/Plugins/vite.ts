@@ -148,9 +148,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
       this.addWatchFile(join(root, CONFIG_FILE))
 
-      const { plugins, warnings, signature } = clientPlugins(root)
+      const { plugins, warnings, incompatible, signature } = clientPlugins(root)
       loadedSignature = signature
       warnings.forEach(warning => warn(`Plugin skipped: ${warning}`))
+      incompatible.forEach(warning => warn(`Plugin loaded anyway: ${warning}`))
 
       // In a release, tell the game which plugin assets exist so it doesn't request the ones left out
       const shipped = config.command === 'build' ? shippedAssetsByPackage(root) : undefined
