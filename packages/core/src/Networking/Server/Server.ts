@@ -775,8 +775,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   start(): Promise<void> {
     const plugins = this.options.plugins
     if (plugins && !Array.isArray(plugins)) {
-      return loadServerPlugins(plugins.root).then(({ plugins: loaded, warnings }) => {
+      return loadServerPlugins(plugins.root).then(({ plugins: loaded, warnings, incompatible }) => {
         warnings.forEach(warning => this.logger.warn(`Plugin skipped: ${warning}`))
+        incompatible.forEach(warning => this.logger.warn(`Plugin loaded anyway: ${warning}`))
         return this.boot(loaded)
       })
     }

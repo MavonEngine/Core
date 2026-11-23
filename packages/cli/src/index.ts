@@ -4,6 +4,7 @@ import { BUILD_HELP, parseBuildArgs, runBuildCommand } from './commands/build'
 import { CREATE_HELP, parseCreateArgs, runCreateCommand } from './commands/create'
 import { DASHBOARD_HELP, parseDashboardArgs, runDashboard, UsageError } from './commands/dashboard'
 import { DEV_HELP, parseDevArgs, runDevCommand } from './commands/dev'
+import { DOCTOR_HELP, parseDoctorArgs, runDoctorCommand } from './commands/doctor'
 import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/install'
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
@@ -19,6 +20,7 @@ Commands:
   plugins        List the plugins that are available to install
   asset:publish  Copy a plugin's files you may change, like the mail layout, into the project
   build          Build the project for release, with the plugin assets it uses
+  doctor         Check Node, the @mavonengine packages, mavonengine.json and the plugins
   mcp            MCP server so AI assistants (any MCP client) can inspect a running game server
 
 Options:
@@ -122,6 +124,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runMcpCommand(options)
+  }
+
+  if (command === 'doctor') {
+    const options = parseDoctorArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(DOCTOR_HELP)
+      return 0
+    }
+
+    return runDoctorCommand(options)
   }
 
   if (command === 'build') {

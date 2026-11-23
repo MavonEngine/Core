@@ -6,8 +6,8 @@ import { enabledPlugins } from './ProjectConfig'
  * Import the server entries of the plugins enabled in `<root>/mavonengine.json`.
  * Plugins that are missing, invalid or fail to import are skipped and reported in `warnings`.
  */
-export async function loadServerPlugins(root: string): Promise<{ plugins: LoadedPlugin<ServerPlugin>[], warnings: string[] }> {
-  const { plugins: enabled, warnings } = enabledPlugins(root, 'server')
+export async function loadServerPlugins(root: string): Promise<{ plugins: LoadedPlugin<ServerPlugin>[], warnings: string[], incompatible: string[] }> {
+  const { plugins: enabled, warnings, incompatible } = enabledPlugins(root, 'server')
   const plugins: LoadedPlugin<ServerPlugin>[] = []
 
   for (const plugin of enabled) {
@@ -25,5 +25,5 @@ export async function loadServerPlugins(root: string): Promise<{ plugins: Loaded
     }
   }
 
-  return { plugins, warnings }
+  return { plugins, warnings, incompatible }
 }

@@ -175,7 +175,7 @@ describe('enabledPlugins', () => {
     installPlugin(root, 'trees', trees, treeFiles)
     writeConfig(root, { plugins: { trees: { enabled: false } } })
 
-    expect(enabledPlugins(root, 'client')).toEqual({ plugins: [], warnings: [] })
+    expect(enabledPlugins(root, 'client')).toEqual({ plugins: [], warnings: [], incompatible: [] })
   })
 
   it('warns about plugins that are missing, invalid or unbuilt', () => {

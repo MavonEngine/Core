@@ -31,7 +31,7 @@ describe('loadServerPlugins', () => {
     installPlugin(root, 'hud', { target: 'client', client: './client.js' }, { 'client.js': 'export default {}' })
     writeConfig(root, { plugins: { hud: {} } })
 
-    expect(await loadServerPlugins(root)).toEqual({ plugins: [], warnings: [] })
+    expect(await loadServerPlugins(root)).toEqual({ plugins: [], warnings: [], incompatible: [] })
   })
 
   it('reports entries without a default export or that fail to import', async () => {

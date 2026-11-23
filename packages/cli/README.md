@@ -152,6 +152,52 @@ npx @mavonengine/cli build
 | --- | --- | --- |
 | `--cwd <dir>` | current directory | Where to start looking for the project |
 
+## `mavonengine doctor`
+
+Checks the project you are in and says what to do about what it finds. It changes nothing.
+
+```sh
+npx @mavonengine/cli doctor
+```
+
+```
+MavonEngine project at ~/games/my-game (npm, @mavonengine/core 0.0.25)
+
+Environment
+  ✓ Node 24.4.0                 needs >=24
+  ✓ @mavonengine/cli 0.0.6
+  i @mavonengine/core 0.0.25    0.0.26 is out
+
+mavonengine.json
+  ✓ mavonengine.json  2 plugins
+  ✗ appUrl "mygame.com"         is not an http(s) URL
+      → e.g. "appUrl": "https://mygame.com"
+
+Plugins
+  ✓ @mavonengine/chat 0.0.3     core >=0.0.22
+  ✗ @mavonengine/auth 0.2.0     made for @mavonengine/core >=0.0.26, the project has 0.0.25
+      → mavonengine install @mavonengine/auth@0.1.1
+
+2 errors, 0 warnings
+```
+
+- **Environment**: the Node version, against what the CLI and the installed `@mavonengine/core` need. Then each `@mavonengine/*` package in `package.json`: whether it is installed and matches the range there (or `npm install` is due), and whether a newer one is out.
+- **mavonengine.json**: whether it can be read, an `appUrl` that isn't an http(s) URL, a `database`, `auth` or `notifications` that names a plugin that isn't in `plugins` or is turned off, entries of the wrong shape, and settings it doesn't know (typos).
+- **Plugins**: each plugin in `mavonengine.json` must be installed, a MavonEngine plugin, and built (its entries exist). It also needs the assets of the prefabs in use, and has to be made for the project's core. A plugin's supported core is `engine` in its `mavonengine` field, or else its `@mavonengine/core` peer dependency. When a plugin doesn't fit, doctor looks through the versions published on npm for the newest one that does and names it. A plugin that is installed but not in `mavonengine.json` is pointed out too.
+
+The game server and the Vite plugin also check `engine` when they load plugins. A plugin made for another core still loads, with a warning that points here.
+
+Version lookups go to the npm registry (`npm_config_registry` when set, else registry.npmjs.org) and send it the names of the project's `@mavonengine/*` packages and plugins. `--offline` leaves that out. When the registry can't be reached, that is one warning and the rest is checked anyway.
+
+The exit code is 1 when something is wrong (✗), 0 otherwise. With `--strict` warnings (!) fail too, notes (i) never do. `--json` prints the findings for CI and scripts.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--offline` | | Don't ask the npm registry |
+| `--strict` | | Fail on warnings too |
+| `--json` | | Print the findings as JSON |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+
 ## `mavonengine dashboard`
 
 A live terminal dashboard for a running game server, built with [hqtui](https://github.com/profullstack/hqtui). For the same dashboard in a browser, behind a login, see the [`@mavonengine/http-monitoring`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/http-monitoring) plugin.

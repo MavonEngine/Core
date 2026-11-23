@@ -75,6 +75,7 @@ jobs:
         node dist/index.js --version
         node dist/index.js --help
         node dist/index.js dashboard --help
+        node dist/index.js doctor --help
       working-directory: ./packages/cli
 
     - name: npm link core locally
@@ -171,6 +172,10 @@ jobs:
           # The template aliases core and the editor to their src/, so nothing above loads their dist/. This runs
           # the template against the built packages, like a project that installed them, and opens the editor
           - { name: editor-dist, dir: editor-dist }
+          # `mavonengine doctor` on the template, against a fake npm registry in the test that knows a newer core and two
+          # versions of a fixture plugin: a plugin made for a newer core fails it and gets pointed to the version that fits,
+          # the game server warns about it and loads it anyway, and a registry that can't be reached is only a warning
+          - { name: doctor, dir: doctor }
 
     steps:
     - name: Use Node.js ${{ matrix.node-version }}
