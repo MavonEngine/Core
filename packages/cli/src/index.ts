@@ -9,6 +9,7 @@ import { INSTALL_HELP, parseInstallArgs, runInstallCommand } from './commands/in
 import { MCP_HELP, parseMcpArgs, runMcpCommand } from './commands/mcp'
 import { parsePluginsArgs, PLUGINS_HELP, runPluginsCommand } from './commands/plugins'
 import { parsePublishArgs, PUBLISH_HELP, runPublishCommand } from './commands/publish'
+import { parseUpgradeArgs, runUpgradeCommand, UPGRADE_HELP } from './commands/upgrade'
 
 const HELP = `Usage: mavonengine <command> [options]
 
@@ -21,6 +22,7 @@ Commands:
   asset:publish  Copy a plugin's files you may change, like the mail layout, into the project
   build          Build the project for release, with the plugin assets it uses
   doctor         Check Node, the @mavonengine packages, mavonengine.json and the plugins
+  upgrade        Move to the latest @mavonengine/core and plugins that fit it, then migrate the project
   mcp            MCP server so AI assistants (any MCP client) can inspect a running game server
 
 Options:
@@ -135,6 +137,17 @@ async function main(argv: string[]): Promise<number> {
     }
 
     return runDoctorCommand(options)
+  }
+
+  if (command === 'upgrade') {
+    const options = parseUpgradeArgs(args)
+
+    if (options === 'help') {
+      process.stdout.write(UPGRADE_HELP)
+      return 0
+    }
+
+    return runUpgradeCommand(options)
   }
 
   if (command === 'build') {

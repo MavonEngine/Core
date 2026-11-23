@@ -5,12 +5,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { compareVersions, engineCompat, engineRangeOf, maxSatisfying, parseVersion, satisfies, validRange } from '@mavonengine/core/Plugins/compat'
 import { assetsDir, CONFIG_FILE, configPath, findPackageDir, parseAppUrl, resolveInside, runsOn, shippedAssetPaths } from '@mavonengine/core/Plugins/ProjectConfig'
+import { loadMigrations } from '../upgrade/migrations'
 
 export type Level = 'ok' | 'info' | 'warn' | 'error'
 
-export type Group = 'Environment' | typeof CONFIG_FILE | 'Plugins'
+export type Group = 'Environment' | typeof CONFIG_FILE | 'Plugins' | 'Migrations'
 
-export const GROUPS: Group[] = ['Environment', CONFIG_FILE, 'Plugins']
+export const GROUPS: Group[] = ['Environment', CONFIG_FILE, 'Plugins', 'Migrations']
 
 export interface Finding {
   group: Group
@@ -36,7 +37,7 @@ export interface DoctorContext {
 /** What the CLI needs, from its own package.json */
 export const CLI_NODE_RANGE = '>=24'
 
-const TOP_LEVEL_KEYS = new Set(['$schema', 'plugins', 'database', 'auth', 'notifications', 'appUrl', 'appName'])
+const TOP_LEVEL_KEYS = new Set(['$schema', 'plugins', 'database', 'auth', 'notifications', 'appUrl', 'appName', 'migrations'])
 const PROVIDER_KEYS = ['database', 'auth', 'notifications'] as const
 const PLAIN_SPEC_RE = /^[\s\d.<>=^~x*|-]+$/i
 
@@ -353,4 +354,36 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
     add({ level: 'ok', label: 'no plugins' })
 
   return findings
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Migrations
+
+/**
+ * The migrations the project's core has that the project hasn't had.
+ */
+export async function checkMigrations(ctx: DoctorContext, cliVersion?: string): Promise<Finding[]> {
+  const coreVersion = coreVersionOf(ctx.root)
+  if (!coreVersion)
+    return []
+
+  const { module } = await loadMigrations(ctx.root)
+  let pending
+  try {
+    pending = module.pendingMigrations({ files: new module.ProjectFiles(ctx.root), versions: { core: coreVersion, cli: cliVersion } })
+  }
+  catch (err) {
+    return [{ group: 'Migrations', level: 'warn', label: 'migrations', detail: `can't be checked: ${(err as Error).message}` }]
+  }
+
+  if (!pending.length)
+    return [{ group: 'Migrations', level: 'ok', label: 'none pending' }]
+
+  return pending.map((migration, index) => ({
+    group: 'Migrations' as const,
+    level: 'warn' as const,
+    label: migration.id,
+    detail: migration.description,
+    fix: index === pending.length - 1 ? 'mavonengine upgrade --only-migrations' : undefined,
+  }))
 }

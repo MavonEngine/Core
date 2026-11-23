@@ -4,7 +4,8 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { CONFIG_FILE } from '@mavonengine/core/Plugins/ProjectConfig'
-import { checkConfig, checkEnvironment, checkPlugins, coreVersionOf, GROUPS, registryFinding } from '../doctor/checks'
+import { version as cliVersion } from '../../package.json'
+import { checkConfig, checkEnvironment, checkMigrations, checkPlugins, coreVersionOf, GROUPS, registryFinding } from '../doctor/checks'
 import { NPM_REGISTRY_URL, NpmRegistry } from '../doctor/npm'
 import { UsageError } from './dashboard'
 import { detectPackageManager, findProjectRoot } from './dev'
@@ -100,9 +101,13 @@ export async function runDoctor(root: string, options: Pick<DoctorOptions, 'offl
   }
 
   const { findings: configFindings, config } = checkConfig(root, io.env ?? process.env)
-  const [environment, plugins] = await Promise.all([checkEnvironment(ctx), config ? checkPlugins(ctx, config) : []])
+  const [environment, plugins, migrations] = await Promise.all([
+    checkEnvironment(ctx),
+    config ? checkPlugins(ctx, config) : [],
+    config ? checkMigrations(ctx, cliVersion) : [],
+  ])
   const registry = registryFinding(ctx.npm)
-  const findings = [...environment, ...(registry ? [registry] : []), ...configFindings, ...plugins]
+  const findings = [...environment, ...(registry ? [registry] : []), ...configFindings, ...plugins, ...migrations]
 
   return {
     root,

@@ -35,6 +35,8 @@ export interface MavonEngineConfig {
   appUrl?: string
   /** The game's name, e.g. in mails and their layout. Plugins get it as `ctx.appName` */
   appName?: string
+  /** The `mavonengine upgrade` migrations the project has had, by id */
+  migrations?: string[]
   [key: string]: unknown
 }
 
