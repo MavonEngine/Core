@@ -147,6 +147,9 @@ jobs:
           # dev server, in `mavonengine build`'s release and on the production server. Uses an npm stub for the
           # install, since a real one would replace the npm-linked @mavonengine/core
           - { name: plugin, dir: plugin }
+          # Generates a plugin in the template with `mavonengine make:plugin`, typechecks it, then checks that the dev
+          # server runs its TypeScript server entry as it is and Vite compiles its client entry, without a build step
+          - { name: make-plugin, dir: make-plugin }
           # Boots the template's game server in production with @mavonengine/http-monitoring and an htpasswd
           # login, then opens the dashboard in the runner's preinstalled Chrome and goes through every tab
           - { name: monitoring, dir: http-monitoring }

@@ -140,6 +140,28 @@ A plugin offers files with `"publish": "<directory>"` under `mavonengine` in its
 | `--cwd <dir>` | current directory | Where to start looking for the project |
 | `--force` | | Replace the files you have with the plugin's |
 
+## `mavonengine make:plugin`
+
+Creates a plugin inside the project you are in, ready to load:
+
+```sh
+npx @mavonengine/cli make:plugin forest
+npx @mavonengine/cli make:plugin @acme/forest --target server
+```
+
+It writes `plugins/<name>/` (without the scope) with a `package.json` that has the [`mavonengine` manifest](#writing-a-plugin), `src/client.ts` and/or `src/server.ts` with every hook stubbed, a `tsconfig.json` and a README. Then it adds `plugins/*` to the `workspaces` in `package.json` (pnpm gets a `link:` dependency instead), adds the plugin to `mavonengine.json` and runs the package manager's install, which links it into `node_modules`.
+
+The manifest points at the TypeScript sources, so there is no build step: Vite compiles the client entry and Node 24 strips the types of the server entry. That means the server entry takes only syntax Node can strip (no `enum`s or parameter properties) and imports its own files with `.ts` extensions, which the generated `tsconfig.json` enforces. The client reloads when its entry changes; restart the game server for changes to the server entry. To publish the plugin to npm later, build it to `dist/` like the [first-party plugins](https://github.com/MavonEngine/Core/tree/main/packages/plugins) and point the manifest there.
+
+It refuses a name that is already in `mavonengine.json`, installed, or a directory that exists, and never overwrites a file.
+
+| Option | Default | |
+| --- | --- | --- |
+| `--target <side>` | `both` | `client`, `server` or `both` |
+| `--cwd <dir>` | current directory | Where to start looking for the project |
+| `--no-register` | | Leave `mavonengine.json` alone |
+| `--no-install` | | Don't run the package manager to link it |
+
 ## `mavonengine build`
 
 Runs the project's `build` script, then lists what each plugin put into the release. Plugin assets are copied into the client's output under `plugins/<package>/`. Only the shared ones and those of the prefabs in `mavonengine.json` are copied. The client skips loading the others, so a release never requests a file it doesn't contain.
@@ -405,7 +427,7 @@ To let `compare_entity` match your own player with the server's, set `game.local
 
 ## Writing a plugin
 
-A plugin is an npm package with a `mavonengine` field in its `package.json`:
+[`mavonengine make:plugin`](#mavonengine-makeplugin) sets one up in your project. A plugin is an npm package with a `mavonengine` field in its `package.json`:
 
 ```json
 {
