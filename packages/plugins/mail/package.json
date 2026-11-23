@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/mail",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: send mail from the game server, queued and retried, through a transport plugin such as @mavonengine/smtp",
   "license": "MIT",
   "repository": {

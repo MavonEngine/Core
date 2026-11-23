@@ -237,6 +237,8 @@ describe('mavonengine upgrade', () => {
 
   it('shows the migrations, writes them when told to, and installs what they add', async () => {
     project({ scripts: { dev: 'npm run dev --prefix server' }, devDependencies: {} })
+    // What `npm install` leaves for the @mavonengine/cli the migration adds, which the fake install doesn't
+    installed('@mavonengine/cli', cliVersion)
     write('client/index.html', '<title>My Game</title>\n')
     const { io: upgradeIO, runs, output } = io()
 
