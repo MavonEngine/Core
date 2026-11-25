@@ -12,7 +12,7 @@
   "dependencies": {
     "@geckos.io/client": "^3.0.2",
     "@template/server": "*",
-    "vue": "^3.5.15"
+    "vue": "^3.5.46"
   },
   "devDependencies": {
     "@tweakpane/plugin-essentials": "^0.2.1",
