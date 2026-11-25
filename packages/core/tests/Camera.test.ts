@@ -69,6 +69,14 @@ describe('camera', () => {
     expectClose(heading(camera), new Vector3(0, 0, -1))
   })
 
+  it('turns around the camera without moving it', () => {
+    camera.place(new Vector3(3, 2, 10), new Vector3(3, 2, 0))
+    camera.turn(Math.PI / 2)
+
+    expectClose(camera.worldPosition, new Vector3(3, 2, 10))
+    expectClose(heading(camera), new Vector3(-1, 0, 0))
+  })
+
   describe('in VR', () => {
     beforeEach(() => {
       mockGame.renderer.xrPresenting = true

@@ -6,6 +6,7 @@ const UP = new Vector3(0, 1, 0)
 const lookMatrix = new Matrix4()
 const flatTarget = new Vector3()
 const headOffset = new Vector3()
+const pivot = new Vector3()
 
 /** Where the head is assumed to be above the rig's floor until the headset's first pose is known */
 const DEFAULT_EYE_HEIGHT = 1.6
@@ -88,6 +89,18 @@ export default class Camera {
     // the rig by that offset to land the head at `position`
     headOffset.copy(this.xrHeadOffset ?? { x: 0, y: DEFAULT_EYE_HEIGHT, z: 0 }).applyQuaternion(this.rig.quaternion)
     this.rig.position.copy(position).sub(headOffset)
+    this.updateWorldPosition()
+  }
+
+  /**
+   * Turn the view around the vertical axis through the player's head, e.g. a snap turn on a thumbstick flick.
+   * Positive turns left. Works on desktop too, where it turns the rig around the camera.
+   */
+  turn(angle: number) {
+    this.updateWorldPosition()
+    pivot.copy(this.worldPosition)
+    this.rig.position.sub(pivot).applyAxisAngle(UP, angle).add(pivot)
+    this.rig.rotateOnWorldAxis(UP, angle)
     this.updateWorldPosition()
   }
 
