@@ -54,20 +54,19 @@
     "@geckos.io/client": "^3.0.2",
     "@geckos.io/server": "^3.0.0",
     "@tweakpane/plugin-essentials": "^0.2.1",
-    "express": "5.1.0",
+    "express": "^5.3.0",
     "kysely": "^0.29.8",
     "three": "0.184.0",
     "three-perf": "^1.0.11",
     "tweakpane": "^4.0.5",
     "vite": "^8.3.5",
-    "winston": "3.17.0"
+    "winston": "^3.19.0"
   },
   "peerDependenciesMeta": {
     "kysely": {
       "optional": true
     }
   },
-  "dependencies": {},
   "devDependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
     "@geckos.io/server": "^3.0.0",
@@ -85,7 +84,7 @@
     "tweakpane": "^4.0.5",
     "typescript": "7.0.2",
     "vite": "^8.3.5",
-    "vite-plugin-glsl": "^1.6.2",
-    "vitest": "^5.1.0"
+    "vite-plugin-glsl": "^1.6.3",
+    "vitest": "^5.1.1"
   }
 }

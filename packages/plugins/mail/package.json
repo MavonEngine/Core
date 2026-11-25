@@ -65,7 +65,7 @@
     "maildev": "^3.0.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",
-    "vitest": "^5.1.0",
-    "winston": "^3.17.0"
+    "vitest": "^5.1.1",
+    "winston": "^3.19.0"
   }
 }

@@ -11,10 +11,10 @@
   "devDependencies": {
     "@antfu/eslint-config": "8.0.0",
     "bcryptjs": "^3.0.3",
-    "eslint": "10.1.0",
-    "playwright-core": "^1.65.0",
+    "eslint": "10.15.0",
+    "playwright-core": "^1.65.1",
     "vite": "^8.3.5",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
