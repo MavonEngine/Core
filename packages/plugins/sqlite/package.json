@@ -43,7 +43,7 @@
     "@mavonengine/core": ">=0.0.24"
   },
   "dependencies": {
-    "kysely": "^0.29.8"
+    "kysely": "^0.29.9"
   },
   "devDependencies": {
     "@mavonengine/core": "*",
