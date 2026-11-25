@@ -220,10 +220,34 @@ async function main() {
     await delay(200)
     check(await rigYaw() === beforeHover, 'moving the mouse without dragging leaves the view alone')
 
+    log('\n== mirror')
+    // The emulator reports a Quest's browser, where the page is hidden in VR: the template leaves the mirror off there
+    check(!(await page.evaluate(() => window.Game.xr.mirror)), 'the template leaves the mirror off in a standalone headset\'s browser')
+    // As on a PC headset
+    await page.evaluate(() => window.Game.xr.mirror = true)
+    const mirror = await page.evaluate(async () => {
+      const game = window.Game
+      const frames = game.renderer.instance.info.render.frame
+      await new Promise(resolve => setTimeout(resolve, 300))
+      game.camera.instance.updateWorldMatrix(true, false)
+      const head = game.camera.instance.getWorldPosition(game.camera.worldPosition.clone())
+      return {
+        rendered: game.renderer.instance.info.render.frame - frames,
+        offset: game.xr.mirrorCamera.position.distanceTo(head),
+        aspect: game.xr.mirrorCamera.aspect,
+        window: game.sizes.width / game.sizes.height,
+        xr: game.renderer.instance.xr.enabled,
+      }
+    })
+    check(mirror.rendered > 3 && mirror.xr, `the session keeps rendering with the mirror on (${mirror.rendered} frames in 0.3s)`)
+    check(mirror.offset < 0.05, `the mirror looks from the player's head (${(mirror.offset * 100).toFixed(1)}cm off)`)
+    check(Math.abs(mirror.aspect - mirror.window) < 0.01, `shaped like the browser window (${mirror.aspect.toFixed(2)})`)
+
     log('\n== leave VR')
     await page.evaluate(() => window.Game.xr.exit())
     await waitFor(page, () => !window.Game.renderer.xrPresenting, null, 10000)
     check(await page.evaluate(() => window.Game.camera.rig.position.length() === 0 && window.Game.camera.rig.rotation.y === 0), 'the camera rig is reset for the desktop controls')
+    check(await page.evaluate(() => window.Game.camera.instance.fov) === 35, 'the camera has its own field of view back, not the headset\'s')
     await delay(1000)
     const desktop = await pose(page)
     const orbit = Math.hypot(...desktop.offset)

@@ -8,6 +8,9 @@ import GameWorld from './Scenes/GameWorld'
 import Frame from './UI/Frame.vue'
 import './game.css'
 
+/** Browsers that run on the headset itself: Quest, Pico, Wolvic */
+const STANDALONE_HEADSET = /OculusBrowser|Quest|Pico|Wolvic/i
+
 // Engine plugins from mavonengine.json, see `mavonengine install`
 Game.usePlugins(plugins)
 
@@ -37,8 +40,11 @@ RAPIER.init().then(() => {
   // Play in a VR headset: an "Enter VR" button shows on devices that can (e.g. a Quest's browser), the left
   // stick walks and the right stick turns the view. The headset sets the frame rate there, not maxFps
   XR.isSupported().then((supported) => {
-    if (supported)
-      game.enableXR()
+    if (supported) {
+      // On a PC headset (SteamVR, Quest Link) the browser window keeps showing the game. Not on a standalone headset,
+      // whose browser hides the page while in VR: drawing it there would only cost frame rate
+      game.enableXR({ mirror: !STANDALONE_HEADSET.test(navigator.userAgent) })
+    }
   })
 
   // The map: sky, lights and ground, shared with the server which builds the trees from it. Edit it in the editor (press .)
