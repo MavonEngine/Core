@@ -2,6 +2,7 @@ import type Game from './Game'
 import type Renderer from './Renderer'
 import type { XRInputOptions } from './XRInput'
 import type { XRLocomotionOptions } from './XRLocomotion'
+import { PerspectiveCamera } from 'three'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
 import XRInput from './XRInput'
 import XRLocomotion from './XRLocomotion'
@@ -18,6 +19,16 @@ export interface XROptions {
   sessionInit?: XRSessionInit
   /** How the controllers show, or false to leave controller input out */
   input?: XRInputOptions | false
+  /**
+   * Keep drawing the game in the browser window while a headset plays, from the player's head, e.g. for someone
+   * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`
+   */
+  mirror?: boolean | XRMirrorOptions
+}
+
+export interface XRMirrorOptions {
+  /** The mirror's vertical field of view, in degrees. Default 70 */
+  fov?: number
 }
 
 /**
@@ -36,7 +47,16 @@ export default class XR {
   /** Thumbstick movement, once `enableLocomotion()` was called */
   locomotion?: XRLocomotion
 
+  /** Whether the browser window shows the game while a headset plays. See `XROptions.mirror` */
+  mirror: boolean
+
+  /** The mirror's view: the player's head, shaped like the browser window */
+  readonly mirrorCamera: PerspectiveCamera
+
   private readonly sessionInit: XRSessionInit
+
+  /** The camera's field of view before the session, which three.js replaces with the headset's */
+  private desktopFov?: number
 
   constructor(
     private readonly renderer: Renderer,
@@ -56,8 +76,22 @@ export default class XR {
       ],
     }
 
-    xr.addEventListener('sessionstart', () => game.trigger('xrSessionStart', xr.getSession()))
+    this.mirror = !!options.mirror
+    this.mirrorCamera = new PerspectiveCamera(
+      typeof options.mirror === 'object'
+        ? options.mirror.fov ?? 70
+        : 70,
+      game.sizes.width / game.sizes.height,
+    )
+
+    xr.addEventListener('sessionstart', () => {
+      this.desktopFov = game.camera.instance.fov
+      game.trigger('xrSessionStart', xr.getSession())
+    })
     xr.addEventListener('sessionend', () => {
+      // three.js gave the camera the headset's field of view, which would stay on the desktop
+      if (this.desktopFov !== undefined)
+        game.camera.instance.fov = this.desktopFov
       // Resizes were skipped while presenting, so catch up with the window
       game.sizes.setSize(window.innerWidth, window.innerHeight)
       // Hand the camera back to desktop controls that move it directly (orbit, fly), without the VR offset and
@@ -95,6 +129,41 @@ export default class XR {
       this.locomotion = locomotion
     }
     return this.locomotion
+  }
+
+  /**
+   * Draw the scene in the browser window from the player's head, after the headset's frame. Called by the renderer
+   * every frame while presenting and `mirror` is on
+   */
+  renderMirror() {
+    const webgl = this.renderer.instance
+    const camera = this.game.camera.instance
+    const near = camera.near
+    const far = camera.far
+
+    // The headset's frame placed the camera at the head: take its world pose, with the window's shape
+    camera.matrixWorld.decompose(this.mirrorCamera.position, this.mirrorCamera.quaternion, this.mirrorCamera.scale)
+    this.mirrorCamera.aspect = this.game.sizes.width / this.game.sizes.height
+    this.mirrorCamera.near = near
+    this.mirrorCamera.far = far
+    this.mirrorCamera.updateProjectionMatrix()
+    this.mirrorCamera.updateMatrixWorld(true)
+
+    // With XR off for this one render, three.js draws to the page's canvas instead of the headset
+    // The headset's frame already updated the shadow maps, so they're reused rather than rendered again
+    const target = webgl.getRenderTarget()
+    const shadowsAutoUpdate = webgl.shadowMap.autoUpdate
+    webgl.xr.enabled = false
+    webgl.shadowMap.autoUpdate = false
+    try {
+      webgl.setRenderTarget(null)
+      webgl.render(this.game.scene, this.mirrorCamera)
+    }
+    finally {
+      webgl.xr.enabled = true
+      webgl.shadowMap.autoUpdate = shadowsAutoUpdate
+      webgl.setRenderTarget(target)
+    }
   }
 
   /** Whether this browser and device can run immersive VR */

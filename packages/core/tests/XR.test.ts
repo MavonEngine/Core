@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { EventDispatcher, Group } from 'three'
+import { EventDispatcher, Group, PerspectiveCamera, Scene, WebGLRenderTarget } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import XR from '../src/XR'
 
@@ -40,8 +40,16 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     setSession: vi.fn().mockResolvedValue(undefined),
     getSession: vi.fn((): any => null),
   })
+  const renderTarget = { current: null as WebGLRenderTarget | null }
+  const webgl = {
+    xr,
+    shadowMap: { autoUpdate: true },
+    getRenderTarget: vi.fn(() => renderTarget.current),
+    setRenderTarget: vi.fn((target: WebGLRenderTarget | null) => renderTarget.current = target),
+    render: vi.fn(),
+  }
   const renderer = {
-    instance: { xr },
+    instance: webgl,
     get xrPresenting() {
       return xr.isPresenting
     },
@@ -50,18 +58,29 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     trigger: vi.fn(),
     camera: {
       rig: new Group(),
+      instance: new PerspectiveCamera(35, 2, 0.1, 500),
     },
+    scene: new Scene(),
     callbacks: {} as Record<string, ((event?: any) => void)[]>,
     on(name: string, callback: (event?: any) => void) {
       (this.callbacks[name] ??= []).push(callback)
     },
     input: {} as Record<string, unknown>,
     sizes: {
+      width: 1600,
+      height: 900,
       setSize: vi.fn(),
     },
   }
   const instance = new XR(renderer as any, game as any, options)
-  return { instance, xr, game, session }
+  return {
+    instance,
+    xr,
+    game,
+    session,
+    webgl,
+    renderTarget,
+  }
 }
 
 describe('xr', () => {
@@ -169,5 +188,67 @@ describe('xr', () => {
   it('needs the controllers for locomotion', () => {
     const { instance } = setup({ input: false })
     expect(() => instance.enableLocomotion()).toThrow('input: false')
+  })
+
+  it('gives the camera its own field of view back after the session', () => {
+    const { xr, game } = setup()
+    xr.dispatchEvent({ type: 'sessionstart' })
+    // three.js copies the headset's projection onto the camera
+    game.camera.instance.fov = 104
+    xr.dispatchEvent({ type: 'sessionend' })
+
+    expect(game.camera.instance.fov).toBe(35)
+  })
+
+  it('leaves the mirror off unless asked for', () => {
+    expect(setup().instance.mirror).toBe(false)
+    expect(setup({ mirror: true }).instance.mirror).toBe(true)
+    expect(setup({
+      mirror: { fov: 90 },
+    }).instance.mirrorCamera.fov).toBe(90)
+  })
+
+  it('mirrors the headset to the page from the head, shaped like the window, without touching the headset', () => {
+    const { instance, game, webgl, renderTarget } = setup({ mirror: true })
+    const headsetTarget = new WebGLRenderTarget(1, 1)
+    renderTarget.current = headsetTarget
+    // Where the headset's frame put the camera, in the rig like the real one
+    game.camera.rig.add(game.camera.instance)
+    game.camera.rig.position.set(10, 0, 0)
+    game.camera.instance.position.set(0, 1.7, 0)
+    game.camera.instance.rotation.set(0, Math.PI / 2, 0)
+    game.camera.rig.updateMatrixWorld(true)
+
+    let during: { xr: boolean, shadows: boolean, target: unknown } | undefined
+    webgl.render.mockImplementation(() => {
+      during = { xr: webgl.xr.enabled, shadows: webgl.shadowMap.autoUpdate, target: renderTarget.current }
+    })
+    webgl.xr.enabled = true
+    instance.renderMirror()
+
+    const [scene, camera] = webgl.render.mock.calls[0]
+    expect(scene).toBe(game.scene)
+    expect(camera).toBe(instance.mirrorCamera)
+    expect(camera.position.toArray().map((n: number) => +n.toFixed(6))).toEqual([10, 1.7, 0])
+    expect(camera.getWorldDirection(new Group().position).x).toBeCloseTo(-1)
+    expect(camera.aspect).toBeCloseTo(1600 / 900)
+    expect(camera.far).toBe(500)
+
+    // Drawn to the page with XR off and the headset's shadow maps, then everything put back
+    expect(during).toEqual({ xr: false, shadows: false, target: null })
+    expect(webgl.xr.enabled).toBe(true)
+    expect(webgl.shadowMap.autoUpdate).toBe(true)
+    expect(renderTarget.current).toBe(headsetTarget)
+  })
+
+  it('puts XR back on even when the mirror\'s render throws', () => {
+    const { instance, webgl } = setup({ mirror: true })
+    webgl.xr.enabled = true
+    webgl.render.mockImplementation(() => {
+      throw new Error('lost context')
+    })
+
+    expect(() => instance.renderMirror()).toThrow('lost context')
+    expect(webgl.xr.enabled).toBe(true)
   })
 })

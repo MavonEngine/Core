@@ -163,6 +163,10 @@ export default class Renderer {
       // EffectComposer renders a single view, so in XR render straight to the headset's stereo cameras.
       // The renderer's toneMapping and outputColorSpace stand in for the OutputPass
       this.instance.render(Game.instance().scene, Game.instance().camera.instance)
+      // The browser window otherwise stays on its last frame (black, mostly) while the headset plays
+      const xr = Game.instance().xr
+      if (xr?.mirror)
+        xr.renderMirror()
     }
     else {
       this.composer.render(delta)
