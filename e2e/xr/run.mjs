@@ -137,6 +137,50 @@ async function main() {
     // Looking 30 degrees further right swings the view round to the character's left: 7m * sin(30) = 3.5m
     check(Math.abs(distance - 7) < 0.5 && Math.abs(around.offset[0] + 3.5) < 0.5, `around the character, keeping its distance (${around.offset.map(n => n.toFixed(2))})`)
 
+    log('\n== keyboard and mouse in VR')
+    const rigYaw = () => page.evaluate(() => window.Game.camera.rig.rotation.y)
+    // Looking 30 degrees right of -Z after the snap turn
+    const forward = [
+      Math.sin(Math.PI / 6),
+      -Math.cos(Math.PI / 6),
+    ]
+    const beforeKeys = await pose(page)
+    await page.keyboard.down('KeyW')
+    await delay(800)
+    await page.keyboard.up('KeyW')
+    await delay(600)
+    const keyed = await pose(page)
+    const kx = keyed.player[0] - beforeKeys.player[0]
+    const kz = keyed.player[2] - beforeKeys.player[2]
+    const along = (kx * forward[0] + kz * forward[1]) / Math.hypot(kx, kz)
+    check(Math.hypot(kx, kz) > 2 && along > 0.95, `W walks the character the way the player looks (${Math.hypot(kx, kz).toFixed(2)}m, ${along.toFixed(3)} along the view)`)
+
+    const beforeQ = await rigYaw()
+    await page.keyboard.press('KeyQ')
+    await delay(200)
+    const q = (await rigYaw() - beforeQ) * 180 / Math.PI
+    check(Math.abs(q - 30) < 1, `Q snap turns the view 30 degrees left (${q.toFixed(1)})`)
+    const beforeE = await rigYaw()
+    await page.keyboard.press('KeyE')
+    await delay(200)
+    const e = (await rigYaw() - beforeE) * 180 / Math.PI
+    check(Math.abs(e + 30) < 1, `E snap turns it 30 degrees right (${e.toFixed(1)})`)
+
+    const beforeDrag = await rigYaw()
+    await page.mouse.move(600, 400)
+    await page.mouse.down()
+    for (let x = 610; x <= 700; x += 10)
+      await page.mouse.move(x, 400)
+    await page.mouse.up()
+    await delay(200)
+    const dragged = (await rigYaw() - beforeDrag) * 180 / Math.PI
+    check(dragged < -20 && dragged > -40, `dragging the mouse 100px right turns the view right (${dragged.toFixed(1)} degrees)`)
+    // Moving the mouse without a button held leaves the view alone
+    const beforeHover = await rigYaw()
+    await page.mouse.move(800, 400)
+    await delay(200)
+    check(await rigYaw() === beforeHover, 'moving the mouse without dragging leaves the view alone')
+
     log('\n== leave VR')
     await page.evaluate(() => window.Game.xr.exit())
     await waitFor(page, () => !window.Game.renderer.xrPresenting, null, 10000)

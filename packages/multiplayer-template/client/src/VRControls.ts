@@ -1,7 +1,7 @@
 import type Character from './Entities/Player'
 import Game from '@mavonengine/core/Game'
 import XRLocomotion from '@mavonengine/core/XRLocomotion'
-import { Vector3 } from 'three'
+import { Vector2, Vector3 } from 'three'
 
 const UP = new Vector3(0, 1, 0)
 /** Where the view sits from the character, before turning: behind and above it */
@@ -15,22 +15,32 @@ const SNAP_THRESHOLD = 0.7
 const SNAP_RESET = 0.3
 /** How far the left stick has to be pushed to walk */
 const WALK_THRESHOLD = 0.3
+/** How far the view turns per pixel the mouse is dragged sideways, in radians */
+const MOUSE_TURN = 0.005
 
 /**
- * Third person controls in VR: the left stick walks the character the way it's pushed, relative to where the
- * player looks, and the right stick snap turns the view around the character. The view follows the character
- * every rendered frame, smoothing out the tick rate and network updates, and only turns on a snap turn.
+ * Third person controls in VR, with the controllers or the keyboard and mouse:
+ *
+ * - the left stick, or WASD, walks the character the way it's pushed, relative to where the player looks
+ * - a right stick flick, or Q / E, snap turns the view around the character
+ * - dragging the mouse sideways turns the view around the character
+ *
+ * The view follows the character every rendered frame, smoothing out the tick rate and network updates, and only
+ * turns when the player turns it. The headset alone decides where the player looks up and down.
  */
 export default class VRControls {
   private readonly locomotion: XRLocomotion
   private readonly aim = new Vector3()
   private readonly view = new Vector3()
   private readonly direction = new Vector3()
+  private readonly keyStick = new Vector2()
   private chaseYaw = 0
   private snapArmed = true
 
   private readonly onFrame = (delta: number) => this.frame(delta)
   private readonly onSessionStart = () => this.reset()
+  private readonly onKeydown = (event: KeyboardEvent) => this.keydown(event)
+  private readonly onMousemove = (event: MouseEvent) => this.mousemove(event)
 
   constructor(private readonly player: Character) {
     const game = Game.instance()
@@ -38,6 +48,8 @@ export default class VRControls {
     this.locomotion = new XRLocomotion(game.camera, game.input.xr!)
     game.on('beforeRender', this.onFrame)
     game.on('xrSessionStart', this.onSessionStart)
+    game.input.on('keydown', this.onKeydown)
+    window.addEventListener('mousemove', this.onMousemove)
     this.reset()
   }
 
@@ -47,13 +59,16 @@ export default class VRControls {
   }
 
   /**
-   * The movement for CL_MOVE from the left stick: walk forward, facing the way the stick points in the world.
-   * The server walks the character along its yaw.
+   * The movement for CL_MOVE from the left stick, or WASD while it isn't pushed: walk forward, facing the way it
+   * points in the world. The server walks the character along its yaw.
    */
   move(currentYaw: number): { keys: string[], yaw: number } {
-    const stick = Game.instance().input.xr!.left.stick
-    if (stick.length() < WALK_THRESHOLD)
-      return { keys: [], yaw: currentYaw }
+    let stick = Game.instance().input.xr!.left.stick
+    if (stick.length() < WALK_THRESHOLD) {
+      stick = this.keyboardStick()
+      if (stick.lengthSq() === 0)
+        return { keys: [], yaw: currentYaw }
+    }
 
     this.locomotion.getMoveDirection(stick, this.direction)
     // A yaw of 0 walks along -Z
@@ -63,9 +78,40 @@ export default class VRControls {
     }
   }
 
+  /** WASD as a stick: Y forward, X right */
+  private keyboardStick(): Vector2 {
+    const keys = Game.instance().input.keysPressed
+    return this.keyStick.set(
+      Number(keys.has('KeyD')) - Number(keys.has('KeyA')),
+      Number(keys.has('KeyW')) - Number(keys.has('KeyS')),
+    )
+  }
+
   private reset() {
     this.chaseYaw = this.player.rotation.y
     this.aim.copy(this.player.position).y += AIM_HEIGHT
+  }
+
+  /** Turn the view around the character. Positive turns left */
+  private turn(angle: number) {
+    this.chaseYaw += angle
+  }
+
+  private keydown(event: KeyboardEvent) {
+    // Not while typing in the chat, and once per press rather than on the key's auto repeat
+    if (!this.active || event.repeat || document.activeElement?.tagName === 'INPUT')
+      return
+
+    if (event.code === 'KeyQ')
+      this.turn(SNAP_ANGLE)
+    else if (event.code === 'KeyE')
+      this.turn(-SNAP_ANGLE)
+  }
+
+  private mousemove(event: MouseEvent) {
+    // Dragging with the left button held. Only sideways: tilting the view from the mouse is the headset's job
+    if (this.active && (event.buttons & 1))
+      this.turn(-event.movementX * MOUSE_TURN)
   }
 
   private frame(delta: number) {
@@ -77,7 +123,7 @@ export default class VRControls {
       this.snapArmed = true
     }
     else if (this.snapArmed && Math.abs(x) > SNAP_THRESHOLD) {
-      this.chaseYaw -= Math.sign(x) * SNAP_ANGLE
+      this.turn(-Math.sign(x) * SNAP_ANGLE)
       this.snapArmed = false
     }
 
@@ -85,12 +131,15 @@ export default class VRControls {
     this.aim.lerp(this.direction, 1 - Math.exp(-FOLLOW_RATE * delta))
 
     this.view.copy(CHASE_OFFSET).applyAxisAngle(UP, this.chaseYaw).add(this.aim)
-    // Turned only by chaseYaw, which changes on snap turns alone
+    // Turned only by chaseYaw, which changes only when the player turns the view
     Game.instance().camera.place(this.view, this.aim)
   }
 
   destroy() {
-    Game.instance().off('beforeRender', this.onFrame)
-    Game.instance().off('xrSessionStart', this.onSessionStart)
+    const game = Game.instance()
+    game.off('beforeRender', this.onFrame)
+    game.off('xrSessionStart', this.onSessionStart)
+    game.input.off('keydown', this.onKeydown)
+    window.removeEventListener('mousemove', this.onMousemove)
   }
 }

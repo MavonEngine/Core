@@ -115,8 +115,8 @@ On a device that can do WebXR (a Quest's browser, or desktop Chrome with a heads
 [Immersive Web Emulator](https://chromewebstore.google.com/detail/immersive-web-emulator/cgffilbpcibhmcfbgggfhfolhkfbhmik)
 extension) an **Enter VR** button shows. Join first, then enter VR:
 
-- the left stick walks the character the way it's pushed, relative to where you look
-- the right stick snap turns the view around the character, 30 degrees a flick
+- the left stick, or WASD, walks the character the way it's pushed, relative to where you look
+- the right stick, or Q / E, snap turns the view around the character, 30 degrees a flick, and dragging the mouse sideways turns it
 - the view follows the character from behind, smoothed every rendered frame (`VRControls.ts`)
 
 Movement goes through the same `CL_MOVE` as the keyboard, so the server needs nothing for VR.
