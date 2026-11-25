@@ -159,7 +159,7 @@ describe('dev inbox in the admin panel', () => {
     const { api, logger, requests, panel, get } = await startedPlugin()
 
     expect(api.transport).toBe('maildev')
-    await vi.waitFor(() => expect(logger.info).toHaveBeenCalledWith('Mail: no transport set up, mail goes to the dev inbox at /admin/mail/ in the admin panel'))
+    await vi.waitFor(() => expect(logger.info).toHaveBeenCalledWith('Mail: no transport set up, mail goes to the dev inbox at /admin/mail/ in the admin panel'), { timeout: 15_000 })
     expect(panel.list().map(page => page.path)).toContain('mail')
     expect(requests.ignorePrefix).toHaveBeenCalledWith('/admin/mail/inbox/')
 

@@ -79,7 +79,8 @@ async function startedServer() {
   cleanups.push(stop)
 
   const dataDir = mailDataDir(projectRoot)
-  await vi.waitFor(() => expect(existsSync(join(dataDir, INBOX_FILE))).toBe(true))
+  // MailDev's first start loads it and binds its ports, which takes Windows runners over waitFor's default second
+  await vi.waitFor(() => expect(existsSync(join(dataDir, INBOX_FILE))).toBe(true), { timeout: 15_000 })
   return { api, queue, dataDir, stop }
 }
 
