@@ -29,10 +29,20 @@ afterEach(async () => {
 })
 
 function start(options: Record<string, unknown> = { from: 'Game <game@example.com>' }) {
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const queue = new Queue(logger, { pollIntervalMs: 10 })
   const server = {}
-  const ctx = { package: '@mavonengine/mail', options, logger, server, queue } as unknown as ServerPluginContext
+  const ctx = {
+    package: '@mavonengine/mail',
+    options,
+    logger,
+    server,
+    queue,
+  } as unknown as ServerPluginContext
   const api = plugin.api(ctx)
   plugin.setup(ctx)
   started.push({ ctx, queue })
@@ -47,19 +57,26 @@ describe('mail plugin', () => {
 
     const result = await api.to('Player <player@example.com>').send(new Welcome('Ada'))
 
-    expect(result).toEqual({ queued: true, jobId: expect.any(String) })
+    expect(result).toEqual({
+      queued: true,
+      jobId: expect.any(String),
+    })
     expect(await queue.size()).toBe(1)
     expect(memory.sent).toEqual([])
 
     queue.start()
-    await vi.waitFor(() => expect(memory.sent).toEqual([{
-      from: { address: 'game@example.com', name: 'Game' },
-      to: [{ address: 'player@example.com', name: 'Player' }],
-      subject: 'Welcome, Ada',
-      text: 'Good to have you, Ada.',
-      // Text alone gets html, in the layout
-      html: expect.stringContaining('<p style="margin: 0 0 16px;">Good to have you, Ada.</p>'),
-    }]))
+    await vi.waitFor(() => expect(memory.sent).toEqual([
+      {
+        from: { address: 'game@example.com', name: 'Game' },
+        to: [
+          { address: 'player@example.com', name: 'Player' },
+        ],
+        subject: 'Welcome, Ada',
+        text: 'Good to have you, Ada.',
+        // Text alone gets html, in the layout
+        html: expect.stringContaining('<p style="margin: 0 0 16px;">Good to have you, Ada.</p>'),
+      },
+    ]))
   })
 
   it('sends right away with sendNow(), a mailable or the options that say so', async () => {
@@ -79,7 +96,12 @@ describe('mail plugin', () => {
     notQueued.api.useTransport(memory)
     await notQueued.api.to('d@example.com').send(new Welcome('D'))
 
-    expect(memory.sent.map(m => m.to[0].address)).toEqual(['a@example.com', 'b@example.com', 'c@example.com', 'd@example.com'])
+    expect(memory.sent.map(m => m.to[0].address)).toEqual([
+      'a@example.com',
+      'b@example.com',
+      'c@example.com',
+      'd@example.com',
+    ])
     expect(await queue.size()).toBe(0)
   })
 
@@ -114,9 +136,16 @@ describe('mail plugin', () => {
 
     expect(memory.sent[0]).toEqual({
       from: { address: 'reports@example.com', name: 'Reports' },
-      to: [{ address: 'a@example.com' }],
-      cc: [{ address: 'b@example.com' }],
-      bcc: [{ address: 'c@example.com' }, { address: 'd@example.com' }],
+      to: [
+        { address: 'a@example.com' },
+      ],
+      cc: [
+        { address: 'b@example.com' },
+      ],
+      bcc: [
+        { address: 'c@example.com' },
+        { address: 'd@example.com' },
+      ],
       replyTo: { address: 'support@example.com' },
       subject: 'Report',
       html: expect.stringContaining('<b>3 cheaters</b>'),
@@ -172,8 +201,14 @@ describe('mail plugin', () => {
 
   it('closes the transport it replaces, and the last one when the server stops', async () => {
     const { api, ctx } = start()
-    const first = { ...memoryTransport(), close: vi.fn() }
-    const second = { ...memoryTransport(), close: vi.fn() }
+    const first = {
+      ...memoryTransport(),
+      close: vi.fn(),
+    }
+    const second = {
+      ...memoryTransport(),
+      close: vi.fn(),
+    }
 
     api.useTransport(first)
     api.useTransport(second)
@@ -195,12 +230,18 @@ describe('mail plugin', () => {
 
     expect(api.transport).toBe('json')
     const result = await api.to('a@example.com').sendNow(new Welcome('A'))
-    expect(result).toEqual({ queued: false, transport: 'json', messageId: expect.stringContaining('@example.com>') })
+    expect(result).toEqual({
+      queued: false,
+      transport: 'json',
+      messageId: expect.stringContaining('@example.com>'),
+    })
   })
 
   it('gives other plugins its api by type', () => {
     // Typed through ServerPluginApis: this only compiles with the right type
-    const ctx = { plugin: () => undefined } as unknown as ServerPluginContext
+    const ctx = {
+      plugin: () => undefined,
+    } as unknown as ServerPluginContext
     const api: MailApi | undefined = ctx.plugin('@mavonengine/mail')
     expect(api).toBeUndefined()
   })
@@ -208,11 +249,50 @@ describe('mail plugin', () => {
 
 describe('mail options', () => {
   it('fills in the defaults, and keeps what makes sense', () => {
-    expect(parseOptions({}, {})).toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: true })
-    expect(parseOptions({ queued: false, queue: 'mail', tries: 5.7, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' } }, {}))
-      .toEqual({ queued: false, queue: 'mail', tries: 5, backoffMs: 500, from: 'a@example.com', smtp: { host: 'smtp.example.com' }, layout: true, layoutData: {}, devInbox: true })
-    expect(parseOptions({ queued: 'yes', queue: '', tries: 0, backoffMs: ['x'], smtp: { port: 25 } }, {}))
-      .toEqual({ queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: true })
+    expect(parseOptions({}, {})).toEqual({
+      queued: true,
+      queue: 'default',
+      tries: 3,
+      backoffMs: [10_000, 60_000],
+      layout: true,
+      layoutData: {},
+      devInbox: true,
+    })
+    expect(parseOptions({
+      queued: false,
+      queue: 'mail',
+      tries: 5.7,
+      backoffMs: 500,
+      from: 'a@example.com',
+      smtp: { host: 'smtp.example.com' },
+    }, {}))
+      .toEqual({
+        queued: false,
+        queue: 'mail',
+        tries: 5,
+        backoffMs: 500,
+        from: 'a@example.com',
+        smtp: { host: 'smtp.example.com' },
+        layout: true,
+        layoutData: {},
+        devInbox: true,
+      })
+    expect(parseOptions({
+      queued: 'yes',
+      queue: '',
+      tries: 0,
+      backoffMs: ['x'],
+      smtp: { port: 25 },
+    }, {}))
+      .toEqual({
+        queued: true,
+        queue: 'default',
+        tries: 3,
+        backoffMs: [10_000, 60_000],
+        layout: true,
+        layoutData: {},
+        devInbox: true,
+      })
   })
 
   it('wants the dev inbox in development only, unless it is turned off', () => {
@@ -225,13 +305,26 @@ describe('mail options', () => {
 
   it('takes the sender and the SMTP URL from the environment over the options', () => {
     const env = { [FROM_ENV]: 'env@example.com', [SMTP_URL_ENV]: 'smtps://u:p@smtp.example.com' }
-    expect(parseOptions({ from: 'a@example.com', smtp: { host: 'other' } }, env)).toMatchObject({ from: 'env@example.com', smtp: 'smtps://u:p@smtp.example.com' })
+    expect(parseOptions({
+      from: 'a@example.com',
+      smtp: { host: 'other' },
+    }, env)).toMatchObject({ from: 'env@example.com', smtp: 'smtps://u:p@smtp.example.com' })
   })
 
   it('makes the SMTP config with the password from the environment', () => {
     const env = { [SMTP_PASSWORD_ENV]: 's3cret/+' }
-    expect(smtpConfig({ host: 'smtp.example.com', user: 'game' }, env)).toEqual({ host: 'smtp.example.com', port: 587, secure: false, auth: { user: 'game', pass: 's3cret/+' } })
-    expect(smtpConfig({ host: 'smtp.example.com', port: 465 }, {})).toEqual({ host: 'smtp.example.com', port: 465, secure: true, auth: undefined })
+    expect(smtpConfig({ host: 'smtp.example.com', user: 'game' }, env)).toEqual({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+      auth: { user: 'game', pass: 's3cret/+' },
+    })
+    expect(smtpConfig({ host: 'smtp.example.com', port: 465 }, {})).toEqual({
+      host: 'smtp.example.com',
+      port: 465,
+      secure: true,
+      auth: undefined,
+    })
     expect(smtpConfig({ host: 'smtp.example.com', secure: true }, {})).toMatchObject({ port: 465 })
     expect(smtpConfig('smtp://game@smtp.example.com:2525', env)).toBe('smtp://game:s3cret%2F+@smtp.example.com:2525')
     // A URL from the environment has its password already

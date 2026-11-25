@@ -154,7 +154,11 @@ export default class Queue {
    * Run a job now, in this call, without the queue: no retries, and a throw is passed on rather than kept as failed.
    */
   async dispatchSync(job: Job<any>): Promise<void> {
-    await job.handle({ id: randomUUID(), queue: job.queue ?? 'default', attempt: 1 })
+    await job.handle({
+      id: randomUUID(),
+      queue: job.queue ?? 'default',
+      attempt: 1,
+    })
   }
 
   /** Number of jobs on `queue` (or on all queues) that didn't finish yet, also the delayed and running ones */
@@ -293,7 +297,9 @@ export default class Queue {
   }
 
   private async reserveNext(): Promise<QueuedJob | undefined> {
-    const names = [...this.classes.keys()]
+    const names = [
+      ...this.classes.keys(),
+    ]
     if (names.length === 0)
       return undefined
 
@@ -304,7 +310,12 @@ export default class Queue {
       return this.driver.reserve({ names, now, staleBefore })
 
     for (const queue of queues) {
-      const job = await this.driver.reserve({ names, queues: [queue], now, staleBefore })
+      const job = await this.driver.reserve({
+        names,
+        queues: [queue],
+        now,
+        staleBefore,
+      })
       if (job)
         return job
     }
@@ -346,7 +357,9 @@ export default class Queue {
         const delay = backoffAfter(job.backoffMs, queued.attempts)
         await driver.release(queued.id, Date.now() + delay)
         this.done.retried++
-        this.logger?.warn(`${label} failed try ${queued.attempts} of ${tries}, trying again${delay ? ` in ${delay} ms` : ''}: ${error.message}`)
+        this.logger?.warn(`${label} failed try ${queued.attempts} of ${tries}, trying again${delay
+          ? ` in ${delay} ms`
+          : ''}: ${error.message}`)
         if (delay > 0)
           this.wakeAfter(delay)
         return
@@ -354,7 +367,9 @@ export default class Queue {
 
       await driver.fail(queued, error.stack ?? error.message, Date.now())
       this.done.failed++
-      this.logger?.error(`${label} failed${tries > 1 ? ` all ${tries} tries` : ''}: ${error.stack ?? error.message}`)
+      this.logger?.error(`${label} failed${tries > 1
+        ? ` all ${tries} tries`
+        : ''}: ${error.stack ?? error.message}`)
     }
     catch (err) {
       this.logger?.error(`Queue: could not record that ${label} failed: ${(err as Error)?.stack ?? err}`)
@@ -378,5 +393,7 @@ function serialize(data: unknown, name: string): string {
 }
 
 function toError(err: unknown): Error {
-  return err instanceof Error ? err : new Error(String(err))
+  return err instanceof Error
+    ? err
+    : new Error(String(err))
 }

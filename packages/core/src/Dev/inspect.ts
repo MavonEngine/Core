@@ -87,7 +87,9 @@ export function describeScene(scene: GameScene): SceneInfo {
       return {
         ...object,
         built: !!scene.get(object.id)?.object,
-        plugin: definition ? (definition.plugin ?? null) : undefined,
+        plugin: definition
+          ? (definition.plugin ?? null)
+          : undefined,
       }
     }),
   }
@@ -108,13 +110,23 @@ export function summarizeEntity(entity: GameObject, scene: GameScene | undefined
     scale: vec(entity.scale),
     networked,
     player: isPlayer(entity),
-    sceneObject: entry ? { type: entry.data.type, ...(entry.data.name ? { name: entry.data.name } : {}) } : null,
+    sceneObject: entry
+      ? {
+          type: entry.data.type,
+          ...(entry.data.name
+            ? { name: entry.data.name }
+            : {}),
+        }
+      : null,
     garbageCollect: entity.garbageCollect,
   }
 }
 
 export function detailEntity(entity: GameObject, scene: GameScene | undefined, isPlayer: (entity: GameObject) => boolean): EntityDetail {
-  return { ...summarizeEntity(entity, scene, isPlayer), serialized: toJson(() => entity.serialize()) }
+  return {
+    ...summarizeEntity(entity, scene, isPlayer),
+    serialized: toJson(() => entity.serialize()),
+  }
 }
 
 /**
@@ -122,7 +134,9 @@ export function detailEntity(entity: GameObject, scene: GameScene | undefined, i
  */
 export function parseEntityQuery(query: Record<string, unknown>): EntityQuery | string {
   const result: EntityQuery = {}
-  const text = (key: string) => typeof query[key] === 'string' && query[key] !== '' ? query[key] as string : undefined
+  const text = (key: string) => typeof query[key] === 'string' && query[key] !== ''
+    ? query[key] as string
+    : undefined
 
   const type = text('type')
   if (type)
@@ -161,13 +175,19 @@ export function queryEntities(summaries: EntitySummary[], query: EntityQuery = {
   if (near) {
     const radius = query.radius ?? Infinity
     matches = matches
-      .map(entity => ({ entity, distance: distance(entity.position, near) }))
+      .map(entity => ({
+        entity,
+        distance: distance(entity.position, near),
+      }))
       .filter(({ distance }) => distance <= radius)
       .sort((a, b) => a.distance - b.distance)
       .map(({ entity }) => entity)
   }
 
-  return { total: matches.length, entities: matches.slice(offset, offset + limit) }
+  return {
+    total: matches.length,
+    entities: matches.slice(offset, offset + limit),
+  }
 }
 
 export function vec(v: Vec3): Vec3 {
@@ -182,7 +202,9 @@ export function distance(a: Vec3, b: Vec3) {
 export function toJson(value: () => unknown): unknown {
   try {
     const json = JSON.stringify(value())
-    return json === undefined ? null : JSON.parse(json)
+    return json === undefined
+      ? null
+      : JSON.parse(json)
   }
   catch {
     return null

@@ -31,9 +31,14 @@ function Editor() {
           {activity !== 'scene' && (
             <div className={`${styles.panel} ${styles.fullView}`}>
               <div className={styles.panelContent}>
-                <PanelHeader title={activity === 'server' ? 'Server' : 'Plugins'} />
+                <PanelHeader title={activity === 'server'
+                  ? 'Server'
+                  : 'Plugins'}
+                />
                 <div className={styles.panelBody}>
-                  {activity === 'server' ? <ServerPanel /> : <PluginsPanel />}
+                  {activity === 'server'
+                    ? <ServerPanel />
+                    : <PluginsPanel />}
                 </div>
               </div>
             </div>
@@ -53,13 +58,28 @@ function Editor() {
                 <Group orientation="vertical" className={styles.middleGroup}>
                   <CanvasPanel />
                   <Panel id="horizontal" className={styles.panel}>
-                    <DockArea location="bottom" builtins={[{ id: 'assets', title: 'Assets', element: <Assets />, padded: false }]} />
+                    <DockArea
+                      location="bottom"
+                      builtins={[
+                        {
+                          id: 'assets',
+                          title: 'Assets',
+                          element: <Assets />,
+                          padded: false,
+                        },
+                      ]}
+                    />
                   </Panel>
                 </Group>
               </div>
             </Panel>
             <Panel collapsible={true} id="right" minSize={180} defaultSize="19%" className={styles.panel}>
-              <DockArea location="right" builtins={[{ id: 'properties', title: 'Properties', element: <PropertiesPanel /> }]} />
+              <DockArea
+                location="right"
+                builtins={[
+                  { id: 'properties', title: 'Properties', element: <PropertiesPanel /> },
+                ]}
+              />
             </Panel>
           </Group>
         </div>

@@ -25,7 +25,9 @@ vi.mock('@geckos.io/client', () => ({
   }),
 }))
 
-vi.mock('@dimforge/rapier3d-compat', () => ({ version: vi.fn().mockReturnValue('0.0.0') }))
+vi.mock('@dimforge/rapier3d-compat', () => ({
+  version: vi.fn().mockReturnValue('0.0.0'),
+}))
 
 function useClientPlugins(plugins: { authorization?(): string | undefined, onConnectError?(error: unknown): void }[]) {
   const game = BaseGame.instance() as unknown as { plugins?: unknown }
@@ -41,7 +43,18 @@ describe('network manager auth', () => {
   })
 
   it('sends the authorization of the first client plugin that gives one', () => {
-    useClientPlugins([{}, { authorization: () => undefined }, { authorization: () => 'Bearer abc' }, { authorization: () => 'Bearer later' }])
+    useClientPlugins([
+      {},
+      {
+        authorization: () => undefined,
+      },
+      {
+        authorization: () => 'Bearer abc',
+      },
+      {
+        authorization: () => 'Bearer later',
+      },
+    ])
 
     new NetworkManager({ url: 'http://localhost' }).destroy()
 
@@ -49,7 +62,11 @@ describe('network manager auth', () => {
   })
 
   it('prefers the authorization the game passes, and sends none without either', () => {
-    useClientPlugins([{ authorization: () => 'Bearer abc' }])
+    useClientPlugins([
+      {
+        authorization: () => 'Bearer abc',
+      },
+    ])
     new NetworkManager({ authorization: 'Bearer mine' }).destroy()
     expect(socket.options?.authorization).toBe('Bearer mine')
 
@@ -79,7 +96,10 @@ describe('network manager auth', () => {
 
   it('tells the client plugins when connecting failed, so an auth plugin can forget a session the server turned away', () => {
     const onConnectError = vi.fn()
-    useClientPlugins([{}, { onConnectError }])
+    useClientPlugins([
+      {},
+      { onConnectError },
+    ])
     const network = new NetworkManager({})
 
     socket.connect!({ message: 'Connection failed with status code 401.', status: 401, statusText: 'Unauthorized' })

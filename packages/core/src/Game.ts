@@ -99,7 +99,9 @@ export default class Game extends BaseGame {
   ) {
     super(
       // eslint-disable-next-line node/prefer-global/process
-      new Logger(process.env.NODE_ENV === 'production' ? 'error' : 'debug'),
+      new Logger(process.env.NODE_ENV === 'production'
+        ? 'error'
+        : 'debug'),
       physicsWorld,
     )
 
@@ -116,7 +118,10 @@ export default class Game extends BaseGame {
     })
 
     this.plugins = this.createPluginHost()
-    this.resources = new Resources([...sources, ...this.pluginAssets()])
+    this.resources = new Resources([
+      ...sources,
+      ...this.pluginAssets(),
+    ])
 
     this.loadingScreen = new LoadingScreen(this.resources)
 
@@ -205,7 +210,9 @@ export default class Game extends BaseGame {
           return true
 
         const base = pluginAssetBase(pkg)
-        const paths = Array.isArray(asset.path) ? asset.path : [asset.path]
+        const paths = Array.isArray(asset.path)
+          ? asset.path
+          : [asset.path]
         const missing = paths.some(path => path.startsWith(base) && !files.has(path.slice(base.length)))
         if (missing)
           this.logger?.debug(`Plugin ${pkg}: skipping asset ${asset.name}, it is not part of this release`)
@@ -263,7 +270,9 @@ export default class Game extends BaseGame {
     }
 
     const isName = SCENE_NAME_RE.test(scene)
-    const url = isName ? `/${SCENES_DIR}/${scene}.json` : scene
+    const url = isName
+      ? `/${SCENES_DIR}/${scene}.json`
+      : scene
     const response = await fetch(url, { cache: 'no-store' })
     if (!response.ok)
       throw new Error(`Could not load scene ${url}: ${response.status} ${response.statusText}`)
@@ -271,8 +280,12 @@ export default class Game extends BaseGame {
     const data: unknown = await response.json()
     await this.resourcesReady()
 
-    const source = isName ? scene : url.split('/').pop()?.replace(JSON_EXT_RE, '')
-    return this.loadScene(data, source && SCENE_NAME_RE.test(source) ? source : undefined)
+    const source = isName
+      ? scene
+      : url.split('/').pop()?.replace(JSON_EXT_RE, '')
+    return this.loadScene(data, source && SCENE_NAME_RE.test(source)
+      ? source
+      : undefined)
   }
 
   /** Resolves once every resource has loaded */
@@ -288,7 +301,9 @@ export default class Game extends BaseGame {
     else if (this.scene.background instanceof THREE.Color)
       this.scene.background = null
 
-    this.scene.fog = settings.fog ? new THREE.FogExp2(settings.fog.color, settings.fog.density) : null
+    this.scene.fog = settings.fog
+      ? new THREE.FogExp2(settings.fog.color, settings.fog.density)
+      : null
   }
 
   private resize() {

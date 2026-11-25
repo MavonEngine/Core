@@ -9,12 +9,24 @@ import NetworkOverlay, { ghostState } from '../../../src/Editor/Network/NetworkO
 import SyncStore from '../../../src/Editor/Network/SyncStore'
 
 // The real Game pulls in the renderer, which needs a canvas
-vi.mock('@mavonengine/core/Game', () => ({ default: { instance: vi.fn() } }))
+vi.mock('@mavonengine/core/Game', () => ({
+  default: {
+    instance: vi.fn(),
+  },
+}))
 
 const at = (x: number) => ({ x, y: 0, z: 0 })
 
 function view(id: string, x: number, tick: number, receivedAt = performance.now()): ServerEntityView {
-  return { id, type: 'rock', position: at(x), rotation: at(0), scale: { x: 1, y: 1, z: 1 }, tick, receivedAt }
+  return {
+    id,
+    type: 'rock',
+    position: at(x),
+    rotation: at(0),
+    scale: { x: 1, y: 1, z: 1 },
+    tick,
+    receivedAt,
+  }
 }
 
 function snapshot(overrides: Partial<SyncSnapshot> = {}): SyncSnapshot {
@@ -24,13 +36,47 @@ function snapshot(overrides: Partial<SyncSnapshot> = {}): SyncSnapshot {
     tickRate: 30,
     syncDistance: 50,
     players: [
-      { id: 'p1', displayName: 'Ada', position: at(0), ack: 0, tracked: ['p1', 'rock'], lastState: null },
-      { id: 'p2', displayName: 'Bob', position: at(200), ack: 0, tracked: ['p2'], lastState: null },
+      {
+        id: 'p1',
+        displayName: 'Ada',
+        position: at(0),
+        ack: 0,
+        tracked: ['p1', 'rock'],
+        lastState: null,
+      },
+      {
+        id: 'p2',
+        displayName: 'Bob',
+        position: at(200),
+        ack: 0,
+        tracked: ['p2'],
+        lastState: null,
+      },
     ],
     editors: [],
     entities: [
-      { id: 'rock', type: 'rock', position: at(1), rotation: at(0), scale: at(1), player: false, needsSync: false, trackedBy: 1, lastSentTick: 10 },
-      { id: 'tree', type: 'tree', position: at(900), rotation: at(0), scale: at(1), player: false, needsSync: false, trackedBy: 0, lastSentTick: null },
+      {
+        id: 'rock',
+        type: 'rock',
+        position: at(1),
+        rotation: at(0),
+        scale: at(1),
+        player: false,
+        needsSync: false,
+        trackedBy: 1,
+        lastSentTick: 10,
+      },
+      {
+        id: 'tree',
+        type: 'tree',
+        position: at(900),
+        rotation: at(0),
+        scale: at(1),
+        player: false,
+        needsSync: false,
+        trackedBy: 0,
+        lastSentTick: null,
+      },
     ],
     ...overrides,
   }
@@ -69,9 +115,18 @@ describe('networkOverlay', () => {
   beforeEach(() => {
     localStorage.clear()
     scene = new Scene()
-    serverView = { tick: 10, entities: new Map() }
+    serverView = {
+      tick: 10,
+      entities: new Map(),
+    }
     entities = new Map()
-    vi.mocked(Game.instance).mockReturnValue({ scene, network: { serverView }, world: { entities: { items: entities } } } as any)
+    vi.mocked(Game.instance).mockReturnValue({
+      scene,
+      network: { serverView },
+      world: {
+        entities: { items: entities },
+      },
+    } as any)
     sync = new SyncStore(1000, async () => snapshot())
   })
 
@@ -96,7 +151,9 @@ describe('networkOverlay', () => {
   it('draws a ghost where the server said the entity is, with a line to where it is rendered', () => {
     const overlay = new NetworkOverlay(sync, { ghosts: true, rings: false, viewAs: null })
     serverView.entities.set('rock', view('rock', 4, 10))
-    entities.set('rock', { position: new Vector3(4, 0, 0) })
+    entities.set('rock', {
+      position: new Vector3(4, 0, 0),
+    })
 
     overlay.update()
 
@@ -123,8 +180,12 @@ describe('networkOverlay', () => {
     await sync.refresh()
     serverView.entities.set('rock', view('rock', 1, 10))
     serverView.entities.set('tree', view('tree', 900, 10))
-    entities.set('rock', { position: new Vector3(1, 0, 0) })
-    entities.set('tree', { position: new Vector3(900, 0, 0) })
+    entities.set('rock', {
+      position: new Vector3(1, 0, 0),
+    })
+    entities.set('tree', {
+      position: new Vector3(900, 0, 0),
+    })
 
     overlay.update()
     const color = (id: string) => (overlay.group.getObjectByName(`ServerGhost:${id}`) as any).material.color.getHex()

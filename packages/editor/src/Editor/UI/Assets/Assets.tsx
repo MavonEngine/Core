@@ -38,7 +38,14 @@ function placeInScene(type: string, position: Vector3, props?: Record<string, un
     return false
 
   try {
-    return !!scene.create(type, { transform: { position: position.toArray(), rotation: [0, 0, 0], scale: [1, 1, 1] }, props })
+    return !!scene.create(type, {
+      transform: {
+        position: position.toArray(),
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      props,
+    })
   }
   catch (err) {
     window.Game.logger?.warn(`Could not place ${type}: ${(err as Error).message}`)
@@ -48,7 +55,9 @@ function placeInScene(type: string, position: Vector3, props?: Record<string, un
 
 /** A plugin prefab's icon, SVG markup or an image URL, as an image source */
 function prefabIconSrc(icon: string): string {
-  return icon.trimStart().startsWith('<svg') ? `data:image/svg+xml;utf8,${encodeURIComponent(icon)}` : icon
+  return icon.trimStart().startsWith('<svg')
+    ? `data:image/svg+xml;utf8,${encodeURIComponent(icon)}`
+    : icon
 }
 
 export default () => {
@@ -73,6 +82,15 @@ export default () => {
   const [openAssets, setOpenAssets] = useState<OpenAsset[]>([])
   const [search, setSearch] = useState('')
   const nextId = useRef(0)
+  // Re-render when assets are loaded later, e.g. imported by a plugin, so they show in the list
+  const [, setAssetsVersion] = useState(0)
+
+  useEffect(() => {
+    const resources = window.Game.resources
+    const onAdded = () => setAssetsVersion(version => version + 1)
+    resources.on('assetsAdded', onAdded)
+    return () => resources.off('assetsAdded', onAdded)
+  }, [])
 
   function onItemDragStart(e: DragEvent, key: string) {
     if (!e.dataTransfer)
@@ -163,7 +181,9 @@ export default () => {
       if (prefab && window.Game.activeScene) {
         if (placeInScene(prefabType(prefabName), dropPos)) {
           window.Game.editor?.trigger('assetDropped')
-          window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin ? ` from ${prefab.plugin}` : ''} at ${dropPos.toArray()}`)
+          window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin
+            ? ` from ${prefab.plugin}`
+            : ''} at ${dropPos.toArray()}`)
           if (prefab.plugin)
             void recordPrefabUsage(prefab.plugin, prefab.name)
         }
@@ -179,7 +199,9 @@ export default () => {
         if (result.addBindings)
           window.Game.editor?.trigger('prefabCreated', { label: prefab.label, addBindings: result.addBindings })
         window.Game.editor?.trigger('assetDropped')
-        window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin ? ` from ${prefab.plugin}` : ''} at ${dropPos.toArray()}`)
+        window.Game.logger?.info(`Spawned ${prefab.label} prefab${prefab.plugin
+          ? ` from ${prefab.plugin}`
+          : ''} at ${dropPos.toArray()}`)
 
         if (prefab.plugin)
           void recordPrefabUsage(prefab.plugin, prefab.name)
@@ -290,7 +312,9 @@ export default () => {
       const hit = intersects.find(i => i.object instanceof Mesh)
       if (hit && hit.object instanceof Mesh) {
         const mesh = hit.object
-        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+        const material = Array.isArray(mesh.material)
+          ? mesh.material[0]
+          : mesh.material
         if (material && 'map' in material) {
           (material as { map: Texture | null, needsUpdate: boolean }).map = item
           material.needsUpdate = true
@@ -300,7 +324,9 @@ export default () => {
       return
     }
 
-    const scene = 'scene' in item ? item.scene as unknown as Scene : null
+    const scene = 'scene' in item
+      ? item.scene as unknown as Scene
+      : null
     if (scene && window.Game.activeScene) {
       const canvas = window.Game.canvas
       const rect = canvas.getBoundingClientRect()
@@ -339,7 +365,11 @@ export default () => {
         return
       }
 
-      const mat = obj instanceof Mesh ? (Array.isArray(obj.material) ? obj.material[0] : obj.material) : null
+      const mat = obj instanceof Mesh
+        ? (Array.isArray(obj.material)
+            ? obj.material[0]
+            : obj.material)
+        : null
 
       if (mat && WaterManager.instance?.waters.some(w => w.material === mat)) {
         window.Game.editor?.trigger('prefabCreated', {
@@ -378,14 +408,19 @@ export default () => {
     const source = window.Game.resources.sources.find(s => s.name === key)
     if (!source)
       return key
-    const path = Array.isArray(source.path) ? source.path[0] : source.path
+    const path = Array.isArray(source.path)
+      ? source.path[0]
+      : source.path
     return path.split('/').pop() ?? key
   }
 
   function openAsset(name: string, item: OpenAsset['item']) {
     const id = nextId.current++
     const title = getAssetTitle(name)
-    setOpenAssets(prev => [...prev, { id, title, item }])
+    setOpenAssets(prev => [
+      ...prev,
+      { id, title, item },
+    ])
   }
 
   function closeAsset(id: number) {
@@ -402,7 +437,15 @@ export default () => {
             title={title}
             defaultX={(window.innerWidth - 400) / 2 + offset}
             defaultY={(window.innerHeight - 300) / 2 + offset}
-            storageKey={item instanceof AudioBuffer ? 'audioViewer' : 'scene' in item ? 'modelViewer' : item instanceof Texture ? 'textureViewer' : 'particleName' in item ? 'particleViewer' : undefined}
+            storageKey={item instanceof AudioBuffer
+              ? 'audioViewer'
+              : 'scene' in item
+                ? 'modelViewer'
+                : item instanceof Texture
+                  ? 'textureViewer'
+                  : 'particleName' in item
+                    ? 'particleViewer'
+                    : undefined}
             onClose={() => closeAsset(id)}
           >
             {item instanceof AudioBuffer && <AudioPlayer buffer={item} />}
@@ -531,7 +574,13 @@ export default () => {
                   ? PREFABS
                       .filter(p => p.label.toLowerCase().includes(search.toLowerCase()))
                       .map(prefab => (
-                        <div className={styles.assetRow} key={prefab.key} title={prefab.plugin ? `${prefab.label} (${prefab.plugin})` : prefab.label}>
+                        <div
+                          className={styles.assetRow}
+                          key={prefab.key}
+                          title={prefab.plugin
+                            ? `${prefab.label} (${prefab.plugin})`
+                            : prefab.label}
+                        >
                           <div
                             className={styles.assetIcon}
                             onDragStart={e => onPrefabDragStart(e, prefab.key)}

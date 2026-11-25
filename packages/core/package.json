@@ -78,7 +78,7 @@
     "@vitejs/plugin-react": "^6.2.1",
     "@vitest/coverage-v8": "^5.1.0",
     "@vitest/ui": "^5.1.0",
-    "jsdom": "^28.1.0",
+    "jsdom": "^31.0.1",
     "kysely": "0.29.8",
     "three": "0.187.0",
     "three-perf": "^1.0.11",

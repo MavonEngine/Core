@@ -11,11 +11,20 @@ const DATABASE_TAB = 7
 
 function source(overrides: Partial<MetricsSource> = {}): MetricsSource {
   const sim = simulatedSource()
-  return { ...sim, fetchDatabase: vi.fn(sim.fetchDatabase!), fetchTable: vi.fn(sim.fetchTable!), ...overrides }
+  return {
+    ...sim,
+    fetchDatabase: vi.fn(sim.fetchDatabase!),
+    fetchTable: vi.fn(sim.fetchTable!),
+    ...overrides,
+  }
 }
 
 function view(overrides: Partial<ViewState> = {}): ViewState {
-  return { ...initialViewState(), tab: DATABASE_TAB, ...overrides }
+  return {
+    ...initialViewState(),
+    tab: DATABASE_TAB,
+    ...overrides,
+  }
 }
 
 async function liveState(src = source()): Promise<{ state: DashboardState, client: MetricsClient }> {
@@ -103,12 +112,69 @@ describe('database in the dashboard client', () => {
 describe('database responses', () => {
   it('reads what the server sends, whatever is missing', () => {
     expect(normalizeDatabase(null)).toEqual({ provider: null, tables: [], migrations: [] })
-    expect(normalizeDatabase({ provider: 'x', tables: [{ name: 't', rows: 'many', columns: [{ name: 'a' }] }], migrations: [{ table: 'p__migrations', applied: [{ name: '001' }] }] })).toEqual({
+    expect(normalizeDatabase({
       provider: 'x',
-      tables: [{ name: 't', plugin: null, rows: null, columns: [{ name: 'a', type: '', nullable: true, autoIncrement: false, hasDefault: false }] }],
-      migrations: [{ plugin: null, table: 'p__migrations', applied: [{ name: '001', executedAt: null }] }],
+      tables: [
+        {
+          name: 't',
+          rows: 'many',
+          columns: [
+            { name: 'a' },
+          ],
+        },
+      ],
+      migrations: [
+        {
+          table: 'p__migrations',
+          applied: [
+            { name: '001' },
+          ],
+        },
+      ],
+    })).toEqual({
+      provider: 'x',
+      tables: [
+        {
+          name: 't',
+          plugin: null,
+          rows: null,
+          columns: [
+            {
+              name: 'a',
+              type: '',
+              nullable: true,
+              autoIncrement: false,
+              hasDefault: false,
+            },
+          ],
+        },
+      ],
+      migrations: [
+        {
+          plugin: null,
+          table: 'p__migrations',
+          applied: [
+            { name: '001', executedAt: null },
+          ],
+        },
+      ],
     })
-    expect(normalizeTablePage({ table: 't', rows: [{ a: 1 }, 'junk'] })).toEqual({ table: 't', columns: [], rows: [{ a: 1 }], total: 1, offset: 0, limit: 1 })
+    expect(normalizeTablePage({
+      table: 't',
+      rows: [
+        { a: 1 },
+        'junk',
+      ],
+    })).toEqual({
+      table: 't',
+      columns: [],
+      rows: [
+        { a: 1 },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 1,
+    })
   })
 })
 
@@ -118,7 +184,10 @@ describe('database tab', () => {
     expect(dashboardTabs(state)).toContain('Database')
     expect(tabForKey('8', dashboardTabs(state).length)).toBe(7)
 
-    const without = { ...state, plugins: state.plugins.map(({ database: _database, ...plugin }) => plugin) }
+    const without = {
+      ...state,
+      plugins: state.plugins.map(({ database: _database, ...plugin }) => plugin),
+    }
     expect(dashboardTabs(without)).not.toContain('Database')
     expect(tabForKey('8', dashboardTabs(without).length)).toBeNull()
     expect(tabForKey('7', dashboardTabs(without).length)).toBe(6)
@@ -137,7 +206,20 @@ describe('database tab', () => {
 
     const screen = render(state)
 
-    for (const text of ['8 Database', 'Tables in @mavonengine/sqlite (2)', 'chat_messages', '@mavonengine/chat', 'game_scores', 'game', '137', 'chat_messages · rows 1–', 'anyone near the tower?', 'Migrations', '001_init', '←→ Page rows'])
+    for (const text of [
+      '8 Database',
+      'Tables in @mavonengine/sqlite (2)',
+      'chat_messages',
+      '@mavonengine/chat',
+      'game_scores',
+      'game',
+      '137',
+      'chat_messages · rows 1–',
+      'anyone near the tower?',
+      'Migrations',
+      '001_init',
+      '←→ Page rows',
+    ])
       expect(screen.contains(text), text).toBe(true)
   })
 
@@ -156,8 +238,14 @@ describe('database tab', () => {
     const base = (await liveState()).state
 
     expect(render({ ...base, database: null, databaseError: 'The database needs the server\'s admin token: start the dashboard with --token <admin token>' }).contains('needs the server\'s admin token')).toBe(true)
-    expect(render({ ...base, database: { provider: null, tables: [], migrations: [] } }).contains('mavonengine install @mavonengine/sqlite')).toBe(true)
-    expect(render({ ...base, database: { provider: '@mavonengine/sqlite', tables: [], migrations: [] } }).contains('No tables yet')).toBe(true)
+    expect(render({
+      ...base,
+      database: { provider: null, tables: [], migrations: [] },
+    }).contains('mavonengine install @mavonengine/sqlite')).toBe(true)
+    expect(render({
+      ...base,
+      database: { provider: '@mavonengine/sqlite', tables: [], migrations: [] },
+    }).contains('No tables yet')).toBe(true)
     expect(render({ ...base, database: null, databaseAvailable: false }).contains('without GET /api/game/database')).toBe(true)
   })
 
@@ -195,7 +283,9 @@ describe('database tab', () => {
     expect(formatCell(null)).toBe('NULL')
     expect(formatCell(undefined)).toBe('NULL')
     expect(formatCell(42)).toBe('42')
-    expect(formatCell({ a: [1] })).toBe('{"a":[1]}')
+    expect(formatCell({
+      a: [1],
+    })).toBe('{"a":[1]}')
     expect(formatCell('two\nlines')).toBe('two ⏎ lines')
     expect(formatCell('x'.repeat(100))).toHaveLength(60)
   })

@@ -59,11 +59,83 @@ export type GamepadButtonIndex = typeof GamepadButton[keyof typeof GamepadButton
 export type GamepadType = 'xbox' | 'playstation' | 'nintendo' | 'generic'
 
 const BUTTON_LABELS: Record<GamepadType, string[]> = {
-  xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', 'D-Pad Up', 'D-Pad Down', 'D-Pad Left', 'D-Pad Right', 'Xbox'],
-  playstation: ['Cross', 'Circle', 'Square', 'Triangle', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', 'D-Pad Up', 'D-Pad Down', 'D-Pad Left', 'D-Pad Right', 'PS'],
+  xbox: [
+    'A',
+    'B',
+    'X',
+    'Y',
+    'LB',
+    'RB',
+    'LT',
+    'RT',
+    'View',
+    'Menu',
+    'LS',
+    'RS',
+    'D-Pad Up',
+    'D-Pad Down',
+    'D-Pad Left',
+    'D-Pad Right',
+    'Xbox',
+  ],
+  playstation: [
+    'Cross',
+    'Circle',
+    'Square',
+    'Triangle',
+    'L1',
+    'R1',
+    'L2',
+    'R2',
+    'Share',
+    'Options',
+    'L3',
+    'R3',
+    'D-Pad Up',
+    'D-Pad Down',
+    'D-Pad Left',
+    'D-Pad Right',
+    'PS',
+  ],
   // Browsers map Nintendo pads positionally, so South is labelled B
-  nintendo: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '-', '+', 'LS', 'RS', 'D-Pad Up', 'D-Pad Down', 'D-Pad Left', 'D-Pad Right', 'Home'],
-  generic: ['Button 1', 'Button 2', 'Button 3', 'Button 4', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'LS', 'RS', 'D-Pad Up', 'D-Pad Down', 'D-Pad Left', 'D-Pad Right', 'Home'],
+  nintendo: [
+    'B',
+    'A',
+    'Y',
+    'X',
+    'L',
+    'R',
+    'ZL',
+    'ZR',
+    '-',
+    '+',
+    'LS',
+    'RS',
+    'D-Pad Up',
+    'D-Pad Down',
+    'D-Pad Left',
+    'D-Pad Right',
+    'Home',
+  ],
+  generic: [
+    'Button 1',
+    'Button 2',
+    'Button 3',
+    'Button 4',
+    'LB',
+    'RB',
+    'LT',
+    'RT',
+    'Select',
+    'Start',
+    'LS',
+    'RS',
+    'D-Pad Up',
+    'D-Pad Down',
+    'D-Pad Left',
+    'D-Pad Right',
+    'Home',
+  ],
 }
 
 const XBOX_ID = /xbox|xinput|vendor: 045e|^045e-/
@@ -278,7 +350,9 @@ export default class GamepadManager extends EventEmitter {
     }
 
     // Some browsers drop controllers without firing gamepaddisconnected
-    for (const index of [...this.gamepads.keys()]) {
+    for (const index of [
+      ...this.gamepads.keys(),
+    ]) {
       if (!seen.has(index)) {
         this.disconnect(index)
       }

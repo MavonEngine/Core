@@ -45,7 +45,9 @@ export function nodemailerTransport(config: NodemailerTransport, name?: string):
         headers: message.headers,
       })
       const messageId = (info as { messageId?: unknown } | undefined)?.messageId
-      return typeof messageId === 'string' ? { messageId } : {}
+      return typeof messageId === 'string'
+        ? { messageId }
+        : {}
     },
     close: () => mailer.close(),
   }
@@ -95,7 +97,9 @@ export function logTransport(logger: Logger | null | undefined): MailTransport {
     name: 'log',
     async send(message) {
       const body = message.text ?? htmlToLogText(message.html!)
-      const cut = body.length > LOG_BODY_CHARS ? `${body.slice(0, LOG_BODY_CHARS)}…` : body
+      const cut = body.length > LOG_BODY_CHARS
+        ? `${body.slice(0, LOG_BODY_CHARS)}…`
+        : body
       logger?.info([
         `Mail (not sent: no mail transport is set up) to ${message.to.map(formatAddress).join(', ')}: ${message.subject}`,
         cut,

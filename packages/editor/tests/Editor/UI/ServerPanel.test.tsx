@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ServerPanel, { ROUTES_REFRESH_MS } from '../../../src/Editor/UI/Server/ServerPanel'
 
 vi.mock('../../../src/Editor/UI/Server/ServerPanel.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 const ROUTES: HttpRouteInfo[] = [
@@ -21,12 +23,29 @@ const ROUTES: HttpRouteInfo[] = [
     response: '`{ entries, latestId }`',
     auth: 'Localhost only',
   },
-  { method: 'POST', path: '/api/scores/:player', source: 'game', params: { player: 'Id of the player' }, devOnly: false, summary: 'Save a score' },
-  { method: 'GET', path: '/chat/history', source: 'plugin', plugin: '@acme/chat', params: {}, devOnly: true },
+  {
+    method: 'POST',
+    path: '/api/scores/:player',
+    source: 'game',
+    params: { player: 'Id of the player' },
+    devOnly: false,
+    summary: 'Save a score',
+  },
+  {
+    method: 'GET',
+    path: '/chat/history',
+    source: 'plugin',
+    plugin: '@acme/chat',
+    params: {},
+    devOnly: true,
+  },
 ]
 
 function server(routes: HttpRouteInfo[] = ROUTES) {
-  return vi.fn(async () => new Response(JSON.stringify({ routes }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  return vi.fn(async () => new Response(JSON.stringify({ routes }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  }))
 }
 
 /** jsdom lays nothing out, so say whether the panel's tab is the one shown */
@@ -48,14 +67,38 @@ describe('serverPanel', () => {
     render(<ServerPanel fetchFn={server()} />)
 
     await screen.findByText('HTTP endpoints (3)')
-    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Method', 'Path', 'Served in', 'From', 'What it does'])
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual([
+      'Method',
+      'Path',
+      'Served in',
+      'From',
+      'What it does',
+    ])
 
     // The game's own first, then plugins, the engine's last
     const rows = screen.getAllByRole('row').slice(1).map(row => Array.from(row.querySelectorAll('td'), cell => cell.textContent))
     expect(rows).toEqual([
-      ['POST', '/api/scores/:player', 'Prod + dev', 'Game', 'Save a score'],
-      ['GET', '/chat/history', 'Dev only', '@acme/chat', ''],
-      ['GET', '/api/game/logs', 'Prod + dev', 'Engine', 'Recent server log entries'],
+      [
+        'POST',
+        '/api/scores/:player',
+        'Prod + dev',
+        'Game',
+        'Save a score',
+      ],
+      [
+        'GET',
+        '/chat/history',
+        'Dev only',
+        '@acme/chat',
+        '',
+      ],
+      [
+        'GET',
+        '/api/game/logs',
+        'Prod + dev',
+        'Engine',
+        'Recent server log entries',
+      ],
     ])
   })
 
@@ -111,7 +154,10 @@ describe('serverPanel', () => {
   })
 
   it('shows why there is no list, and recovers on refresh', async () => {
-    const fetchFn = vi.fn(async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } }))
+    const fetchFn = vi.fn(async () => new Response('<html></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    }))
     render(<ServerPanel fetchFn={fetchFn} />)
 
     expect((await screen.findByRole('alert')).textContent).toContain('no game server')
@@ -141,7 +187,16 @@ describe('serverPanel', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2)
 
     // A route added while the editor is open shows up
-    fetchFn.mockImplementation(server([...ROUTES, { method: 'DELETE', path: '/api/scores', source: 'game', params: {}, devOnly: false }]))
+    fetchFn.mockImplementation(server([
+      ...ROUTES,
+      {
+        method: 'DELETE',
+        path: '/api/scores',
+        source: 'game',
+        params: {},
+        devOnly: false,
+      },
+    ]))
     await act(() => vi.advanceTimersByTimeAsync(ROUTES_REFRESH_MS))
     vi.useRealTimers()
     await waitFor(() => screen.getByText('HTTP endpoints (4)'))

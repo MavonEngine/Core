@@ -33,7 +33,9 @@ export function migrationsFor(coreVersion: string, migrations: Migration[] = MIG
 /** The ids in `migrations` of the project's mavonengine.json */
 export function recordedMigrations(files: ProjectFiles): string[] {
   const recorded = files.readJson(CONFIG)?.migrations
-  return Array.isArray(recorded) ? recorded.filter(id => typeof id === 'string') : []
+  return Array.isArray(recorded)
+    ? recorded.filter(id => typeof id === 'string')
+    : []
 }
 
 /**
@@ -57,7 +59,10 @@ export function applyMigrations(ctx: MigrationContext, pending: Migration[], mig
   const recorded = new Set(recordedMigrations(ctx.files))
   const ids = migrationsFor(ctx.versions.core, migrations).map(migration => migration.id)
   if (ids.some(id => !recorded.has(id))) {
-    config.migrations = [...recorded, ...ids.filter(id => !recorded.has(id))]
+    config.migrations = [
+      ...recorded,
+      ...ids.filter(id => !recorded.has(id)),
+    ]
     ctx.files.writeJson(CONFIG, config)
   }
 

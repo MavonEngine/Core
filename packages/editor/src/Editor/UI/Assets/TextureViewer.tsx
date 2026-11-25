@@ -25,8 +25,12 @@ function imageToUrl(img: RawImage): string {
 }
 
 export function getTextureUrl(texture: Texture<RawImage> | CubeTexture<HTMLImageElement>): string {
-  const img = isCubeTexture<HTMLImageElement>(texture) ? texture.image[0] : texture.image
-  return img ? imageToUrl(img) : ''
+  const img = isCubeTexture<HTMLImageElement>(texture)
+    ? texture.image[0]
+    : texture.image
+  return img
+    ? imageToUrl(img)
+    : ''
 }
 
 function formatWrap(wrap: number): string {
@@ -64,12 +68,16 @@ const CUBE_FACES: Array<{ label: string, faceIndex: number } | null> = [
 
 export default ({ texture }: { texture: Texture<RawImage> | CubeTexture<HTMLImageElement> }) => {
   const isCube = isCubeTexture<HTMLImageElement>(texture)
-  const img = isCubeTexture<HTMLImageElement>(texture) ? texture.image[0] : texture.image
+  const img = isCubeTexture<HTMLImageElement>(texture)
+    ? texture.image[0]
+    : texture.image
   const width = img?.width ?? 0
   const height = img?.height ?? 0
 
   const faces = isCube ? 6 : 1
-  const memoryMb = width && height ? (width * height * 4 * faces) / (1024 * 1024) : 0
+  const memoryMb = width && height
+    ? (width * height * 4 * faces) / (1024 * 1024)
+    : 0
 
   const wrapperRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
@@ -83,7 +91,9 @@ export default ({ texture }: { texture: Texture<RawImage> | CubeTexture<HTMLImag
 
     function onWheel(e: WheelEvent) {
       e.preventDefault()
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
+      const factor = e.deltaY < 0
+        ? 1.15
+        : 1 / 1.15
       const rect = el!.getBoundingClientRect()
       const cx = e.clientX - rect.left
       const cy = e.clientY - rect.top
@@ -172,11 +182,29 @@ export default ({ texture }: { texture: Texture<RawImage> | CubeTexture<HTMLImag
       </div>
       <AssetStats stats={[
         { label: 'Size', value: `${width} × ${height}` },
-        { label: 'Memory', value: memoryMb >= 0.1 ? `${memoryMb.toFixed(2)} MB` : `${(memoryMb * 1024).toFixed(2)} KB` },
-        { label: 'Color Space', value: formatColorSpace(texture.colorSpace) },
-        { label: 'Wrap S', value: formatWrap(texture.wrapS) },
-        { label: 'Wrap T', value: formatWrap(texture.wrapT) },
-        ...(isCube ? [{ label: 'Type', value: 'Cube' }] : []),
+        {
+          label: 'Memory',
+          value: memoryMb >= 0.1
+            ? `${memoryMb.toFixed(2)} MB`
+            : `${(memoryMb * 1024).toFixed(2)} KB`,
+        },
+        {
+          label: 'Color Space',
+          value: formatColorSpace(texture.colorSpace),
+        },
+        {
+          label: 'Wrap S',
+          value: formatWrap(texture.wrapS),
+        },
+        {
+          label: 'Wrap T',
+          value: formatWrap(texture.wrapT),
+        },
+        ...(isCube
+          ? [
+              { label: 'Type', value: 'Cube' },
+            ]
+          : []),
       ]}
       />
     </div>

@@ -21,7 +21,12 @@ const forest = {
   client: './client.js',
   server: './server.js',
   engine: '^0.0.22',
-  assets: { prefabs: { Tree: ['tree.glb'], Rock: ['rock.glb'] } },
+  assets: {
+    prefabs: {
+      Tree: ['tree.glb'],
+      Rock: ['rock.glb'],
+    },
+  },
 }
 
 /**
@@ -34,7 +39,13 @@ function fakeIO(packages: Record<string, object | undefined>, { interactive = tr
       const pkgPath = join(dir, 'package.json')
       const pkg = readJson(pkgPath)
       for (const [name, manifest] of Object.entries(packages)) {
-        write(join(dir, 'node_modules', name, 'package.json'), JSON.stringify({ name, version: '1.2.0', ...(manifest ? { mavonengine: manifest } : {}) }))
+        write(join(dir, 'node_modules', name, 'package.json'), JSON.stringify({
+          name,
+          version: '1.2.0',
+          ...(manifest
+            ? { mavonengine: manifest }
+            : {}),
+        }))
         pkg.dependencies[name] = '^1.2.0'
       }
       writeFileSync(pkgPath, JSON.stringify(pkg))
@@ -53,7 +64,10 @@ const configPath = () => join(dir, 'mavonengine.json')
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'mavonengine-install-'))
-  write(join(dir, 'package.json'), JSON.stringify({ dependencies: { '@mavonengine/core': '0.0.22' }, scripts: { dev: 'x' } }))
+  write(join(dir, 'package.json'), JSON.stringify({
+    dependencies: { '@mavonengine/core': '0.0.22' },
+    scripts: { dev: 'x' },
+  }))
   write(join(dir, 'node_modules', '@mavonengine', 'core', 'package.json'), JSON.stringify({ version: '0.0.22' }))
 })
 
@@ -63,7 +77,13 @@ afterEach(() => {
 
 describe('parseInstallArgs', () => {
   it('takes the packages and flags', () => {
-    expect(parseInstallArgs(['forest', '@acme/hud@^2', '-y', '--cwd', 'game'], '/home')).toEqual({
+    expect(parseInstallArgs([
+      'forest',
+      '@acme/hud@^2',
+      '-y',
+      '--cwd',
+      'game',
+    ], '/home')).toEqual({
       cwd: resolve('/home', 'game'),
       packages: ['forest', '@acme/hud@^2'],
       yes: true,
@@ -110,8 +130,13 @@ describe('package names', () => {
   })
 
   it('finds what a git install added from package.json', () => {
-    const before = new Map([['three', '1']])
-    const after = new Map([['three', '1'], ['forest', 'file:../forest']])
+    const before = new Map([
+      ['three', '1'],
+    ])
+    const after = new Map([
+      ['three', '1'],
+      ['forest', 'file:../forest'],
+    ])
 
     expect(installedNames(['github:acme/forest'], dir, before, after)).toEqual(['forest'])
   })
@@ -125,14 +150,22 @@ describe('package names', () => {
 })
 
 describe('runInstallCommand', () => {
-  const options = (overrides = {}) => ({ cwd: dir, packages: ['forest'], yes: false, register: true, ...overrides })
+  const options = (overrides = {}) => ({
+    cwd: dir,
+    packages: ['forest'],
+    yes: false,
+    register: true,
+    ...overrides,
+  })
 
   it('installs in the project root with its package manager', async () => {
     writeFileSync(join(dir, 'pnpm-lock.yaml'), '')
     mkdirSync(join(dir, 'client'))
     const io = fakeIO({ forest })
 
-    await runInstallCommand(options({ cwd: join(dir, 'client') }), io)
+    await runInstallCommand(options({
+      cwd: join(dir, 'client'),
+    }), io)
 
     expect(io.run).toHaveBeenCalledWith('pnpm', ['add', 'forest'], dir)
   })
@@ -143,7 +176,11 @@ describe('runInstallCommand', () => {
     expect(await runInstallCommand(options(), io)).toBe(0)
 
     expect(io.confirm).toHaveBeenCalledWith('Add forest to the plugins in mavonengine.json? (Y/n) ')
-    expect(readJson(configPath())).toEqual({ plugins: { forest: { enabled: true } } })
+    expect(readJson(configPath())).toEqual({
+      plugins: {
+        forest: { enabled: true },
+      },
+    })
     expect(io.output()).toContain('forest@1.2.0 is a MavonEngine plugin (client + server)')
     expect(io.output()).toContain('Prefabs: Tree, Rock')
     expect(io.output()).toContain('Made for @mavonengine/core ^0.0.22, you have 0.0.22')
@@ -151,11 +188,22 @@ describe('runInstallCommand', () => {
   })
 
   it('keeps the rest of an existing mavonengine.json', async () => {
-    writeFileSync(configPath(), JSON.stringify({ custom: true, plugins: { other: { enabled: true } } }))
+    writeFileSync(configPath(), JSON.stringify({
+      custom: true,
+      plugins: {
+        other: { enabled: true },
+      },
+    }))
 
     await runInstallCommand(options(), fakeIO({ forest }))
 
-    expect(readJson(configPath())).toEqual({ custom: true, plugins: { other: { enabled: true }, forest: { enabled: true } } })
+    expect(readJson(configPath())).toEqual({
+      custom: true,
+      plugins: {
+        other: { enabled: true },
+        forest: { enabled: true },
+      },
+    })
   })
 
   it('leaves mavonengine.json alone when the answer is no', async () => {
@@ -198,14 +246,23 @@ describe('runInstallCommand', () => {
   it('skips packages that are not plugins', async () => {
     const io = fakeIO({ lodash: undefined })
 
-    expect(await runInstallCommand(options({ packages: ['lodash'] }), io)).toBe(0)
+    expect(await runInstallCommand(options({
+      packages: ['lodash'],
+    }), io)).toBe(0)
 
     expect(io.confirm).not.toHaveBeenCalled()
     expect(io.output()).toContain('lodash is installed. It is not a MavonEngine plugin')
   })
 
   it('does not ask again for a plugin that is already enabled', async () => {
-    writeFileSync(configPath(), JSON.stringify({ plugins: { forest: { enabled: true, prefabs: ['Tree'] } } }))
+    writeFileSync(configPath(), JSON.stringify({
+      plugins: {
+        forest: {
+          enabled: true,
+          prefabs: ['Tree'],
+        },
+      },
+    }))
     const io = fakeIO({ forest })
 
     await runInstallCommand(options(), io)
@@ -218,7 +275,10 @@ describe('runInstallCommand', () => {
   it('finds the plugin a path install added', async () => {
     const io = fakeIO({ forest })
 
-    await runInstallCommand(options({ packages: ['file:../forest'], yes: true }), io)
+    await runInstallCommand(options({
+      packages: ['file:../forest'],
+      yes: true,
+    }), io)
 
     expect(readJson(configPath()).plugins.forest).toEqual({ enabled: true })
   })
@@ -226,10 +286,16 @@ describe('runInstallCommand', () => {
   it('finds an already installed local plugin again from its directory', async () => {
     write(join(dir, 'forest-src', 'package.json'), JSON.stringify({ name: 'forest' }))
     const io = fakeIO({ forest })
-    await runInstallCommand(options({ packages: ['file:./forest-src'], register: false }), io)
+    await runInstallCommand(options({
+      packages: ['file:./forest-src'],
+      register: false,
+    }), io)
 
     // Installing the same path again changes nothing in package.json
-    await runInstallCommand(options({ packages: ['file:./forest-src'], yes: true }), io)
+    await runInstallCommand(options({
+      packages: ['file:./forest-src'],
+      yes: true,
+    }), io)
 
     expect(readJson(configPath()).plugins.forest).toEqual({ enabled: true })
   })
@@ -237,15 +303,22 @@ describe('runInstallCommand', () => {
   it('says so when it can\'t tell what was installed', async () => {
     const io = fakeIO({})
 
-    await runInstallCommand(options({ packages: ['github:acme/forest'] }), io)
+    await runInstallCommand(options({
+      packages: ['github:acme/forest'],
+    }), io)
 
     expect(io.output()).toContain('couldn\'t tell which packages were installed')
   })
 
   it('reports an invalid plugin manifest and exits with 1', async () => {
-    const io = fakeIO({ broken: { target: 'everywhere' } })
+    const io = fakeIO({
+      broken: { target: 'everywhere' },
+    })
 
-    expect(await runInstallCommand(options({ packages: ['broken'], yes: true }), io)).toBe(1)
+    expect(await runInstallCommand(options({
+      packages: ['broken'],
+      yes: true,
+    }), io)).toBe(1)
 
     expect(io.output()).toContain('mavonengine.target')
     expect(existsSync(configPath())).toBe(false)

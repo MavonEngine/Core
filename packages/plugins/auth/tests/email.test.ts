@@ -24,8 +24,14 @@ async function started(options: Record<string, unknown> = {}, { mail = true, app
   await runPluginMigrations(db, PKG, plugin.migrations)
 
   const sent: MailInput[] = []
-  const mailApi = { send: vi.fn(async (input: MailInput) => void sent.push(input)) }
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const mailApi = {
+    send: vi.fn(async (input: MailInput) => void sent.push(input)),
+  }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const ctx = {
     package: PKG,
     options,
@@ -38,7 +44,9 @@ async function started(options: Record<string, unknown> = {}, { mail = true, app
     // The game's address, from mavonengine.json or MAVONENGINE_APP_URL
     appUrl,
     appName,
-    plugin: (pkg: string) => (pkg === '@mavonengine/mail' && mail ? mailApi : undefined),
+    plugin: (pkg: string) => (pkg === '@mavonengine/mail' && mail
+      ? mailApi
+      : undefined),
   } as unknown as ServerPluginContext
 
   await plugin.setup(ctx)
@@ -65,20 +73,37 @@ async function started(options: Record<string, unknown> = {}, { mail = true, app
     }
     if (token)
       headers.Authorization = `Bearer ${token}`
-    const res = await fetch(`${origin}${path.startsWith('http') ? path.slice(origin.length) : path}`, { method, headers, body: payload })
+    const res = await fetch(`${origin}${path.startsWith('http')
+      ? path.slice(origin.length)
+      : path}`, { method, headers, body: payload })
     const text = await res.text()
     let json: any
     try {
-      json = text ? JSON.parse(text) : undefined
+      json = text
+        ? JSON.parse(text)
+        : undefined
     }
     catch {
       json = undefined
     }
-    return { status: res.status, headers: res.headers, json, text }
+    return {
+      status: res.status,
+      headers: res.headers,
+      json,
+      text,
+    }
   }
 
   async function register(username = 'Ada', email: string | null = 'ada@example.com') {
-    const res = await request('POST', '/api/auth/register', { body: { username, password: 'correct horse', ...(email ? { email } : {}) } })
+    const res = await request('POST', '/api/auth/register', {
+      body: {
+        username,
+        password: 'correct horse',
+        ...(email
+          ? { email }
+          : {}),
+      },
+    })
     expect(res.status).toBe(201)
     return res.json as { token: string, account: { id: string, email: string | null, emailVerified: boolean } }
   }
@@ -88,10 +113,24 @@ async function started(options: Record<string, unknown> = {}, { mail = true, app
     await vi.waitFor(() => expect(sent.some(m => m.to === to)).toBe(true))
     const mail = sent.filter(m => m.to === to).at(-1)!
     const match = LINK_RE.exec(mail.text)!
-    return { mail, url: match[0], token: decodeURIComponent(match[1]) }
+    return {
+      mail,
+      url: match[0],
+      token: decodeURIComponent(match[1]),
+    }
   }
 
-  return { ctx, db, logger, origin, sent, mailApi, request, register, linkIn }
+  return {
+    ctx,
+    db,
+    logger,
+    origin,
+    sent,
+    mailApi,
+    request,
+    register,
+    linkIn,
+  }
 }
 
 describe('confirming the email', () => {
@@ -107,13 +146,17 @@ describe('confirming the email', () => {
     // In development the link goes where the request came to
     expect(url).toMatch(new RegExp(`^${server.origin}/api/auth/verify-email\\?token=`))
 
-    const confirmed = await server.request('POST', '/api/auth/verify-email', { body: { token } })
+    const confirmed = await server.request('POST', '/api/auth/verify-email', {
+      body: { token },
+    })
     expect(confirmed.status).toBe(200)
     expect(confirmed.json.account).toMatchObject({ id: account.id, email: 'ada@example.com', emailVerified: true })
     expect((await server.request('GET', '/api/auth/me', { token: session })).json.account.emailVerified).toBe(true)
 
     // Once
-    expect((await server.request('POST', '/api/auth/verify-email', { body: { token } })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/verify-email', {
+      body: { token },
+    })).status).toBe(400)
   })
 
   it('asks on the page before confirming, as mail scanners open links', async () => {
@@ -132,7 +175,9 @@ describe('confirming the email', () => {
     expect((await server.request('GET', url)).status).toBe(200)
 
     // Its button does
-    const done = await server.request('POST', '/api/auth/verify-email', { form: { token } })
+    const done = await server.request('POST', '/api/auth/verify-email', {
+      form: { token },
+    })
     expect(done.status).toBe(200)
     expect(done.text).toContain('ada@example.com is confirmed')
 
@@ -146,12 +191,19 @@ describe('confirming the email', () => {
     const { token: session } = await server.register()
     const first = await server.linkIn('ada@example.com')
 
-    const changed = await server.request('POST', '/api/auth/email', { token: session, body: { email: 'ada@new.example.com' } })
+    const changed = await server.request('POST', '/api/auth/email', {
+      token: session,
+      body: { email: 'ada@new.example.com' },
+    })
     expect(changed.json.account).toMatchObject({ email: 'ada@new.example.com', emailVerified: false })
     const second = await server.linkIn('ada@new.example.com')
 
-    expect((await server.request('POST', '/api/auth/verify-email', { body: { token: first.token } })).status).toBe(400)
-    expect((await server.request('POST', '/api/auth/verify-email', { body: { token: second.token } })).json.account.emailVerified).toBe(true)
+    expect((await server.request('POST', '/api/auth/verify-email', {
+      body: { token: first.token },
+    })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/verify-email', {
+      body: { token: second.token },
+    })).json.account.emailVerified).toBe(true)
   })
 
   it('changes the email only to one that is free, and takes it away with null', async () => {
@@ -159,10 +211,21 @@ describe('confirming the email', () => {
     const { token: session } = await server.register()
     await server.register('Bob', 'bob@example.com')
 
-    expect((await server.request('POST', '/api/auth/email', { token: session, body: { email: 'BOB@example.com' } })).status).toBe(409)
-    expect((await server.request('POST', '/api/auth/email', { token: session, body: { email: 'nope' } })).status).toBe(400)
-    expect((await server.request('POST', '/api/auth/email', { body: { email: 'x@example.com' } })).status).toBe(401)
-    expect((await server.request('POST', '/api/auth/email', { token: session, body: { email: null } })).json.account).toMatchObject({ email: null, emailVerified: false })
+    expect((await server.request('POST', '/api/auth/email', {
+      token: session,
+      body: { email: 'BOB@example.com' },
+    })).status).toBe(409)
+    expect((await server.request('POST', '/api/auth/email', {
+      token: session,
+      body: { email: 'nope' },
+    })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/email', {
+      body: { email: 'x@example.com' },
+    })).status).toBe(401)
+    expect((await server.request('POST', '/api/auth/email', {
+      token: session,
+      body: { email: null },
+    })).json.account).toMatchObject({ email: null, emailVerified: false })
   })
 
   it('mails a new link when asked, a few an hour at most', async () => {
@@ -211,24 +274,36 @@ describe('resetting a forgotten password', () => {
     const { token: oldSession } = await server.register()
     await server.linkIn('ada@example.com')
 
-    const asked = await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ADA@example.com' } })
+    const asked = await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ADA@example.com' },
+    })
     expect(asked.status).toBe(202)
     const { mail, url, token } = await server.linkIn('ada@example.com')
     expect(mail.subject).toBe('Reset your password')
     expect(url).toMatch(/^https:\/\/game\.example\.com\/api\/auth\/reset-password\?token=/)
 
-    expect((await server.request('POST', '/api/auth/reset-password', { body: { token, password: 'short' } })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/reset-password', {
+      body: { token, password: 'short' },
+    })).status).toBe(400)
     // A password that can't be used leaves the link working
-    const reset = await server.request('POST', '/api/auth/reset-password', { body: { token, password: 'brand new horse' } })
+    const reset = await server.request('POST', '/api/auth/reset-password', {
+      body: { token, password: 'brand new horse' },
+    })
     expect(reset.status).toBe(200)
     expect(reset.json.account).toMatchObject({ name: 'Ada', emailVerified: true })
     expect(reset.json.token).toEqual(expect.any(String))
 
     expect((await server.request('GET', '/api/auth/me', { token: oldSession })).status).toBe(401)
-    expect((await server.request('POST', '/api/auth/login', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(401)
-    expect((await server.request('POST', '/api/auth/login', { body: { username: 'ada', password: 'brand new horse' } })).status).toBe(200)
+    expect((await server.request('POST', '/api/auth/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(401)
+    expect((await server.request('POST', '/api/auth/login', {
+      body: { username: 'ada', password: 'brand new horse' },
+    })).status).toBe(200)
     // Once
-    expect((await server.request('POST', '/api/auth/reset-password', { body: { token, password: 'another new one' } })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/reset-password', {
+      body: { token, password: 'another new one' },
+    })).status).toBe(400)
   })
 
   it('answers the same for an email no account has, and mails nothing', async () => {
@@ -236,8 +311,12 @@ describe('resetting a forgotten password', () => {
     await server.register()
     server.sent.length = 0
 
-    const unknown = await server.request('POST', '/api/auth/forgot-password', { body: { email: 'nobody@example.com' } })
-    const known = await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    const unknown = await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'nobody@example.com' },
+    })
+    const known = await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })
     expect([unknown.status, unknown.json]).toEqual([known.status, known.json])
     await server.linkIn('ada@example.com')
     expect(server.sent.map(m => m.to)).toEqual(['ada@example.com'])
@@ -246,7 +325,9 @@ describe('resetting a forgotten password', () => {
   it('offers the form on the page, and checks the two passwords are the same', async () => {
     const server = await started()
     await server.register()
-    await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })
     await vi.waitFor(() => expect(server.sent.some(m => m.subject === 'Reset your password')).toBe(true))
     const { url, token } = await server.linkIn('ada@example.com')
 
@@ -254,16 +335,22 @@ describe('resetting a forgotten password', () => {
     expect(page.text).toContain('<input id="password" name="password" type="password"')
     expect(page.headers.get('referrer-policy')).toBe('no-referrer')
 
-    const mismatch = await server.request('POST', '/api/auth/reset-password', { form: { token, password: 'brand new horse', confirm: 'brand new hors' } })
+    const mismatch = await server.request('POST', '/api/auth/reset-password', {
+      form: { token, password: 'brand new horse', confirm: 'brand new hors' },
+    })
     expect(mismatch.status).toBe(400)
     expect(mismatch.text).toContain('The two passwords are not the same')
     // Still offered: the link works
     expect(mismatch.text).toContain('name="token"')
 
-    const done = await server.request('POST', '/api/auth/reset-password', { form: { token, password: 'brand new horse', confirm: 'brand new horse' } })
+    const done = await server.request('POST', '/api/auth/reset-password', {
+      form: { token, password: 'brand new horse', confirm: 'brand new horse' },
+    })
     expect(done.status).toBe(200)
     expect(done.text).toContain('Your password is changed')
-    expect((await server.request('POST', '/api/auth/login', { body: { username: 'Ada', password: 'brand new horse' } })).status).toBe(200)
+    expect((await server.request('POST', '/api/auth/login', {
+      body: { username: 'Ada', password: 'brand new horse' },
+    })).status).toBe(200)
   })
 
   it('only takes the latest link, and none once the email changed or the password was changed', async () => {
@@ -271,16 +358,25 @@ describe('resetting a forgotten password', () => {
     const { token: session } = await server.register()
     const ask = async () => {
       server.sent.length = 0
-      await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+      await server.request('POST', '/api/auth/forgot-password', {
+        body: { email: 'ada@example.com' },
+      })
       return (await server.linkIn('ada@example.com')).token
     }
 
     const first = await ask()
     const second = await ask()
-    expect((await server.request('POST', '/api/auth/reset-password', { body: { token: first, password: 'brand new horse' } })).status).toBe(400)
+    expect((await server.request('POST', '/api/auth/reset-password', {
+      body: { token: first, password: 'brand new horse' },
+    })).status).toBe(400)
 
-    await server.request('POST', '/api/auth/password', { token: session, body: { current: 'correct horse', password: 'changed horse' } })
-    expect((await server.request('POST', '/api/auth/reset-password', { body: { token: second, password: 'brand new horse' } })).status).toBe(400)
+    await server.request('POST', '/api/auth/password', {
+      token: session,
+      body: { current: 'correct horse', password: 'changed horse' },
+    })
+    expect((await server.request('POST', '/api/auth/reset-password', {
+      body: { token: second, password: 'brand new horse' },
+    })).status).toBe(400)
   })
 
   it('caps the resets an address asks for, and the mails one email gets', async () => {
@@ -288,9 +384,15 @@ describe('resetting a forgotten password', () => {
     await server.register()
     server.sent.length = 0
 
-    expect((await server.request('POST', '/api/auth/forgot-password', { body: { email: 'x@example.com' } })).status).toBe(202)
-    expect((await server.request('POST', '/api/auth/forgot-password', { body: { email: 'y@example.com' } })).status).toBe(202)
-    const tooMany = await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    expect((await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'x@example.com' },
+    })).status).toBe(202)
+    expect((await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'y@example.com' },
+    })).status).toBe(202)
+    const tooMany = await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })
     expect(tooMany.status).toBe(429)
     expect(tooMany.headers.get('retry-after')).toEqual(expect.any(String))
 
@@ -298,8 +400,11 @@ describe('resetting a forgotten password', () => {
     const many = await started({ resetsPerHour: 100 })
     await many.register()
     many.sent.length = 0
-    for (let i = 0; i < MAILS_PER_ADDRESS_PER_HOUR + 3; i++)
-      await many.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    for (let i = 0; i < MAILS_PER_ADDRESS_PER_HOUR + 3; i++) {
+      await many.request('POST', '/api/auth/forgot-password', {
+        body: { email: 'ada@example.com' },
+      })
+    }
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(many.sent).toHaveLength(MAILS_PER_ADDRESS_PER_HOUR)
   })
@@ -310,19 +415,25 @@ describe('resetting a forgotten password', () => {
     server.sent.length = 0
     await server.db.updateTable('auth_accounts').set({ disabled_at: '2026-01-01T00:00:00.000Z' }).where('id', '=', account.id).execute()
 
-    await server.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    await server.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(server.sent).toEqual([])
   })
 
   it('needs a mail plugin, and in production the game\'s address', async () => {
     const noMail = await started({}, { mail: false })
-    expect((await noMail.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })).status).toBe(503)
+    expect((await noMail.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })).status).toBe(503)
 
     vi.stubEnv('NODE_ENV', 'production')
     const noUrl = await started()
     expect(noUrl.logger.warn).toHaveBeenCalledWith(expect.stringContaining('set "appUrl"'))
-    const res = await noUrl.request('POST', '/api/auth/forgot-password', { body: { email: 'ada@example.com' } })
+    const res = await noUrl.request('POST', '/api/auth/forgot-password', {
+      body: { email: 'ada@example.com' },
+    })
     expect(res.status).toBe(503)
     expect(res.json.error).toContain('appUrl')
   })

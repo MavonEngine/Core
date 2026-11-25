@@ -80,7 +80,12 @@ export default class Renderer {
         renderer: this.instance,
       })
 
-      renderDebug.addBinding(this, 'maxFps', { label: 'max fps (0 = off)', min: 0, max: 240, step: 1 })
+      renderDebug.addBinding(this, 'maxFps', {
+        label: 'max fps (0 = off)',
+        min: 0,
+        max: 240,
+        step: 1,
+      })
 
       renderDebug.addBinding(this.options, 'wireframe').on('change', () => {
         Game.instance().scene.traverse((object) => {

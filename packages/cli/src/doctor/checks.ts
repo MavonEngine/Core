@@ -11,7 +11,12 @@ export type Level = 'ok' | 'info' | 'warn' | 'error'
 
 export type Group = 'Environment' | typeof CONFIG_FILE | 'Plugins' | 'Migrations'
 
-export const GROUPS: Group[] = ['Environment', CONFIG_FILE, 'Plugins', 'Migrations']
+export const GROUPS: Group[] = [
+  'Environment',
+  CONFIG_FILE,
+  'Plugins',
+  'Migrations',
+]
 
 export interface Finding {
   group: Group
@@ -37,7 +42,16 @@ export interface DoctorContext {
 /** What the CLI needs, from its own package.json */
 export const CLI_NODE_RANGE = '>=24'
 
-const TOP_LEVEL_KEYS = new Set(['$schema', 'plugins', 'database', 'auth', 'notifications', 'appUrl', 'appName', 'migrations'])
+const TOP_LEVEL_KEYS = new Set([
+  '$schema',
+  'plugins',
+  'database',
+  'auth',
+  'notifications',
+  'appUrl',
+  'appName',
+  'migrations',
+])
 const PROVIDER_KEYS = ['database', 'auth', 'notifications'] as const
 const PLAIN_SPEC_RE = /^[\s\d.<>=^~x*|-]+$/i
 
@@ -52,22 +66,34 @@ function readJson(path: string): Record<string, any> | undefined {
 
 function installedPackageJson(root: string, pkg: string): Record<string, any> | undefined {
   const dir = findPackageDir(root, pkg)
-  return dir ? readJson(join(dir, 'package.json')) : undefined
+  return dir
+    ? readJson(join(dir, 'package.json'))
+    : undefined
 }
 
 /** The @mavonengine/core version installed in the project */
 export function coreVersionOf(root: string): string | undefined {
   const version = installedPackageJson(root, '@mavonengine/core')?.version
-  return typeof version === 'string' ? version : undefined
+  return typeof version === 'string'
+    ? version
+    : undefined
 }
 
 export function installCommand(pm: PackageManager, spec = ''): string {
-  return `${pm} ${pm === 'npm' ? 'install' : spec ? 'add' : 'install'}${spec ? ` ${spec}` : ''}`
+  return `${pm} ${pm === 'npm'
+    ? 'install'
+    : spec ? 'add' : 'install'}${spec
+    ? ` ${spec}`
+    : ''}`
 }
 
 function isNewer(candidate: string | undefined, than: string | undefined): candidate is string {
-  const a = candidate ? parseVersion(candidate) : undefined
-  const b = than ? parseVersion(than) : undefined
+  const a = candidate
+    ? parseVersion(candidate)
+    : undefined
+  const b = than
+    ? parseVersion(than)
+    : undefined
   return !!a && !!b && compareVersions(a, b) > 0
 }
 
@@ -87,10 +113,20 @@ export async function checkEnvironment(ctx: DoctorContext): Promise<Finding[]> {
   const needs = [CLI_NODE_RANGE, coreJson?.engines?.node].filter((range): range is string => typeof range === 'string' && validRange(range))
   const unmet = needs.filter(range => !satisfies(ctx.nodeVersion, range))
   add(unmet.length
-    ? { level: 'error', label: `Node ${ctx.nodeVersion}`, detail: `needs ${unmet.join(' and ')}`, fix: 'install a newer Node, e.g. from https://nodejs.org' }
-    : { level: 'ok', label: `Node ${ctx.nodeVersion}`, detail: `needs ${[...new Set(needs)].join(' and ')}` })
+    ? {
+        level: 'error',
+        label: `Node ${ctx.nodeVersion}`,
+        detail: `needs ${unmet.join(' and ')}`,
+        fix: 'install a newer Node, e.g. from https://nodejs.org',
+      }
+    : { level: 'ok', label: `Node ${ctx.nodeVersion}`, detail: `needs ${[
+        ...new Set(needs),
+      ].join(' and ')}` })
 
-  const declared = { ...ctx.packageJson.devDependencies, ...ctx.packageJson.dependencies } as Record<string, string>
+  const declared = {
+    ...ctx.packageJson.devDependencies,
+    ...ctx.packageJson.dependencies,
+  } as Record<string, string>
   const packages = Object.keys(declared).filter(name => name.startsWith('@mavonengine/'))
   // Plugins are looked at under Plugins
   const engine = packages.filter((name) => {
@@ -103,16 +139,28 @@ export async function checkEnvironment(ctx: DoctorContext): Promise<Finding[]> {
   for (const name of engine) {
     const spec = String(declared[name])
     const json = installedPackageJson(ctx.root, name)
-    const version = typeof json?.version === 'string' ? json.version : undefined
+    const version = typeof json?.version === 'string'
+      ? json.version
+      : undefined
 
     if (!version) {
-      add({ level: 'error', label: name, detail: `in package.json (${spec}) but not installed`, fix: installCommand(ctx.packageManager) })
+      add({
+        level: 'error',
+        label: name,
+        detail: `in package.json (${spec}) but not installed`,
+        fix: installCommand(ctx.packageManager),
+      })
       continue
     }
 
     // Only plain ranges can be compared; file:, workspace: and git specs are what they are
     if (PLAIN_SPEC_RE.test(spec) && validRange(spec) && !satisfies(version, spec)) {
-      add({ level: 'error', label: `${name} ${version}`, detail: `package.json asks for ${spec}`, fix: installCommand(ctx.packageManager) })
+      add({
+        level: 'error',
+        label: `${name} ${version}`,
+        detail: `package.json asks for ${spec}`,
+        fix: installCommand(ctx.packageManager),
+      })
       continue
     }
 
@@ -123,16 +171,29 @@ export async function checkEnvironment(ctx: DoctorContext): Promise<Finding[]> {
       add({ level: 'ok', label: `${name} ${version}` })
   }
 
-  if (!packages.includes('@mavonengine/core'))
-    add({ level: 'error', label: '@mavonengine/core', detail: 'not in package.json', fix: installCommand(ctx.packageManager, '@mavonengine/core') })
+  if (!packages.includes('@mavonengine/core')) {
+    add({
+      level: 'error',
+      label: '@mavonengine/core',
+      detail: 'not in package.json',
+      fix: installCommand(ctx.packageManager, '@mavonengine/core'),
+    })
+  }
 
   return findings
 }
 
 /** Said once, after every check that asked npm */
 export function registryFinding(npm: NpmRegistry | undefined): Finding | undefined {
-  if (npm?.unreachable)
-    return { group: 'Environment', level: 'warn', label: 'npm registry', detail: `${npm.unreachable}, so newer versions weren't looked for`, fix: 'check the connection, or pass --offline' }
+  if (npm?.unreachable) {
+    return {
+      group: 'Environment',
+      level: 'warn',
+      label: 'npm registry',
+      detail: `${npm.unreachable}, so newer versions weren't looked for`,
+      fix: 'check the connection, or pass --offline',
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -153,8 +214,16 @@ export function checkConfig(root: string, env: Record<string, string | undefined
   const path = configPath(root)
 
   if (!existsSync(path)) {
-    add({ level: 'info', label: CONFIG_FILE, detail: 'there is none, so no plugins are loaded', fix: 'mavonengine install <plugin> creates it' })
-    return { findings, config: { plugins: {} } }
+    add({
+      level: 'info',
+      label: CONFIG_FILE,
+      detail: 'there is none, so no plugins are loaded',
+      fix: 'mavonengine install <plugin> creates it',
+    })
+    return {
+      findings,
+      config: { plugins: {} },
+    }
   }
 
   let raw: unknown
@@ -178,7 +247,9 @@ export function checkConfig(root: string, env: Record<string, string | undefined
   }
   config.plugins ??= {}
 
-  add({ level: 'ok', label: CONFIG_FILE, detail: `${Object.keys(config.plugins).length} plugin${Object.keys(config.plugins).length === 1 ? '' : 's'}` })
+  add({ level: 'ok', label: CONFIG_FILE, detail: `${Object.keys(config.plugins).length} plugin${Object.keys(config.plugins).length === 1
+    ? ''
+    : 's'}` })
 
   for (const key of Object.keys(config)) {
     if (!TOP_LEVEL_KEYS.has(key))
@@ -187,10 +258,23 @@ export function checkConfig(root: string, env: Record<string, string | undefined
 
   if (config.appUrl !== undefined) {
     const url = parseAppUrl(config.appUrl)
-    if (!url)
-      add({ level: 'error', label: `appUrl ${JSON.stringify(config.appUrl)}`, detail: 'is not an http(s) URL', fix: 'e.g. "appUrl": "https://mygame.com"' })
-    else
-      add({ level: 'ok', label: `appUrl ${url}`, detail: env.MAVONENGINE_APP_URL ? `MAVONENGINE_APP_URL overrides it here: ${env.MAVONENGINE_APP_URL}` : undefined })
+    if (!url) {
+      add({
+        level: 'error',
+        label: `appUrl ${JSON.stringify(config.appUrl)}`,
+        detail: 'is not an http(s) URL',
+        fix: 'e.g. "appUrl": "https://mygame.com"',
+      })
+    }
+    else {
+      add({
+        level: 'ok',
+        label: `appUrl ${url}`,
+        detail: env.MAVONENGINE_APP_URL
+          ? `MAVONENGINE_APP_URL overrides it here: ${env.MAVONENGINE_APP_URL}`
+          : undefined,
+      })
+    }
   }
 
   if (config.appName !== undefined && (typeof config.appName !== 'string' || !config.appName.trim()))
@@ -201,12 +285,20 @@ export function checkConfig(root: string, env: Record<string, string | undefined
     if (pkg === undefined)
       continue
 
-    if (typeof pkg !== 'string')
+    if (typeof pkg !== 'string') {
       add({ level: 'error', label: `${key}`, detail: 'should be the package name of a plugin in "plugins"' })
-    else if (!config.plugins[pkg])
-      add({ level: 'error', label: `${key}: ${pkg}`, detail: 'is not in "plugins"', fix: `mavonengine install ${pkg}` })
-    else if (config.plugins[pkg]?.enabled === false)
+    }
+    else if (!config.plugins[pkg]) {
+      add({
+        level: 'error',
+        label: `${key}: ${pkg}`,
+        detail: 'is not in "plugins"',
+        fix: `mavonengine install ${pkg}`,
+      })
+    }
+    else if (config.plugins[pkg]?.enabled === false) {
       add({ level: 'warn', label: `${key}: ${pkg}`, detail: 'is turned off in "plugins"' })
+    }
   }
 
   for (const [pkg, entry] of Object.entries(config.plugins)) {
@@ -241,7 +333,11 @@ async function compatibleVersions(npm: NpmRegistry | undefined, pkg: string, cor
     .filter(([, json]) => engineCompat(engineRangeOf(json), coreVersion) === 'compatible')
     .map(([version]) => version)
 
-  return { forCore: maxSatisfying(supporting, '*'), latest: packument.latest, packument }
+  return {
+    forCore: maxSatisfying(supporting, '*'),
+    latest: packument.latest,
+    packument,
+  }
 }
 
 /**
@@ -258,14 +354,23 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
     const found: Omit<Finding, 'group'>[] = []
     const enabled = entry.enabled !== false
     const dir = findPackageDir(ctx.root, pkg)
-    const json = dir ? readJson(join(dir, 'package.json')) : undefined
+    const json = dir
+      ? readJson(join(dir, 'package.json'))
+      : undefined
 
     if (!dir || !json) {
-      found.push({ level: enabled ? 'error' : 'warn', label: pkg, detail: `in ${CONFIG_FILE} but not installed`, fix: `mavonengine install ${pkg}` })
+      found.push({
+        level: enabled ? 'error' : 'warn',
+        label: pkg,
+        detail: `in ${CONFIG_FILE} but not installed`,
+        fix: `mavonengine install ${pkg}`,
+      })
       return found
     }
 
-    const label = `${pkg}${json.version ? ` ${json.version}` : ''}`
+    const label = `${pkg}${json.version
+      ? ` ${json.version}`
+      : ''}`
     if (json.mavonengine === undefined || !json.mavonengine || typeof json.mavonengine !== 'object') {
       found.push({ level: 'error', label, detail: 'not a MavonEngine plugin: its package.json has no "mavonengine" field' })
       return found
@@ -286,20 +391,39 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
     for (const side of ['client', 'server'] as const) {
       if (!runsOn(manifest.target, side))
         continue
-      const file = typeof manifest[side] === 'string' ? resolveInside(dir, manifest[side]) : undefined
+      const file = typeof manifest[side] === 'string'
+        ? resolveInside(dir, manifest[side])
+        : undefined
       if (!file || !existsSync(file))
         found.push({ level: 'error', label, detail: `${side} entry ${manifest[side] ?? '(none)'} not found, is the plugin built?` })
     }
 
+    // The dev entry runs in the client's dev server, whatever the target. Missing only breaks the editor's tooling
+    if (manifest.dev !== undefined) {
+      const file = typeof manifest.dev === 'string' && manifest.dev
+        ? resolveInside(dir, manifest.dev)
+        : undefined
+      if (!file || !existsSync(file)) {
+        found.push({ level: 'warn', label, detail: `dev entry ${typeof manifest.dev === 'string'
+          ? manifest.dev
+          : '(invalid)'} not found, is the plugin built?` })
+      }
+    }
+
     // The assets of the prefabs in use
-    const prefabs = Array.isArray(entry.prefabs) ? entry.prefabs.filter(prefab => typeof prefab === 'string') : []
+    const prefabs = Array.isArray(entry.prefabs)
+      ? entry.prefabs.filter(prefab => typeof prefab === 'string')
+      : []
     const base = assetsDir({ package: pkg, dir, manifest })
     const missing = shippedAssetPaths(manifest, prefabs).filter((path) => {
       const file = resolveInside(base, path)
       return !file || !existsSync(file)
     })
-    if (missing.length)
-      found.push({ level: 'warn', label, detail: `asset${missing.length === 1 ? '' : 's'} missing from the release: ${missing.join(', ')}` })
+    if (missing.length) {
+      found.push({ level: 'warn', label, detail: `asset${missing.length === 1
+        ? ''
+        : 's'} missing from the release: ${missing.join(', ')}` })
+    }
 
     if (manifest.publish && !existsSync(join(dir, manifest.publish)))
       found.push({ level: 'warn', label, detail: `"mavonengine.publish" directory ${manifest.publish} is not in the package` })
@@ -325,12 +449,25 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
     }
     else if (coreVersion) {
       const { forCore } = await compatibleVersions(ctx.npm, pkg, coreVersion)
-      if (isNewer(forCore, json.version))
-        found.push({ level: 'info', label, detail: `core ${range}; ${forCore} is out and supports core ${coreVersion}`, fix: `mavonengine install ${pkg}@${forCore}` })
+      if (isNewer(forCore, json.version)) {
+        found.push({
+          level: 'info',
+          label,
+          detail: `core ${range}; ${forCore} is out and supports core ${coreVersion}`,
+          fix: `mavonengine install ${pkg}@${forCore}`,
+        })
+      }
     }
 
-    if (!found.some(finding => finding.label === label))
-      found.push({ level: 'ok', label, detail: range ? `core ${range}` : undefined })
+    if (!found.some(finding => finding.label === label)) {
+      found.push({
+        level: 'ok',
+        label,
+        detail: range
+          ? `core ${range}`
+          : undefined,
+      })
+    }
 
     return found
   }))
@@ -341,13 +478,22 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
   }
 
   // Installed and a plugin, but not in mavonengine.json
-  const declared = Object.keys({ ...ctx.packageJson.devDependencies, ...ctx.packageJson.dependencies })
+  const declared = Object.keys({
+    ...ctx.packageJson.devDependencies,
+    ...ctx.packageJson.dependencies,
+  })
   for (const pkg of declared) {
     if (config.plugins[pkg] !== undefined)
       continue
     const json = installedPackageJson(ctx.root, pkg)
-    if (json?.mavonengine && typeof json.mavonengine === 'object')
-      add({ level: 'info', label: pkg, detail: `a plugin that is installed but not in ${CONFIG_FILE}, so it isn't loaded`, fix: `mavonengine install ${pkg}` })
+    if (json?.mavonengine && typeof json.mavonengine === 'object') {
+      add({
+        level: 'info',
+        label: pkg,
+        detail: `a plugin that is installed but not in ${CONFIG_FILE}, so it isn't loaded`,
+        fix: `mavonengine install ${pkg}`,
+      })
+    }
   }
 
   if (!findings.length)
@@ -370,20 +516,35 @@ export async function checkMigrations(ctx: DoctorContext, cliVersion?: string): 
   const { module } = await loadMigrations(ctx.root)
   let pending
   try {
-    pending = module.pendingMigrations({ files: new module.ProjectFiles(ctx.root), versions: { core: coreVersion, cli: cliVersion } })
+    pending = module.pendingMigrations({
+      files: new module.ProjectFiles(ctx.root),
+      versions: { core: coreVersion, cli: cliVersion },
+    })
   }
   catch (err) {
-    return [{ group: 'Migrations', level: 'warn', label: 'migrations', detail: `can't be checked: ${(err as Error).message}` }]
+    return [
+      {
+        group: 'Migrations',
+        level: 'warn',
+        label: 'migrations',
+        detail: `can't be checked: ${(err as Error).message}`,
+      },
+    ]
   }
 
-  if (!pending.length)
-    return [{ group: 'Migrations', level: 'ok', label: 'none pending' }]
+  if (!pending.length) {
+    return [
+      { group: 'Migrations', level: 'ok', label: 'none pending' },
+    ]
+  }
 
   return pending.map((migration, index) => ({
     group: 'Migrations' as const,
     level: 'warn' as const,
     label: migration.id,
     detail: migration.description,
-    fix: index === pending.length - 1 ? 'mavonengine upgrade --only-migrations' : undefined,
+    fix: index === pending.length - 1
+      ? 'mavonengine upgrade --only-migrations'
+      : undefined,
   }))
 }

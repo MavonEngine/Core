@@ -62,7 +62,7 @@
     "@vitest/coverage-v8": "^5.1.0",
     "@vitest/ui": "^5.1.0",
     "glob": "^14.0.6",
-    "jsdom": "^28.1.0",
+    "jsdom": "^31.0.1",
     "three": "0.187.0",
     "typescript": "7.0.2",
     "vite": "^8.3.5",

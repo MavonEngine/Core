@@ -54,7 +54,11 @@ export interface SceneData {
 }
 
 export function emptyTransform(): SceneTransform {
-  return { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+  return {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  }
 }
 
 /**
@@ -100,7 +104,9 @@ export function parseSceneData(value: unknown, fallbackName = 'untitled'): Scene
 
   return {
     version: SCENE_FORMAT_VERSION,
-    name: typeof raw.name === 'string' && raw.name ? raw.name : fallbackName,
+    name: typeof raw.name === 'string' && raw.name
+      ? raw.name
+      : fallbackName,
     settings: raw.settings ?? {},
     objects,
   }

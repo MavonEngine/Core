@@ -8,16 +8,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PluginsPanel from '../../../src/Editor/UI/Plugins/PluginsPanel'
 
 vi.mock('../../../src/Editor/UI/Plugins/PluginsPanel.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 vi.mock('../../../src/Editor/UI/Plugins/InstallDialog.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 vi.mock('../../../src/Editor/UI/Plugins/Markdown.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 vi.mock('../../../src/Editor/UI/Server/ServerPanel.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 const PLUGINS: PluginInfo[] = [
@@ -35,23 +43,75 @@ const PLUGINS: PluginInfo[] = [
     declaredPrefabs: ['Tree', 'Rock'],
     usedPrefabs: ['Tree'],
   },
-  { package: 'chat', enabled: false, installed: true, version: '1.0.0', target: 'server', declaredPrefabs: [], usedPrefabs: [] },
-  { package: 'ghost', enabled: true, installed: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+  {
+    package: 'chat',
+    enabled: false,
+    installed: true,
+    version: '1.0.0',
+    target: 'server',
+    declaredPrefabs: [],
+    usedPrefabs: [],
+  },
+  {
+    package: 'ghost',
+    enabled: true,
+    installed: false,
+    problem: 'Listed in mavonengine.json but not installed',
+    declaredPrefabs: [],
+    usedPrefabs: [],
+  },
 ]
 
 const ROUTES: HttpRouteInfo[] = [
-  { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false },
-  { method: 'GET', path: '/forest/trees', source: 'plugin', plugin: '@acme/forest', params: {}, devOnly: false, summary: 'Every tree' },
-  { method: 'POST', path: '/forest/grow', source: 'plugin', plugin: '@acme/forest', params: {}, devOnly: true },
+  {
+    method: 'GET',
+    path: '/api/game/health',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+  },
+  {
+    method: 'GET',
+    path: '/forest/trees',
+    source: 'plugin',
+    plugin: '@acme/forest',
+    params: {},
+    devOnly: false,
+    summary: 'Every tree',
+  },
+  {
+    method: 'POST',
+    path: '/forest/grow',
+    source: 'plugin',
+    plugin: '@acme/forest',
+    params: {},
+    devOnly: true,
+  },
 ]
 
 function json(body: unknown) {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 const AVAILABLE = [
-  { package: '@acme/forest', name: 'Forest', description: 'Trees and rocks', target: 'both' },
-  { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both', engine: '>=0.1.0', homepage: 'https://example.com/weather', readme: 'https://raw.githubusercontent.com/acme/weather/main/README.md' },
+  {
+    package: '@acme/forest',
+    name: 'Forest',
+    description: 'Trees and rocks',
+    target: 'both',
+  },
+  {
+    package: '@acme/weather',
+    name: 'Weather',
+    description: 'Rain and fog',
+    target: 'both',
+    engine: '>=0.1.0',
+    homepage: 'https://example.com/weather',
+    readme: 'https://raw.githubusercontent.com/acme/weather/main/README.md',
+  },
   { package: 'plain' },
 ]
 
@@ -59,19 +119,44 @@ const AVAILABLE = [
 function servers({ plugins = PLUGINS, routes = ROUTES as HttpRouteInfo[] | null, available = AVAILABLE as object[] | null, readme = '# Weather\n\nMakes it **rain**.' as string | null, install = undefined as object | undefined } = {}) {
   return vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).endsWith('/__mavonengine/plugin-install')) {
-      if (init?.method === 'POST')
-        return new Response(JSON.stringify({ job: { id: 1, packages: JSON.parse(String(init.body)).packages, status: 'installing', output: '' } }), { status: 202, headers: { 'content-type': 'application/json' } })
-      return install ? json(install) : new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          job: {
+            id: 1,
+            packages: JSON.parse(String(init.body)).packages,
+            status: 'installing',
+            output: '',
+          },
+        }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      return install
+        ? json(install)
+        : new Response('<html></html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html' },
+          })
     }
     if (String(url).endsWith('/__mavonengine/plugins'))
       return json({ root: '/project', plugins })
-    if (String(url).endsWith('/README.md'))
-      return readme === null ? new Response('Not Found', { status: 404 }) : new Response(readme)
-    if (String(url).startsWith('https://raw.githubusercontent.com/'))
-      return available ? json({ version: 1, plugins: available }) : new Response('Not Found', { status: 404 })
+    if (String(url).endsWith('/README.md')) {
+      return readme === null
+        ? new Response('Not Found', { status: 404 })
+        : new Response(readme)
+    }
+    if (String(url).startsWith('https://raw.githubusercontent.com/')) {
+      return available
+        ? json({ version: 1, plugins: available })
+        : new Response('Not Found', { status: 404 })
+    }
     if (routes)
       return json({ routes })
-    return new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })
+    return new Response('<html></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    })
   }) as unknown as typeof fetch
 }
 
@@ -80,7 +165,12 @@ function rows(table: HTMLElement) {
 }
 
 beforeEach(() => {
-  registerPrefab({ name: 'Tree', label: 'Pine tree', plugin: '@acme/forest', spawn: () => {} })
+  registerPrefab({
+    name: 'Tree',
+    label: 'Pine tree',
+    plugin: '@acme/forest',
+    spawn: () => {},
+  })
 })
 
 afterEach(() => {
@@ -114,7 +204,12 @@ describe('pluginsPanel', () => {
     const [endpoints, prefabs] = screen.getAllByRole('table')
 
     expect(rows(endpoints)).toEqual([
-      ['GET', '/forest/trees', 'Prod + dev', 'Every tree'],
+      [
+        'GET',
+        '/forest/trees',
+        'Prod + dev',
+        'Every tree',
+      ],
       ['POST', '/forest/grow', 'Dev only', ''],
     ])
     expect(rows(prefabs)).toEqual([
@@ -246,7 +341,12 @@ describe('pluginsPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Install' }))
 
         await screen.findByRole('dialog', { name: 'Installing @acme/weather' })
-        expect(fetchFn).toHaveBeenCalledWith('/__mavonengine/plugin-install', expect.objectContaining({ method: 'POST', body: JSON.stringify({ packages: ['@acme/weather'] }) }))
+        expect(fetchFn).toHaveBeenCalledWith('/__mavonengine/plugin-install', expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            packages: ['@acme/weather'],
+          }),
+        }))
       })
 
       it('closes the dialog without installing on cancel', async () => {
@@ -267,7 +367,9 @@ describe('pluginsPanel', () => {
         const submit = screen.getByRole('button', { name: 'Install…' }) as HTMLButtonElement
         expect(submit.disabled).toBe(true)
 
-        fireEvent.change(input, { target: { value: 'some-plugin@1.2.0  file:../mine' } })
+        fireEvent.change(input, {
+          target: { value: 'some-plugin@1.2.0  file:../mine' },
+        })
         fireEvent.click(submit)
 
         screen.getByRole('dialog', { name: 'Install some-plugin@1.2.0, file:../mine?' })
@@ -277,7 +379,9 @@ describe('pluginsPanel', () => {
       it('refuses what is no package before asking anything', async () => {
         render(<PluginsPanel fetchFn={servers({ install: canInstall })} />)
 
-        fireEvent.change(await screen.findByLabelText('Another package'), { target: { value: 'forest; rm -rf ~' } })
+        fireEvent.change(await screen.findByLabelText('Another package'), {
+          target: { value: 'forest; rm -rf ~' },
+        })
         fireEvent.click(screen.getByRole('button', { name: 'Install…' }))
 
         expect(screen.getByRole('alert').textContent).toContain('not something that can be installed')
@@ -285,7 +389,12 @@ describe('pluginsPanel', () => {
       })
 
       it('only shows the command when the project doesn\'t run under mavonengine dev', async () => {
-        render(<PluginsPanel fetchFn={servers({ install: { available: false, reason: 'Start the project with `mavonengine dev` to install packages from here', job: null } })} />)
+        render(
+          <PluginsPanel fetchFn={servers({
+            install: { available: false, reason: 'Start the project with `mavonengine dev` to install packages from here', job: null },
+          })}
+          />,
+        )
         fireEvent.click(await screen.findByText('@acme/weather'))
 
         await screen.findByText(/Start the project with `mavonengine dev` to install packages from here\./)
@@ -296,7 +405,12 @@ describe('pluginsPanel', () => {
     })
 
     it('says so when nothing is left to install', async () => {
-      render(<PluginsPanel fetchFn={servers({ available: [AVAILABLE[0]] })} />)
+      render(
+        <PluginsPanel fetchFn={servers({
+          available: [AVAILABLE[0]],
+        })}
+        />,
+      )
 
       await screen.findByText('The project has every plugin on the list.')
     })
@@ -320,7 +434,10 @@ describe('pluginsPanel', () => {
   })
 
   it('shows why there is no list, and recovers on refresh', async () => {
-    const fetchFn = vi.fn(async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } }))
+    const fetchFn = vi.fn(async () => new Response('<html></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    }))
     render(<PluginsPanel fetchFn={fetchFn as unknown as typeof fetch} />)
 
     expect((await screen.findByRole('alert')).textContent).toContain('mavonEnginePlugins()')

@@ -7,14 +7,30 @@ const AMPERSAND_RE = /&/g
  * The command that opens `url` in the default browser on `platform`.
  */
 export function openCommand(url: string, platform: NodeJS.Platform = process.platform): [string, string[]] {
-  if (platform === 'darwin')
-    return ['open', [url]]
+  if (platform === 'darwin') {
+    return [
+      'open',
+      [url],
+    ]
+  }
 
   // `start` treats its first quoted argument as the window title, and & ends a cmd command
-  if (platform === 'win32')
-    return ['cmd', ['/c', 'start', '""', url.replace(AMPERSAND_RE, '^&')]]
+  if (platform === 'win32') {
+    return [
+      'cmd',
+      [
+        '/c',
+        'start',
+        '""',
+        url.replace(AMPERSAND_RE, '^&'),
+      ],
+    ]
+  }
 
-  return ['xdg-open', [url]]
+  return [
+    'xdg-open',
+    [url],
+  ]
 }
 
 /**
@@ -45,7 +61,9 @@ export function canOpenBrowserHere(env: Record<string, string | undefined> = pro
  */
 export async function servesPage(url: string, { timeoutMs = 3000, fetch = globalThis.fetch } = {}): Promise<boolean> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+    })
     await res.body?.cancel()
     return res.ok && (res.headers.get('content-type') ?? '').includes('text/html')
   }

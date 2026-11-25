@@ -10,7 +10,16 @@ describe('parseAddress', () => {
   })
 
   it('refuses what is no address, and names that would break the header', () => {
-    for (const bad of ['', 'player', 'player@', '@example.com', 'a b@example.com', 'a@b@example.com', 'x <nope>', 'a@example.com, b@example.com'])
+    for (const bad of [
+      '',
+      'player',
+      'player@',
+      '@example.com',
+      'a b@example.com',
+      'a@b@example.com',
+      'x <nope>',
+      'a@example.com, b@example.com',
+    ])
       expect(() => parseAddress(bad), bad).toThrow(MailError)
     expect(() => parseAddress({ address: 'player@example.com', name: 'x\r\nBcc: victim@example.com' })).toThrow('line break')
     expect(() => parseAddress(42 as never)).toThrow(MailError)
@@ -26,15 +35,30 @@ describe('toMessage', () => {
   const from = { address: 'game@example.com', name: 'Game' }
 
   it('brings a mail into the shape transports get, with the default sender', () => {
-    expect(toMessage({ to: 'a@example.com', cc: ['B <b@example.com>'], subject: ' Hi ', text: 'Hello', headers: { 'X-Game': 'quest' } }, from)).toEqual({
+    expect(toMessage({
+      to: 'a@example.com',
+      cc: ['B <b@example.com>'],
+      subject: ' Hi ',
+      text: 'Hello',
+      headers: { 'X-Game': 'quest' },
+    }, from)).toEqual({
       from,
-      to: [{ address: 'a@example.com' }],
-      cc: [{ address: 'b@example.com', name: 'B' }],
+      to: [
+        { address: 'a@example.com' },
+      ],
+      cc: [
+        { address: 'b@example.com', name: 'B' },
+      ],
       subject: 'Hi',
       text: 'Hello',
       headers: { 'X-Game': 'quest' },
     })
-    expect(toMessage({ to: 'a@example.com', from: 'other@example.com', subject: 'Hi', html: '<p>Hi</p>' }, from).from).toEqual({ address: 'other@example.com' })
+    expect(toMessage({
+      to: 'a@example.com',
+      from: 'other@example.com',
+      subject: 'Hi',
+      html: '<p>Hi</p>',
+    }, from).from).toEqual({ address: 'other@example.com' })
     expect(toMessage({ to: 'a@example.com', subject: 'Hi', text: 'x' })).not.toHaveProperty('from')
   })
 
@@ -44,9 +68,18 @@ describe('toMessage', () => {
     expect(() => toMessage({ ...ok, subject: ' ' })).toThrow('needs a subject')
     expect(() => toMessage({ ...ok, subject: 'Hi\r\nBcc: victim@example.com' })).toThrow('line break')
     expect(() => toMessage({ ...ok, text: '' })).toThrow('text or html')
-    expect(() => toMessage({ ...ok, headers: { Bcc: 'victim@example.com' } })).toThrow('can\'t have a "Bcc" header')
-    expect(() => toMessage({ ...ok, headers: { 'X-A': 'a\nb' } })).toThrow('without line breaks')
-    expect(() => toMessage({ ...ok, headers: { 'X A': 'a' } })).toThrow('header')
+    expect(() => toMessage({
+      ...ok,
+      headers: { Bcc: 'victim@example.com' },
+    })).toThrow('can\'t have a "Bcc" header')
+    expect(() => toMessage({
+      ...ok,
+      headers: { 'X-A': 'a\nb' },
+    })).toThrow('without line breaks')
+    expect(() => toMessage({
+      ...ok,
+      headers: { 'X A': 'a' },
+    })).toThrow('header')
     expect(() => toMessage(null as never)).toThrow(MailError)
   })
 })

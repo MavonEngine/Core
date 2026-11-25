@@ -6,24 +6,37 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import InstallDialog, { INSTALL_POLL_MS, sourceOf } from '../../../src/Editor/UI/Plugins/InstallDialog'
 
 vi.mock('../../../src/Editor/UI/Plugins/InstallDialog.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 /**
  * The dev server: starts an install on POST and answers GET with whatever `status` says right now,
  * or not at all while it is being restarted.
  */
-function devServer(start: () => Response = () => json({ job: job() }, 202)) {
+function devServer(start: () => Response = () => json({
+  job: job(),
+}, 202)) {
   const server = {
-    status: { available: true, job: job() } as object | null,
+    status: {
+      available: true,
+      job: job(),
+    } as object | null,
     posted: [] as unknown[],
     fetch: vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {
-        server.posted.push({ headers: init.headers, body: JSON.parse(String(init.body)) })
+        server.posted.push({
+          headers: init.headers,
+          body: JSON.parse(String(init.body)),
+        })
         return start()
       }
       if (!server.status)
@@ -35,10 +48,19 @@ function devServer(start: () => Response = () => json({ job: job() }, 202)) {
 }
 
 function job(overrides: Partial<InstallJob> = {}): InstallJob {
-  return { id: 4, packages: ['@acme/weather'], status: 'installing', output: '', ...overrides }
+  return {
+    id: 4,
+    packages: ['@acme/weather'],
+    status: 'installing',
+    output: '',
+    ...overrides,
+  }
 }
 
-const request = { packages: ['@acme/weather'], homepage: 'https://github.com/acme/weather' }
+const request = {
+  packages: ['@acme/weather'],
+  homepage: 'https://github.com/acme/weather',
+}
 
 afterEach(() => {
   cleanup()
@@ -95,17 +117,30 @@ describe('installDialog', () => {
     fireEvent.click(screen.getByLabelText('I have checked the source and trust it'))
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Install' })))
 
-    expect(server.posted).toEqual([{ headers: { 'Content-Type': 'application/json' }, body: { packages: ['@acme/weather'] } }])
+    expect(server.posted).toEqual([
+      {
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          packages: ['@acme/weather'],
+        },
+      },
+    ])
     screen.getByRole('dialog', { name: 'Installing @acme/weather' })
     screen.getByText('Running the package manager…')
     // Nothing to click while it runs
     expect(screen.queryByRole('button')).toBeNull()
 
-    server.status = { available: true, job: job({ output: 'added 3 packages in 2s\n' }) }
+    server.status = {
+      available: true,
+      job: job({ output: 'added 3 packages in 2s\n' }),
+    }
     await act(() => vi.advanceTimersByTimeAsync(INSTALL_POLL_MS))
     screen.getByText(/added 3 packages in 2s/)
 
-    server.status = { available: true, job: job({ status: 'restarting', output: 'added 3 packages in 2s\n' }) }
+    server.status = {
+      available: true,
+      job: job({ status: 'restarting', output: 'added 3 packages in 2s\n' }),
+    }
     await act(() => vi.advanceTimersByTimeAsync(INSTALL_POLL_MS))
     screen.getByRole('dialog', { name: 'Installed @acme/weather, restarting' })
 
@@ -115,7 +150,10 @@ describe('installDialog', () => {
     screen.getByText('The dev servers are restarting. The editor reloads when they are back.')
     screen.getByText(/added 3 packages in 2s/)
 
-    server.status = { available: true, job: job({ status: 'done', output: 'added 3 packages in 2s\n' }) }
+    server.status = {
+      available: true,
+      job: job({ status: 'done', output: 'added 3 packages in 2s\n' }),
+    }
     await act(() => vi.advanceTimersByTimeAsync(INSTALL_POLL_MS))
     screen.getByRole('dialog', { name: 'Installed @acme/weather' })
     screen.getByRole('button', { name: 'Reload the editor' })
@@ -129,7 +167,10 @@ describe('installDialog', () => {
     fireEvent.click(screen.getByLabelText('I have checked the source and trust it'))
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Install' })))
 
-    server.status = { available: true, job: job({ status: 'failed', output: 'npm error 404 Not Found\n', error: '\'npm install @acme/weather\' exited with code 1' }) }
+    server.status = {
+      available: true,
+      job: job({ status: 'failed', output: 'npm error 404 Not Found\n', error: '\'npm install @acme/weather\' exited with code 1' }),
+    }
     await act(() => vi.advanceTimersByTimeAsync(INSTALL_POLL_MS))
 
     screen.getByRole('dialog', { name: 'Could not install @acme/weather' })
@@ -159,7 +200,14 @@ describe('installDialog', () => {
     expect(sourceOf('./forest')).toBeUndefined()
     expect(sourceOf('github:acme/forest')).toBeUndefined()
 
-    render(<InstallDialog request={{ packages: ['forest', 'file:../mine'] }} onClose={() => {}} />)
+    render(
+      <InstallDialog
+        request={{
+          packages: ['forest', 'file:../mine'],
+        }}
+        onClose={() => {}}
+      />,
+    )
     screen.getByRole('dialog', { name: 'Install forest, file:../mine?' })
     screen.getByText('https://www.npmjs.com/package/forest')
     screen.getByText('No page to link to: look at what it points to yourself')

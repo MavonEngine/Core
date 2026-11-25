@@ -12,7 +12,10 @@ function writePackage(path: string, pkg: object) {
   writeFileSync(join(path, 'package.json'), JSON.stringify(pkg))
 }
 
-const project = { dependencies: { '@mavonengine/core': '0.0.20' }, scripts: { dev: 'concurrently ...' } }
+const project = {
+  dependencies: { '@mavonengine/core': '0.0.20' },
+  scripts: { dev: 'concurrently ...' },
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'mavonengine-dev-'))
@@ -31,21 +34,28 @@ describe('findProjectRoot', () => {
 
   it('walks up from a workspace to the project root', () => {
     writePackage(dir, project)
-    writePackage(join(dir, 'client'), { scripts: { dev: 'vite' } })
+    writePackage(join(dir, 'client'), {
+      scripts: { dev: 'vite' },
+    })
     mkdirSync(join(dir, 'client', 'src'))
 
     expect(findProjectRoot(join(dir, 'client', 'src'))).toBe(dir)
   })
 
   it('accepts @mavonengine/core as a dev dependency', () => {
-    writePackage(dir, { devDependencies: { '@mavonengine/core': '*' }, scripts: { dev: 'x' } })
+    writePackage(dir, {
+      devDependencies: { '@mavonengine/core': '*' },
+      scripts: { dev: 'x' },
+    })
 
     expect(findProjectRoot(dir)).toBe(dir)
   })
 
   it('skips packages without a dev script', () => {
     writePackage(dir, project)
-    writePackage(join(dir, 'lib'), { dependencies: { '@mavonengine/core': '*' } })
+    writePackage(join(dir, 'lib'), {
+      dependencies: { '@mavonengine/core': '*' },
+    })
 
     expect(findProjectRoot(join(dir, 'lib'))).toBe(dir)
   })
@@ -59,7 +69,9 @@ describe('findProjectRoot', () => {
   })
 
   it('returns undefined outside a project', () => {
-    writePackage(dir, { scripts: { dev: 'vite' } })
+    writePackage(dir, {
+      scripts: { dev: 'vite' },
+    })
 
     expect(findProjectRoot(dir)).toBeUndefined()
   })
@@ -67,14 +79,21 @@ describe('findProjectRoot', () => {
 
 describe('devScriptOf', () => {
   it('prefers dev:server over dev', () => {
-    expect(devScriptOf({ scripts: { 'dev': 'mavonengine dev', 'dev:server': 'npm run dev --prefix server' } })).toBe('dev:server')
-    expect(devScriptOf({ scripts: { dev: 'vite' } })).toBe('dev')
+    expect(devScriptOf({
+      scripts: { 'dev': 'mavonengine dev', 'dev:server': 'npm run dev --prefix server' },
+    })).toBe('dev:server')
+    expect(devScriptOf({
+      scripts: { dev: 'vite' },
+    })).toBe('dev')
     expect(devScriptOf({ scripts: {} })).toBeUndefined()
     expect(devScriptOf(undefined)).toBeUndefined()
   })
 
   it('lets findProjectRoot accept a project with only dev:server', () => {
-    writePackage(dir, { ...project, scripts: { 'dev:server': 'node server.js' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { 'dev:server': 'node server.js' },
+    })
 
     expect(findProjectRoot(dir)).toBe(dir)
   })
@@ -82,19 +101,28 @@ describe('devScriptOf', () => {
 
 describe('checkDevScript', () => {
   it('returns the script to run', () => {
-    writePackage(dir, { ...project, scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node server.js' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node server.js' },
+    })
 
     expect(checkDevScript(dir, {})).toBe('dev:server')
   })
 
   it('refuses a dev script that starts mavonengine dev again', () => {
-    writePackage(dir, { ...project, scripts: { dev: 'mavonengine dev --no-open' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'mavonengine dev --no-open' },
+    })
 
     expect(() => checkDevScript(dir, {})).toThrow('the \'dev\' script starts \'mavonengine dev\' again')
   })
 
   it('refuses to run inside the dev script it started, whatever the script says', () => {
-    writePackage(dir, { ...project, scripts: { 'dev:server': 'npx some-wrapper' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { 'dev:server': 'npx some-wrapper' },
+    })
 
     expect(() => checkDevScript(dir, { MAVONENGINE_DEV_SCRIPT: '1' })).toThrow('starts \'mavonengine dev\' again')
   })
@@ -136,35 +164,58 @@ describe('descendants', () => {
 
 describe('parseDevArgs', () => {
   it('defaults to the current directory', () => {
-    expect(parseDevArgs([], '/work')).toMatchObject({ cwd: resolve('/work') })
+    expect(parseDevArgs([], '/work')).toMatchObject({
+      cwd: resolve('/work'),
+    })
   })
 
   it('resolves --cwd against the current directory', () => {
-    expect(parseDevArgs(['--cwd', 'game'], '/work')).toMatchObject({ cwd: resolve('/work/game') })
+    expect(parseDevArgs(['--cwd', 'game'], '/work')).toMatchObject({
+      cwd: resolve('/work/game'),
+    })
   })
 
   it('opens the browser unless --no-open is passed or the terminal is an SSH session', () => {
-    expect(parseDevArgs([], '/work', {})).toMatchObject({ dashboard: { openBrowser: true, clientUrl: 'http://localhost:8050/' } })
-    expect(parseDevArgs(['--no-open'], '/work', {})).toMatchObject({ dashboard: { openBrowser: false } })
-    expect(parseDevArgs([], '/work', { SSH_TTY: '/dev/ttys001' })).toMatchObject({ dashboard: { openBrowser: false } })
+    expect(parseDevArgs([], '/work', {})).toMatchObject({
+      dashboard: { openBrowser: true, clientUrl: 'http://localhost:8050/' },
+    })
+    expect(parseDevArgs(['--no-open'], '/work', {})).toMatchObject({
+      dashboard: { openBrowser: false },
+    })
+    expect(parseDevArgs([], '/work', { SSH_TTY: '/dev/ttys001' })).toMatchObject({
+      dashboard: { openBrowser: false },
+    })
   })
 
   it('shows the dashboard for the local server by default', () => {
     const options = parseDevArgs([], '/work', {})
 
-    expect(options).toMatchObject({ dashboard: { intervalMs: 1000, transparent: false } })
+    expect(options).toMatchObject({
+      dashboard: { intervalMs: 1000, transparent: false },
+    })
     expect((options as any).dashboard.source.label).toBe('http://localhost:8050/api/game/metrics')
   })
 
   it('passes dashboard options on', () => {
-    const options = parseDevArgs(['--port', '9000', '--theme', 'nord', '--transparent'], '/work', {})
+    const options = parseDevArgs([
+      '--port',
+      '9000',
+      '--theme',
+      'nord',
+      '--transparent',
+    ], '/work', {})
 
-    expect(options).toMatchObject({ dashboard: { theme: 'nord', transparent: true } })
+    expect(options).toMatchObject({
+      dashboard: { theme: 'nord', transparent: true },
+    })
     expect((options as any).dashboard.source.label).toBe('http://localhost:9000/api/game/metrics')
   })
 
   it('turns the dashboard off with --no-dashboard', () => {
-    expect(parseDevArgs(['--no-dashboard'], '/work')).toEqual({ cwd: resolve('/work'), dashboard: false })
+    expect(parseDevArgs(['--no-dashboard'], '/work')).toEqual({
+      cwd: resolve('/work'),
+      dashboard: false,
+    })
   })
 
   it('rejects a bad dashboard port', () => {
@@ -186,19 +237,28 @@ describe('runDevCommand', () => {
   })
 
   it('runs the dev script and returns its exit code', async () => {
-    writePackage(dir, { ...project, scripts: { dev: 'node -e "process.exit(3)"' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'node -e "process.exit(3)"' },
+    })
 
     expect(await runDevCommand({ cwd: dir, dashboard: false })).toBe(3)
   })
 
   it('runs dev:server when the project has one', async () => {
-    writePackage(dir, { ...project, scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node -e "process.exit(4)"' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { 'dev': 'mavonengine dev', 'dev:server': 'node -e "process.exit(4)"' },
+    })
 
     expect(await runDevCommand({ cwd: dir, dashboard: false })).toBe(4)
   })
 
   it('fails before starting anything when dev would start itself', async () => {
-    writePackage(dir, { ...project, scripts: { dev: 'mavonengine dev' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'mavonengine dev' },
+    })
 
     await expect(runDevCommand({ cwd: dir, dashboard: false })).rejects.toThrow('dev:server')
   })
@@ -206,7 +266,10 @@ describe('runDevCommand', () => {
 
 describe.skipIf(process.platform === 'win32')('startDev', () => {
   it('captures the output of the dev script', async () => {
-    writePackage(dir, { ...project, scripts: { dev: 'node -e "console.log(\'hello from dev\')"' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'node -e "console.log(\'hello from dev\')"' },
+    })
 
     const dev = startDev(dir, { capture: true })
 
@@ -215,7 +278,10 @@ describe.skipIf(process.platform === 'win32')('startDev', () => {
   })
 
   it('marks the environment of the dev script', async () => {
-    writePackage(dir, { ...project, scripts: { 'dev:server': 'node -e "console.log(\'flag=\' + process.env.MAVONENGINE_DEV_SCRIPT)"' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { 'dev:server': 'node -e "console.log(\'flag=\' + process.env.MAVONENGINE_DEV_SCRIPT)"' },
+    })
 
     const dev = startDev(dir, { capture: true })
 
@@ -231,7 +297,10 @@ describe.skipIf(process.platform === 'win32')('startDev', () => {
       require('node:fs').writeFileSync('server.pid', String(process.pid))
       setInterval(() => {}, 1000)
     `)
-    writePackage(dir, { ...project, scripts: { dev: 'node server.cjs' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'node server.cjs' },
+    })
 
     const dev = startDev(dir, { capture: true })
     const pidFile = join(dir, 'server.pid')
@@ -255,9 +324,14 @@ describe.skipIf(process.platform === 'win32')('startDevSession', () => {
       console.log('run ' + (runs + 1))
       setInterval(() => {}, 1000)
     `)
-    writePackage(dir, { ...project, scripts: { dev: 'node server.cjs' } })
+    writePackage(dir, {
+      ...project,
+      scripts: { dev: 'node server.cjs' },
+    })
   }
-  const runs = () => existsSync(join(dir, 'runs')) ? Number(readFileSync(join(dir, 'runs'), 'utf8')) : 0
+  const runs = () => existsSync(join(dir, 'runs'))
+    ? Number(readFileSync(join(dir, 'runs'), 'utf8'))
+    : 0
 
   it('restarts the dev script without counting that as its exit', async () => {
     countingProject()
@@ -281,7 +355,10 @@ describe.skipIf(process.platform === 'win32')('startDevSession', () => {
   it('lets the dev script reach the installer, which restarts it after an install', async () => {
     countingProject()
     const output: string[] = []
-    const { session, installer, close } = await startDevWithInstaller(dir, { capture: true, onOutput: text => output.push(text) })
+    const { session, installer, close } = await startDevWithInstaller(dir, {
+      capture: true,
+      onOutput: text => output.push(text),
+    })
     // No package manager here: the install itself is covered by the install command's tests
     ;(installer as any).options.install = async (_root: string, packages: string[], write: (text: string) => void) => {
       write(`installed ${packages.join(' ')}\n`)
@@ -290,11 +367,20 @@ describe.skipIf(process.platform === 'win32')('startDevSession', () => {
     await vi.waitFor(() => expect(runs()).toBe(1), { timeout: 5000 })
 
     const [url, token] = readFileSync(join(dir, 'control'), 'utf8').split(' ')
-    const started = await fetch(`${url}/install`, { method: 'POST', headers: { 'x-mavonengine-dev-token': token }, body: JSON.stringify({ packages: ['forest'] }) })
+    const started = await fetch(`${url}/install`, {
+      method: 'POST',
+      headers: { 'x-mavonengine-dev-token': token },
+      body: JSON.stringify({
+        packages: ['forest'],
+      }),
+    })
     expect(started.status).toBe(202)
     await installer.finished
 
-    expect(installer.job).toMatchObject({ status: 'done', packages: ['forest'] })
+    expect(installer.job).toMatchObject({
+      status: 'done',
+      packages: ['forest'],
+    })
     await vi.waitFor(() => expect(runs()).toBe(2), { timeout: 5000 })
     expect(output.join('')).toContain('installed forest')
     expect(output.join('')).toContain('restarting the dev script')

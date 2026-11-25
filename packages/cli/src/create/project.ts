@@ -65,7 +65,9 @@ export async function downloadZip(url: string, { report, signal, fetch = globalT
   const progress = new Transform({
     transform(chunk: Uint8Array, _encoding, callback) {
       received += chunk.length
-      report.step(`Downloading the template… ${formatBytes(received)}${total ? ` of ${formatBytes(total)}` : ''}`)
+      report.step(`Downloading the template… ${formatBytes(received)}${total
+        ? ` of ${formatBytes(total)}`
+        : ''}`)
       callback(null, chunk)
     },
   })
@@ -142,14 +144,20 @@ export function runCommand(command: string, args: string[], cwd: string, { repor
     child.stderr.setEncoding('utf8').on('data', report.output)
 
     child.on('error', (err: NodeJS.ErrnoException) => {
-      reject(err.code === 'ENOENT' ? new Error(`'${command}' was not found on your PATH`) : err)
+      reject(err.code === 'ENOENT'
+        ? new Error(`'${command}' was not found on your PATH`)
+        : err)
     })
 
     child.on('exit', (code, exitSignal) => {
-      if (code === 0)
+      if (code === 0) {
         resolvePromise()
-      else
-        reject(new Error(`'${command} ${args.join(' ')}' ${code === null ? `was stopped by ${exitSignal}` : `exited with code ${code}`}`))
+      }
+      else {
+        reject(new Error(`'${command} ${args.join(' ')}' ${code === null
+          ? `was stopped by ${exitSignal}`
+          : `exited with code ${code}`}`))
+      }
     })
   })
 }

@@ -7,13 +7,24 @@ describe('netRecorder', () => {
 
     expect(recorder.packet('out', 'sv_state', { tick: 1 })).toBeUndefined()
     expect(recorder.event('connect')).toBeUndefined()
-    expect(recorder.list()).toEqual({ enabled: false, latestId: 0, matched: 0, records: [] })
+    expect(recorder.list()).toEqual({
+      enabled: false,
+      latestId: 0,
+      matched: 0,
+      records: [],
+    })
   })
 
   it('records packets with their size and the facts of the payload', () => {
     const recorder = new NetRecorder({ enabled: true })
 
-    const state = { type: 'sv_state', tick: 7, ack: 3, sequenceId: 0, entities: [{}, {}] }
+    const state = {
+      type: 'sv_state',
+      tick: 7,
+      ack: 3,
+      sequenceId: 0,
+      entities: [{}, {}],
+    }
     const command = { type: 'cl_move', sequenceId: 4 }
     recorder.packet('out', 'sv_state', state, { peer: 'p1', timestamp: 1000 })
     recorder.packet('in', 'command', command, { peer: 'p1', timestamp: 1001 })
@@ -21,9 +32,42 @@ describe('netRecorder', () => {
 
     const { records } = recorder.list()
     expect(records).toEqual([
-      { id: 1, timestamp: 1000, kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', bytes: JSON.stringify(state).length, tick: 7, sequenceId: undefined, info: { entities: 2, ack: 3 }, hasPayload: true },
-      { id: 2, timestamp: 1001, kind: 'packet', direction: 'in', type: 'command', peer: 'p1', bytes: JSON.stringify(command).length, tick: undefined, sequenceId: 4, info: { command: 'cl_move' }, hasPayload: true },
-      { id: 3, timestamp: 1002, kind: 'packet', direction: 'in', type: 'ping', peer: 'p1', bytes: 0, hasPayload: false },
+      {
+        id: 1,
+        timestamp: 1000,
+        kind: 'packet',
+        direction: 'out',
+        type: 'sv_state',
+        peer: 'p1',
+        bytes: JSON.stringify(state).length,
+        tick: 7,
+        sequenceId: undefined,
+        info: { entities: 2, ack: 3 },
+        hasPayload: true,
+      },
+      {
+        id: 2,
+        timestamp: 1001,
+        kind: 'packet',
+        direction: 'in',
+        type: 'command',
+        peer: 'p1',
+        bytes: JSON.stringify(command).length,
+        tick: undefined,
+        sequenceId: 4,
+        info: { command: 'cl_move' },
+        hasPayload: true,
+      },
+      {
+        id: 3,
+        timestamp: 1002,
+        kind: 'packet',
+        direction: 'in',
+        type: 'ping',
+        peer: 'p1',
+        bytes: 0,
+        hasPayload: false,
+      },
     ])
   })
 
@@ -37,7 +81,10 @@ describe('netRecorder', () => {
 
     recorder.packet('out', 'sv_state', data, { json: '{"tick":1}' })
 
-    expect(recorder.get(1)).toMatchObject({ bytes: 10, payload: { tick: 1 } })
+    expect(recorder.get(1)).toMatchObject({
+      bytes: 10,
+      payload: { tick: 1 },
+    })
   })
 
   it('filters by id, kind, direction, type and peer, keeping the newest', () => {
@@ -55,7 +102,14 @@ describe('netRecorder', () => {
     expect(ids({ direction: 'out' })).toEqual([2, 3])
     expect(ids({ type: 'command, ping' })).toEqual([4, 5])
     expect(ids({ peer: 'b' })).toEqual([3])
-    expect(recorder.list({ limit: 2 })).toMatchObject({ latestId: 5, matched: 5, records: [{ id: 4 }, { id: 5 }] })
+    expect(recorder.list({ limit: 2 })).toMatchObject({
+      latestId: 5,
+      matched: 5,
+      records: [
+        { id: 4 },
+        { id: 5 },
+      ],
+    })
   })
 
   it('keeps only the newest records', () => {
@@ -65,7 +119,10 @@ describe('netRecorder', () => {
 
     expect(recorder.list().records.map(record => record.id)).toEqual([3, 4, 5])
     expect(recorder.get(2)).toBeUndefined()
-    expect(recorder.get(4)).toMatchObject({ id: 4, payload: { tick: 3 } })
+    expect(recorder.get(4)).toMatchObject({
+      id: 4,
+      payload: { tick: 3 },
+    })
     expect(recorder.get(6)).toBeUndefined()
   })
 
@@ -78,7 +135,9 @@ describe('netRecorder', () => {
     expect(recorder.list().records.map(record => record.hasPayload)).toEqual([false, false, true])
     expect(recorder.get(1)).toMatchObject({ type: 'a', bytes: 17, hasPayload: false })
     expect(recorder.get(1)).not.toHaveProperty('payload')
-    expect(recorder.get(3)).toMatchObject({ payload: { value: 'ccccc' } })
+    expect(recorder.get(3)).toMatchObject({
+      payload: { value: 'ccccc' },
+    })
   })
 
   it('runs onEnabled hooks once recording starts', () => {
@@ -114,7 +173,11 @@ describe('describePayload', () => {
   })
 
   it('reads the id of a removed entity', () => {
-    expect(describePayload('sv_remove_entity', { id: 'rock' })).toEqual({ tick: undefined, sequenceId: undefined, info: { id: 'rock' } })
+    expect(describePayload('sv_remove_entity', { id: 'rock' })).toEqual({
+      tick: undefined,
+      sequenceId: undefined,
+      info: { id: 'rock' },
+    })
   })
 })
 
@@ -127,8 +190,22 @@ describe('byteLength', () => {
 
 describe('parseNetRecordQuery', () => {
   it('parses query string params', () => {
-    expect(parseNetRecordQuery({ after: '12', limit: '5', kind: 'packet', direction: 'in', type: 'sv_state', peer: 'p1' }))
-      .toEqual({ after: 12, limit: 5, kind: 'packet', direction: 'in', type: 'sv_state', peer: 'p1' })
+    expect(parseNetRecordQuery({
+      after: '12',
+      limit: '5',
+      kind: 'packet',
+      direction: 'in',
+      type: 'sv_state',
+      peer: 'p1',
+    }))
+      .toEqual({
+        after: 12,
+        limit: 5,
+        kind: 'packet',
+        direction: 'in',
+        type: 'sv_state',
+        peer: 'p1',
+      })
     expect(parseNetRecordQuery({ after: '', kind: '' })).toEqual({})
   })
 

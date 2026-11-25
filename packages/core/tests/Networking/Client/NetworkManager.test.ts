@@ -134,15 +134,38 @@ describe('networkManager', () => {
 
   describe('server view', () => {
     const stateHandler = () => mockSocket.on.mock.calls.find(([event]) => event === 'sv_state')![1]
-    const entity = (id: string, x: number) => ({ id, $typeName: 'rock', position: { x, y: 0, z: 0 }, rotation: { x: 0, y: 1, z: 0 }, scale: { x: 1, y: 1, z: 1 } })
+    const entity = (id: string, x: number) => ({
+      id,
+      $typeName: 'rock',
+      position: { x, y: 0, z: 0 },
+      rotation: { x: 0, y: 1, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    })
 
     it('keeps the tick, server time and ack of the last state', () => {
       const nm = new NetworkManager({})
-      expect(nm.serverView).toMatchObject({ tick: null, ack: null, receivedAt: null, missedStates: 0 })
+      expect(nm.serverView).toMatchObject({
+        tick: null,
+        ack: null,
+        receivedAt: null,
+        missedStates: 0,
+      })
 
-      stateHandler()({ tick: 5, serverTime: 1234, ack: 9, entities: [entity('rock', 1)] })
+      stateHandler()({
+        tick: 5,
+        serverTime: 1234,
+        ack: 9,
+        entities: [
+          entity('rock', 1),
+        ],
+      })
 
-      expect(nm.serverView).toMatchObject({ tick: 5, serverTime: 1234, ack: 9, missedStates: 0 })
+      expect(nm.serverView).toMatchObject({
+        tick: 5,
+        serverTime: 1234,
+        ack: 9,
+        missedStates: 0,
+      })
       expect(nm.serverView.receivedAt).toBeGreaterThan(0)
       // Entities are only kept for the dev tools
       expect(nm.serverView.entities.size).toBe(0)
@@ -152,12 +175,36 @@ describe('networkManager', () => {
       const nm = new NetworkManager({})
       nm.net.enabled = true
 
-      stateHandler()({ tick: 5, serverTime: 1, ack: 0, entities: [entity('rock', 1), entity('tree', 2)] })
-      stateHandler()({ tick: 6, serverTime: 2, ack: 0, entities: [entity('rock', 3)] })
+      stateHandler()({
+        tick: 5,
+        serverTime: 1,
+        ack: 0,
+        entities: [
+          entity('rock', 1),
+          entity('tree', 2),
+        ],
+      })
+      stateHandler()({
+        tick: 6,
+        serverTime: 2,
+        ack: 0,
+        entities: [
+          entity('rock', 3),
+        ],
+      })
 
-      expect(nm.serverView.entities.get('rock')).toMatchObject({ id: 'rock', type: 'rock', position: { x: 3, y: 0, z: 0 }, rotation: { x: 0, y: 1, z: 0 }, tick: 6 })
+      expect(nm.serverView.entities.get('rock')).toMatchObject({
+        id: 'rock',
+        type: 'rock',
+        position: { x: 3, y: 0, z: 0 },
+        rotation: { x: 0, y: 1, z: 0 },
+        tick: 6,
+      })
       // Not in the newest state: still where the server last said, with the tick it said so in
-      expect(nm.serverView.entities.get('tree')).toMatchObject({ position: { x: 2, y: 0, z: 0 }, tick: 5 })
+      expect(nm.serverView.entities.get('tree')).toMatchObject({
+        position: { x: 2, y: 0, z: 0 },
+        tick: 5,
+      })
 
       mockSocket.on.mock.calls.find(([event]) => event === 'sv_remove_entity')![1]({ id: 'tree' })
       expect(nm.serverView.entities.has('tree')).toBe(false)
@@ -167,15 +214,44 @@ describe('networkManager', () => {
       const nm = new NetworkManager({})
       nm.net.enabled = true
 
-      stateHandler()({ tick: 5, serverTime: 1, ack: 0, entities: [entity('rock', 5)] })
-      stateHandler()({ tick: 8, serverTime: 2, ack: 0, entities: [entity('rock', 8)] })
-      stateHandler()({ tick: 7, serverTime: 2, ack: 0, entities: [entity('rock', 7)] })
+      stateHandler()({
+        tick: 5,
+        serverTime: 1,
+        ack: 0,
+        entities: [
+          entity('rock', 5),
+        ],
+      })
+      stateHandler()({
+        tick: 8,
+        serverTime: 2,
+        ack: 0,
+        entities: [
+          entity('rock', 8),
+        ],
+      })
+      stateHandler()({
+        tick: 7,
+        serverTime: 2,
+        ack: 0,
+        entities: [
+          entity('rock', 7),
+        ],
+      })
 
       expect(nm.serverView).toMatchObject({ tick: 8, missedStates: 2 })
       expect(nm.serverView.entities.get('rock')!.position.x).toBe(8)
       expect(nm.net.list({ kind: 'event' }).records).toMatchObject([
-        { type: 'state_gap', tick: 8, info: { missed: 2, after: 5 } },
-        { type: 'state_out_of_order', tick: 7, info: { newest: 8 } },
+        {
+          type: 'state_gap',
+          tick: 8,
+          info: { missed: 2, after: 5 },
+        },
+        {
+          type: 'state_out_of_order',
+          tick: 7,
+          info: { newest: 8 },
+        },
       ])
     })
 
@@ -199,8 +275,18 @@ describe('networkManager', () => {
       expect(sent).toHaveBeenCalledWith('command', { type: 'cl_move', sequenceId: 0 })
       expect(received).toHaveBeenCalledWith('sv_state', { tick: 1, ack: 0, entities: [] })
       expect(nm.net.list().records).toMatchObject([
-        { direction: 'out', type: 'command', sequenceId: 0, info: { command: 'cl_move' } },
-        { direction: 'in', type: 'sv_state', tick: 1, info: { entities: 0, ack: 0 } },
+        {
+          direction: 'out',
+          type: 'command',
+          sequenceId: 0,
+          info: { command: 'cl_move' },
+        },
+        {
+          direction: 'in',
+          type: 'sv_state',
+          tick: 1,
+          info: { entities: 0, ack: 0 },
+        },
       ])
 
       delete socket.connectionsManager

@@ -20,7 +20,14 @@ describe('the built plugin', () => {
     // tsup takes entries as globs, where a backslash escapes: on Windows a resolved path matches nothing
     const entry = relative(process.cwd(), resolve(import.meta.dirname, '../src/index.ts')).split(sep).join('/')
     // tsup picks .js or .mjs by the package.json where it runs, so from the repo root it would be .mjs
-    await build({ ...(config as object), entry: [entry], outDir, outExtension: () => ({ js: '.js' }), clean: true, silent: true })
+    await build({
+      ...(config as object),
+      entry: [entry],
+      outDir,
+      outExtension: () => ({ js: '.js' }),
+      clean: true,
+      silent: true,
+    })
     const file = join(outDir, 'index.js')
 
     // node:sqlite has no name without the prefix: a bundler that drops it breaks the plugin
@@ -28,7 +35,9 @@ describe('the built plugin', () => {
 
     const built = await import(pathToFileURL(file).href)
     const db: Kysely<any> = built.openSqlite(':memory:')
-    expect((await sql<{ n: number }>`select 41 + 1 as n`.execute(db)).rows).toEqual([{ n: 42 }])
+    expect((await sql<{ n: number }>`select 41 + 1 as n`.execute(db)).rows).toEqual([
+      { n: 42 },
+    ])
     await db.destroy()
   }, 30_000)
 })

@@ -10,7 +10,9 @@ export interface ParticleRegistryEntry {
 
 const registry: Record<string, ParticleRegistryEntry> = {}
 // eslint-disable-next-line node/prefer-global/process
-const logger = new Logger(process.env.NODE_ENV === 'production' ? 'error' : 'debug')
+const logger = new Logger(process.env.NODE_ENV === 'production'
+  ? 'error'
+  : 'debug')
 
 export function registerParticle(name: string, entry: ParticleRegistryEntry) {
   registry[name] = entry

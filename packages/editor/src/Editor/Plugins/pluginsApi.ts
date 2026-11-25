@@ -24,7 +24,10 @@ export function registryUrl(): string {
  * MavonEngine repository, read from GitHub by the browser.
  */
 export async function fetchAvailablePlugins(installed: PluginInfo[], fetchFn: typeof fetch = fetch): Promise<AvailablePlugin[]> {
-  const { plugins } = await fetchPluginRegistry({ url: registryUrl(), fetch: fetchFn })
+  const { plugins } = await fetchPluginRegistry({
+    url: registryUrl(),
+    fetch: fetchFn,
+  })
   return notInProject(plugins, installed.map(plugin => plugin.package))
 }
 
@@ -50,7 +53,12 @@ export async function fetchPlugins(fetchFn: typeof fetch = fetch): Promise<Plugi
     throw new Error(`The dev server answered ${res.status} ${res.statusText}`)
 
   const { root = null, plugins } = await res.json() as Partial<PluginInfoList>
-  return { root, plugins: Array.isArray(plugins) ? plugins : [] }
+  return {
+    root,
+    plugins: Array.isArray(plugins)
+      ? plugins
+      : [],
+  }
 }
 
 export interface PluginPrefab {
@@ -70,10 +78,19 @@ export interface PluginPrefab {
 export function pluginPrefabs(plugin: PluginInfo, registered: { name: string, label?: string, plugin?: string }[]): PluginPrefab[] {
   const prefabs = new Map<string, PluginPrefab>()
 
-  for (const prefab of registered.filter(prefab => prefab.plugin === plugin.package))
-    prefabs.set(prefab.name, { name: prefab.name, label: prefab.label, registered: true, used: false })
+  for (const prefab of registered.filter(prefab => prefab.plugin === plugin.package)) {
+    prefabs.set(prefab.name, {
+      name: prefab.name,
+      label: prefab.label,
+      registered: true,
+      used: false,
+    })
+  }
 
-  for (const name of [...plugin.declaredPrefabs, ...plugin.usedPrefabs]) {
+  for (const name of [
+    ...plugin.declaredPrefabs,
+    ...plugin.usedPrefabs,
+  ]) {
     if (!prefabs.has(name))
       prefabs.set(name, { name, registered: false, used: false })
   }
@@ -81,7 +98,9 @@ export function pluginPrefabs(plugin: PluginInfo, registered: { name: string, la
   for (const name of plugin.usedPrefabs)
     prefabs.get(name)!.used = true
 
-  return [...prefabs.values()]
+  return [
+    ...prefabs.values(),
+  ]
 }
 
 /**

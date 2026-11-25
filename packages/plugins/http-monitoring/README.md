@@ -65,7 +65,9 @@ Set in `mavonengine.json` under `plugins["@mavonengine/http-monitoring"].options
 import { createHttpMonitoring } from '@mavonengine/http-monitoring'
 
 const server = new MyServer(logger, physicsWorld, {
-  plugins: [createHttpMonitoring({ htpasswd: '/etc/mygame/monitoring.htpasswd' })],
+  plugins: [
+    createHttpMonitoring({ htpasswd: '/etc/mygame/monitoring.htpasswd' })
+  ],
 })
 ```
 

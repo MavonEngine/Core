@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ActivityBar from '../../../src/Editor/UI/ActivityBar'
 
 vi.mock('../../../src/Editor/UI/ActivityBar.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 afterEach(cleanup)
@@ -31,6 +33,9 @@ describe('activityBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Server' }))
     fireEvent.click(screen.getByRole('button', { name: 'Scene' }))
 
-    expect(onSelect.mock.calls).toEqual([['server'], ['scene']])
+    expect(onSelect.mock.calls).toEqual([
+      ['server'],
+      ['scene'],
+    ])
   })
 })

@@ -13,7 +13,9 @@ export function tempProject(): string {
 }
 
 export function writeConfig(root: string, config: Partial<MavonEngineConfig> | string) {
-  writeFileSync(join(root, 'mavonengine.json'), typeof config === 'string' ? config : JSON.stringify(config))
+  writeFileSync(join(root, 'mavonengine.json'), typeof config === 'string'
+    ? config
+    : JSON.stringify(config))
 }
 
 export function writeFile(path: string, content: string | Buffer = '') {
@@ -26,7 +28,14 @@ export function writeFile(path: string, content: string | Buffer = '') {
  */
 export function installPlugin(root: string, pkg: string, manifest: PluginManifest | undefined, files: Record<string, string> = {}): string {
   const dir = join(root, 'node_modules', pkg)
-  writeFile(join(dir, 'package.json'), JSON.stringify({ name: pkg, version: '1.0.0', type: 'module', ...(manifest ? { mavonengine: manifest } : {}) }))
+  writeFile(join(dir, 'package.json'), JSON.stringify({
+    name: pkg,
+    version: '1.0.0',
+    type: 'module',
+    ...(manifest
+      ? { mavonengine: manifest }
+      : {}),
+  }))
   for (const [path, content] of Object.entries(files))
     writeFile(join(dir, path), content)
   return dir

@@ -54,7 +54,10 @@ export class NpmRegistry {
     let res: Response
     try {
       // The full document: the abbreviated one leaves out the `mavonengine` field
-      res = await this.fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(this.timeoutMs) })
+      res = await this.fetch(url, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      })
     }
     catch (err) {
       this.unreachable ??= `can't reach ${this.url}: ${(err as Error).message}`

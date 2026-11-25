@@ -9,7 +9,7 @@
     "packages/plugins/*"
   ],
   "devDependencies": {
-    "@antfu/eslint-config": "8.0.0",
+    "@antfu/eslint-config": "10.0.0",
     "bcryptjs": "^3.0.3",
     "eslint": "10.1.0",
     "playwright-core": "^1.65.0",

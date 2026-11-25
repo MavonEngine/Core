@@ -31,7 +31,9 @@ function fallback(url: string): string {
 }
 
 export function verifyEmailMail(to: string, name: string, url: string, appName?: string): MailInput {
-  const game = appName ? ` for ${appName}` : ''
+  const game = appName
+    ? ` for ${appName}`
+    : ''
   const hello = `Hi ${name},`
   const ask = `Please confirm that ${to} is your email address${game}.`
   const expiry = `The link works for ${VERIFY_EMAIL_HOURS} hours. If you didn't make this account, you can ignore this mail.`
@@ -45,7 +47,9 @@ export function verifyEmailMail(to: string, name: string, url: string, appName?:
 }
 
 export function resetPasswordMail(to: string, name: string, url: string, appName?: string): MailInput {
-  const game = appName ? ` on ${appName}` : ''
+  const game = appName
+    ? ` on ${appName}`
+    : ''
   const hello = `Hi ${name},`
   const ask = `Someone asked to reset the password of your account ${name}${game}. Choose a new one with this link.`
   const expiry = `The link works for ${RESET_PASSWORD_MINUTES} minutes, once. If it wasn't you, ignore this mail: your password stays as it is.`

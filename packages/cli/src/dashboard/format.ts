@@ -7,7 +7,9 @@ export function formatBytes(bytes: number, decimals = 1): string {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1)
   const value = bytes / 1024 ** exponent
 
-  return `${exponent === 0 ? value : value.toFixed(decimals)} ${BYTE_UNITS[exponent]}`
+  return `${exponent === 0
+    ? value
+    : value.toFixed(decimals)} ${BYTE_UNITS[exponent]}`
 }
 
 export function formatRate(bytesPerSecond: number): string {
@@ -31,7 +33,9 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 export function formatMs(ms: number): string {
-  return `${ms.toFixed(ms < 10 ? 2 : 1)} ms`
+  return `${ms.toFixed(ms < 10
+    ? 2
+    : 1)} ms`
 }
 
 export function formatPercent(value: number): string {

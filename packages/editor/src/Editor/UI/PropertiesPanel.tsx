@@ -224,7 +224,9 @@ export default function PropertiesPanel() {
   /* listen for selection */
   useEffect(() => {
     function onObjectSelected(selected: Object3D) {
-      setObject(prev => prev?.uuid !== selected.uuid ? selected : prev)
+      setObject(prev => prev?.uuid !== selected.uuid
+        ? selected
+        : prev)
     }
     function onObjectDeselected() {
       setObject(null)
@@ -240,7 +242,9 @@ export default function PropertiesPanel() {
   /* listen for prefab panes */
   useEffect(() => {
     function onPrefabCreated(config: PrefabPaneConfig) {
-      setPrefabPanes(prev => prev.has(config.label) ? prev : new Map(prev).set(config.label, config))
+      setPrefabPanes(prev => prev.has(config.label)
+        ? prev
+        : new Map(prev).set(config.label, config))
     }
     function onPrefabPanesCleared() {
       setPrefabPanes(new Map())
@@ -274,7 +278,11 @@ export default function PropertiesPanel() {
   }
 
   const isMesh = object instanceof Mesh
-  const materials = isMesh ? (Array.isArray(object.material) ? object.material : [object.material]) : []
+  const materials = isMesh
+    ? (Array.isArray(object.material)
+        ? object.material
+        : [object.material])
+    : []
   const isPlane = isMesh && object.geometry instanceof PlaneGeometry
   const helperProperties = EditorHelper.from(object)?.attachment?.properties ?? null
 

@@ -37,7 +37,9 @@ export function parseBuildArgs(args: string[], cwd = process.cwd()): BuildOption
   if (values.help)
     return 'help'
 
-  return { cwd: resolve(cwd, values.cwd ?? '.') }
+  return {
+    cwd: resolve(cwd, values.cwd ?? '.'),
+  }
 }
 
 /**
@@ -52,8 +54,12 @@ export function summarizeReleaseAssets(root: string, assets: ReleaseAsset[], war
   const lines = [`\nPlugins in ${CONFIG_FILE}:`]
   for (const [pkg, entry] of enabled) {
     const count = assets.filter(a => a.package === pkg).length
-    const prefabs = entry?.prefabs?.length ? `, prefabs: ${entry.prefabs.join(', ')}` : ''
-    lines.push(`  ${pkg}: ${count} asset${count === 1 ? '' : 's'}${prefabs}`)
+    const prefabs = entry?.prefabs?.length
+      ? `, prefabs: ${entry.prefabs.join(', ')}`
+      : ''
+    lines.push(`  ${pkg}: ${count} asset${count === 1
+      ? ''
+      : 's'}${prefabs}`)
   }
   for (const warning of warnings)
     lines.push(`  warning: ${warning}`)
@@ -65,7 +71,9 @@ function run(command: string, args: string[], cwd: string): Promise<number> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
     child.on('error', (err: NodeJS.ErrnoException) => {
-      reject(err.code === 'ENOENT' ? new Error(`'${command}' was not found on your PATH`) : err)
+      reject(err.code === 'ENOENT'
+        ? new Error(`'${command}' was not found on your PATH`)
+        : err)
     })
     child.on('exit', code => resolvePromise(code ?? 1))
   })

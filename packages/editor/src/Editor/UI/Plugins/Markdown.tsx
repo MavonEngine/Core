@@ -64,7 +64,9 @@ function inline(text: string): ReactNode[] {
 
 /** Drop HTML tags, but not what looks like one inside `code`, such as `http://<host>/` */
 function stripHtml(text: string): string {
-  return text.split(CODE_SPAN_RE).map((part, i) => i % 2 ? part : part.replace(HTML_TAG_RE, '')).join('')
+  return text.split(CODE_SPAN_RE).map((part, i) => i % 2
+    ? part
+    : part.replace(HTML_TAG_RE, '')).join('')
 }
 
 function cells(row: string): string[] {

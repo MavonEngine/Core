@@ -98,16 +98,25 @@ export function toDevOptions(values: DevFlags, cwd: string, env: Record<string, 
   let dashboard: DashboardOptions | false = false
   if (values.dashboard) {
     const dashboardArgs = [
-      ...(values.port ? ['--port', values.port] : []),
-      ...(values.theme ? ['--theme', values.theme] : []),
-      ...(values.transparent ? ['--transparent'] : []),
+      ...(values.port
+        ? ['--port', values.port]
+        : []),
+      ...(values.theme
+        ? ['--theme', values.theme]
+        : []),
+      ...(values.transparent
+        ? ['--transparent']
+        : []),
     ]
     dashboard = parseDashboardArgs(dashboardArgs, env) as DashboardOptions
     // Over SSH the browser would open on the other machine
     dashboard.openBrowser = values.open && canOpenBrowserHere(env)
   }
 
-  return { cwd: resolve(cwd, values.cwd ?? '.'), dashboard }
+  return {
+    cwd: resolve(cwd, values.cwd ?? '.'),
+    dashboard,
+  }
 }
 
 function readPackageJson(dir: string): Record<string, any> | undefined {
@@ -130,7 +139,9 @@ export function devScriptOf(pkg: Record<string, any> | undefined): string | unde
   const scripts = pkg?.scripts ?? {}
   if (typeof scripts[DEV_SERVER_SCRIPT] === 'string')
     return DEV_SERVER_SCRIPT
-  return typeof scripts.dev === 'string' ? 'dev' : undefined
+  return typeof scripts.dev === 'string'
+    ? 'dev'
+    : undefined
 }
 
 /**
@@ -158,7 +169,10 @@ export function checkDevScript(root: string, env: Record<string, string | undefi
 export function findProjectRoot(start: string): string | undefined {
   for (let dir = resolve(start); ; dir = dirname(dir)) {
     const pkg = readPackageJson(dir)
-    const deps = { ...pkg?.dependencies, ...pkg?.devDependencies }
+    const deps = {
+      ...pkg?.dependencies,
+      ...pkg?.devDependencies,
+    }
     if ('@mavonengine/core' in deps && devScriptOf(pkg))
       return dir
 
@@ -209,7 +223,10 @@ function processTree(pid: number): number[] {
     return []
 
   try {
-    return [pid, ...descendants(pid, execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }))]
+    return [
+      pid,
+      ...descendants(pid, execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' })),
+    ]
   }
   catch {
     return [pid]
@@ -250,7 +267,12 @@ async function waitForExit(pids: number[], timeoutMs: number) {
 function killTree(pid: number, signal: NodeJS.Signals) {
   if (process.platform === 'win32') {
     try {
-      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
+      execFileSync('taskkill', [
+        '/pid',
+        String(pid),
+        '/T',
+        '/F',
+      ], { stdio: 'ignore' })
     }
     catch {
       // Already gone
@@ -287,8 +309,14 @@ export function startDev(root: string, { capture = false, env = {} }: StartDevOp
 
   const child = spawn(pm, ['run', script], {
     cwd: root,
-    env: { ...process.env, ...env, [DEV_ENV_FLAG]: '1' },
-    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    env: {
+      ...process.env,
+      ...env,
+      [DEV_ENV_FLAG]: '1',
+    },
+    stdio: capture
+      ? ['ignore', 'pipe', 'pipe']
+      : 'inherit',
     // npm, pnpm and yarn are .cmd shims on Windows
     shell: process.platform === 'win32',
   })
@@ -331,7 +359,9 @@ export function startDev(root: string, { capture = false, env = {} }: StartDevOp
 
     child.on('error', (err: NodeJS.ErrnoException) => {
       cleanup()
-      reject(err.code === 'ENOENT' ? new Error(`'${pm}' was not found on your PATH`) : err)
+      reject(err.code === 'ENOENT'
+        ? new Error(`'${pm}' was not found on your PATH`)
+        : err)
     })
 
     child.on('exit', (code, signal) => {
@@ -360,7 +390,11 @@ export function startDev(root: string, { capture = false, env = {} }: StartDevOp
     return exited
   }
 
-  return { exited, stop, output: () => output }
+  return {
+    exited,
+    stop,
+    output: () => output,
+  }
 }
 
 export interface DevSession {
@@ -417,13 +451,18 @@ export function startDevSession(root: string, options: StartDevOptions = {}): De
 export async function startDevWithInstaller(root: string, { capture = false, onOutput }: { capture?: boolean, onOutput?(text: string): void } = {}) {
   // The session needs the control server's address for the dev script, the installer needs the session to restart
   let session: DevSession | undefined
-  const installer = new PluginInstaller({ root, restart: async () => session?.restart() })
+  const installer = new PluginInstaller({
+    root,
+    restart: async () => session?.restart(),
+  })
   const control = await startDevControl(installer)
 
   let written = 0
   installer.onChange((job) => {
     // Only what is new since the last change. An output cut off at the front can't be told apart, so it starts over
-    onOutput?.(job.output.slice(written <= job.output.length ? written : 0))
+    onOutput?.(job.output.slice(written <= job.output.length
+      ? written
+      : 0))
     written = job.output.length
     if (job.status === 'done' || job.status === 'failed')
       written = 0
@@ -437,14 +476,20 @@ export async function startDevWithInstaller(root: string, { capture = false, onO
     throw err
   }
 
-  return { session, installer, close: () => control.close() }
+  return {
+    session,
+    installer,
+    close: () => control.close(),
+  }
 }
 
 /**
  * Run the project's dev script and resolve with its exit code. The editor can install packages while it runs.
  */
 export async function runDev(root: string): Promise<number> {
-  const { session, close } = await startDevWithInstaller(root, { onOutput: text => process.stdout.write(text) })
+  const { session, close } = await startDevWithInstaller(root, {
+    onOutput: text => process.stdout.write(text),
+  })
 
   try {
     return await session.exited
@@ -461,7 +506,10 @@ export async function runDev(root: string): Promise<number> {
 export async function runDevWithDashboard(root: string, dashboard: DashboardOptions): Promise<number> {
   const { session: dev, installer, close } = await startDevWithInstaller(root, { capture: true })
   const engineVersion = installedEngineVersion(root)
-  const startup = () => ({ engineVersion, output: dev.output() })
+  const startup = () => ({
+    engineVersion,
+    output: dev.output(),
+  })
 
   const devExited = new AbortController()
   dev.exited.then(() => devExited.abort(), () => devExited.abort())

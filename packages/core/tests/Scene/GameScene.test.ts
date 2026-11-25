@@ -36,9 +36,37 @@ function sceneData(): SceneData {
     name: 'test',
     settings: { background: '#000000' },
     objects: [
-      { id: 'crate', type: 'Crate', name: 'Big crate', transform: { position: [1, 2, 3], rotation: [0, 1, 0], scale: [2, 2, 2] }, props: { weight: 5 } },
-      { id: 'spawner', type: 'Spawner', transform: { position: [9, 0, 9], rotation: [0, 0, 0], scale: [1, 1, 1] }, props: { rate: 3 } },
-      { id: 'unknown', type: 'NotRegistered', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, props: { keep: 'me' } },
+      {
+        id: 'crate',
+        type: 'Crate',
+        name: 'Big crate',
+        transform: {
+          position: [1, 2, 3],
+          rotation: [0, 1, 0],
+          scale: [2, 2, 2],
+        },
+        props: { weight: 5 },
+      },
+      {
+        id: 'spawner',
+        type: 'Spawner',
+        transform: {
+          position: [9, 0, 9],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+        },
+        props: { rate: 3 },
+      },
+      {
+        id: 'unknown',
+        type: 'NotRegistered',
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+        },
+        props: { keep: 'me' },
+      },
     ],
   }
 }
@@ -59,24 +87,79 @@ afterEach(() => clearSceneObjects())
 
 describe('parseSceneData', () => {
   it('fills in what may be left out', () => {
-    const scene = parseSceneData({ objects: [{ id: 'a', type: 'Crate' }] }, 'level1')
+    const scene = parseSceneData({
+      objects: [
+        { id: 'a', type: 'Crate' },
+      ],
+    }, 'level1')
 
     expect(scene).toEqual({
       version: 1,
       name: 'level1',
       settings: {},
-      objects: [{ id: 'a', type: 'Crate', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }],
+      objects: [
+        {
+          id: 'a',
+          type: 'Crate',
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+          },
+        },
+      ],
     })
   })
 
   it.each([
     [null, 'must be a JSON object'],
-    [{ objects: {} }, 'must be an array'],
-    [{ objects: [{ id: 'a' }] }, 'needs a "type"'],
-    [{ objects: [{ type: 'Crate' }] }, 'needs an "id"'],
-    [{ objects: [{ id: 'a', type: 'Crate' }, { id: 'a', type: 'Crate' }] }, 'used twice'],
-    [{ objects: [{ id: 'a', type: 'Crate', transform: { position: [1, 2] } }] }, 'must be [x, y, z]'],
-    [{ version: 99, objects: [] }, 'newer than this engine supports'],
+    [
+      { objects: {} },
+      'must be an array',
+    ],
+    [
+      {
+        objects: [
+          { id: 'a' },
+        ],
+      },
+      'needs a "type"',
+    ],
+    [
+      {
+        objects: [
+          { type: 'Crate' },
+        ],
+      },
+      'needs an "id"',
+    ],
+    [
+      {
+        objects: [
+          { id: 'a', type: 'Crate' },
+          { id: 'a', type: 'Crate' },
+        ],
+      },
+      'used twice',
+    ],
+    [
+      {
+        objects: [
+          {
+            id: 'a',
+            type: 'Crate',
+            transform: {
+              position: [1, 2],
+            },
+          },
+        ],
+      },
+      'must be [x, y, z]',
+    ],
+    [
+      { version: 99, objects: [] },
+      'newer than this engine supports',
+    ],
   ])('rejects %j', (value, message) => {
     expect(() => parseSceneData(value)).toThrow(message)
   })
@@ -93,14 +176,23 @@ describe('registry', () => {
   })
 
   it('keys plugin types by package', () => {
-    registerSceneObject({ type: 'Tree', plugin: 'forest', client: vi.fn() })
+    registerSceneObject({
+      type: 'Tree',
+      plugin: 'forest',
+      client: vi.fn(),
+    })
 
     expect(getSceneObject('forest:Tree')).toBeDefined()
     expect(getSceneObject('Tree')).toBeUndefined()
   })
 
   it('asks resolvers for types that are not registered', () => {
-    const remove = registerSceneObjectResolver(type => (type.startsWith('dyn:') ? { type, client: vi.fn() } : undefined))
+    const remove = registerSceneObjectResolver(type => (type.startsWith('dyn:')
+      ? {
+          type,
+          client: vi.fn(),
+        }
+      : undefined))
 
     expect(getSceneObject('dyn:a')?.type).toBe('dyn:a')
     remove()
@@ -115,7 +207,9 @@ describe('gameScene', () => {
 
     const client = new GameScene(sceneData(), { side: 'client', world }).instantiate()
 
-    expect([...world.entities.items.keys()]).toEqual(['crate'])
+    expect([
+      ...world.entities.items.keys(),
+    ]).toEqual(['crate'])
     const crate = client.get('crate')!.object as Crate
     expect(crate).toBeInstanceOf(Crate)
     expect(crate.id).toBe('crate')
@@ -129,13 +223,18 @@ describe('gameScene', () => {
 
     const serverWorld = new BaseWorld()
     new GameScene(sceneData(), { side: 'server', world: serverWorld }).instantiate()
-    expect([...serverWorld.entities.items.keys()]).toEqual(['spawner'])
+    expect([
+      ...serverWorld.entities.items.keys(),
+    ]).toEqual(['spawner'])
     expect(serverWorld.entities.items.get('spawner')!.position.toArray()).toEqual([9, 0, 9])
   })
 
   it('saves what it loaded, keeping the objects it did not build untouched', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
 
     expect(scene.serialize()).toEqual(sceneData())
     expect(scene.isDirty()).toBe(false)
@@ -149,14 +248,20 @@ describe('gameScene', () => {
     })
     const data = sceneData()
     data.objects[0].props = { weight: 5, label: 'x' }
-    const scene = new GameScene(data, { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(data, {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
 
     expect(scene.isDirty()).toBe(false)
   })
 
   it('saves the current transform and props of the objects', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
     const crate = scene.get('crate')!.object as Crate
 
     crate.instance.position.set(4, 5, 6.0000001)
@@ -176,7 +281,14 @@ describe('gameScene', () => {
     const world = new BaseWorld()
     const scene = new GameScene(sceneData(), { side: 'client', world }).instantiate()
 
-    const entry = scene.create('Crate', { transform: { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, props: { weight: 2 } })!
+    const entry = scene.create('Crate', {
+      transform: {
+        position: [0, 1, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      props: { weight: 2 },
+    })!
     expect(entry.data.id).toBe('crate_1')
     expect(world.entities.items.get('crate_1')).toBe(entry.object)
 
@@ -189,7 +301,10 @@ describe('gameScene', () => {
 
   it('returns undefined when this side cannot build the type', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() })
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    })
 
     expect(scene.create('Spawner')).toBeUndefined()
     expect(scene.create('NotRegistered')).toBeUndefined()
@@ -197,7 +312,10 @@ describe('gameScene', () => {
 
   it('drops objects that were destroyed elsewhere, e.g. deleted in the editor', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
 
     scene.get('crate')!.object!.destroy()
 
@@ -216,12 +334,21 @@ describe('gameScene', () => {
 
     expect(world.entities.items.has('temp')).toBe(false)
     expect(world.entities.items.get(entry.data.id)).toBe(crate)
-    expect(scene.serialize().objects[0]).toMatchObject({ type: 'Crate', transform: { position: [1, 0, 0] }, props: { weight: 3 } })
+    expect(scene.serialize().objects[0]).toMatchObject({
+      type: 'Crate',
+      transform: {
+        position: [1, 0, 0],
+      },
+      props: { weight: 3 },
+    })
   })
 
   it('rebuilds props changes and keeps transforms', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
     const before = scene.get('crate')!.object as Crate
     before.instance.position.set(7, 7, 7)
 
@@ -236,7 +363,10 @@ describe('gameScene', () => {
 
   it('edits the props of objects it does not build', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
 
     scene.setProps('spawner', { rate: 10 })
 
@@ -272,8 +402,14 @@ describe('gameScene', () => {
   })
 
   it('uses the GameObject transform when there is no Object3D', () => {
-    registerSceneObject({ type: 'Spawner', client: () => new Spawner() })
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    registerSceneObject({
+      type: 'Spawner',
+      client: () => new Spawner(),
+    })
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
 
     scene.get('spawner')!.object!.position.copy(new Vector3(1, 1, 1))
 
@@ -282,7 +418,10 @@ describe('gameScene', () => {
 
   it('finds the entry of an Object3D from any of its children', () => {
     registerTypes()
-    const scene = new GameScene(sceneData(), { side: 'client', world: new BaseWorld() }).instantiate()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
     const crate = scene.get('crate')!.object as Crate
     const child = new Object3D()
     crate.instance.add(child)

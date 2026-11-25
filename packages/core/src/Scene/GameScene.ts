@@ -77,7 +77,9 @@ export default class GameScene extends EventEmitter {
 
   /** Every entry in file order, including those this side doesn't build */
   getEntries(): SceneEntry[] {
-    return [...this.entries.values()]
+    return [
+      ...this.entries.values(),
+    ]
   }
 
   get(id: string): SceneEntry | undefined {
@@ -87,7 +89,9 @@ export default class GameScene extends EventEmitter {
   /** The entry an object belongs to, or undefined for objects that aren't part of the scene (players, network entities) */
   entryOf(object: GameObject): SceneEntry | undefined {
     const entry = this.entries.get(object.id)
-    return entry?.object === object ? entry : undefined
+    return entry?.object === object
+      ? entry
+      : undefined
   }
 
   /** The entry an Object3D belongs to, by the id the scene tags it with */
@@ -107,10 +111,15 @@ export default class GameScene extends EventEmitter {
   create(type: string, data: Partial<Omit<SceneObjectData, 'type'>> = {}): SceneEntry | undefined {
     const entry: SceneEntry = {
       data: {
-        id: data.id && !this.entries.has(data.id) ? data.id : this.uniqueId(type),
+        id: data.id && !this.entries.has(data.id)
+          ? data.id
+          : this.uniqueId(type),
         type,
         name: data.name,
-        transform: { ...emptyTransform(), ...data.transform },
+        transform: {
+          ...emptyTransform(),
+          ...data.transform,
+        },
         props: data.props,
       },
     }
@@ -127,12 +136,22 @@ export default class GameScene extends EventEmitter {
    * `type` must be registered for the scene to load it again.
    */
   adopt(object: GameObject, type: string, name?: string): SceneEntry {
-    const id = this.entries.has(object.id) || this.world.entities.items.has(object.id) ? this.uniqueId(type) : object.id
+    const id = this.entries.has(object.id) || this.world.entities.items.has(object.id)
+      ? this.uniqueId(type)
+      : object.id
     const existingKey = [...this.world.entities.items].find(([, o]) => o === object)?.[0]
     if (existingKey !== undefined && existingKey !== id)
       this.world.entities.items.delete(existingKey)
 
-    const entry: SceneEntry = { data: { id, type, name, transform: emptyTransform() }, object }
+    const entry: SceneEntry = {
+      data: {
+        id,
+        type,
+        name,
+        transform: emptyTransform(),
+      },
+      object,
+    }
     object.id = id
     entry.data = this.capture(entry)
     this.attach(entry, object)
@@ -164,7 +183,13 @@ export default class GameScene extends EventEmitter {
     // Released first: that captures the object's current data, which the new props then go on top of
     const built = !!entry.object
     this.release(entry)
-    entry.data = { ...entry.data, props: { ...entry.data.props, ...props } }
+    entry.data = {
+      ...entry.data,
+      props: {
+        ...entry.data.props,
+        ...props,
+      },
+    }
     if (built)
       this.build(entry)
     this.changed()
@@ -182,7 +207,10 @@ export default class GameScene extends EventEmitter {
   }
 
   setSettings(settings: SceneSettings): void {
-    this.settings = { ...this.settings, ...settings }
+    this.settings = {
+      ...this.settings,
+      ...settings,
+    }
     this.trigger('settingsChanged', this.settings)
     this.changed()
   }
@@ -309,13 +337,19 @@ export default class GameScene extends EventEmitter {
       scale: round(source.scale.toArray() as Vec3Tuple),
     }
 
-    const props = definition?.serialize ? definition.serialize(object) : entry.data.props
+    const props = definition?.serialize
+      ? definition.serialize(object)
+      : entry.data.props
     return {
       id: entry.data.id,
       type: entry.data.type,
-      ...(entry.data.name ? { name: entry.data.name } : {}),
+      ...(entry.data.name
+        ? { name: entry.data.name }
+        : {}),
       transform,
-      ...(props && Object.keys(props).length ? { props } : {}),
+      ...(props && Object.keys(props).length
+        ? { props }
+        : {}),
     }
   }
 
@@ -336,7 +370,9 @@ export default class GameScene extends EventEmitter {
     if (definition?.transformTarget)
       return definition.transformTarget(object)
     const instance = (object as { instance?: unknown }).instance
-    return instance instanceof Object3D ? instance : undefined
+    return instance instanceof Object3D
+      ? instance
+      : undefined
   }
 
   private uniqueId(type: string): string {
@@ -352,7 +388,11 @@ export default class GameScene extends EventEmitter {
 /** JSON with object keys sorted, so the same data in another key order compares equal */
 function stableStringify(value: unknown): string {
   return JSON.stringify(value, (_key, v: unknown) => v && typeof v === 'object' && !Array.isArray(v)
-    ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b
+        ? -1
+        : a > b
+          ? 1
+          : 0)))
     : v)
 }
 

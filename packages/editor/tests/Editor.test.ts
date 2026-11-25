@@ -11,10 +11,18 @@ import { getEditorPanels } from '../src/Editor/panels'
 
 // Provide minimal DOM globals for the node test environment
 beforeAll(() => {
-  ;(globalThis as any).window = { innerWidth: 800, innerHeight: 600, addEventListener: vi.fn() }
-  const mockBody = { removeAttribute: vi.fn() }
+  ;(globalThis as any).window = {
+    innerWidth: 800,
+    innerHeight: 600,
+    addEventListener: vi.fn(),
+  }
+  const mockBody = {
+    removeAttribute: vi.fn(),
+  }
   const mockElement = {
-    classList: { add: vi.fn() },
+    classList: {
+      add: vi.fn(),
+    },
     style: {},
     textContent: '',
     appendChild: vi.fn(),
@@ -23,7 +31,10 @@ beforeAll(() => {
     ;(globalThis as any).document = {
     getElementsByTagName: () => [mockBody],
     createElement: vi.fn().mockReturnValue(mockElement),
-    body: { contains: vi.fn().mockReturnValue(false), appendChild: vi.fn() },
+    body: {
+      contains: vi.fn().mockReturnValue(false),
+      appendChild: vi.fn(),
+    },
   }
 })
 
@@ -61,19 +72,33 @@ vi.mock('three/examples/jsm/controls/TransformControls.js', () => ({
 }))
 
 vi.mock('../src/Editor/mount', () => ({
-  mountEditorUI: vi.fn().mockReturnValue({ unmount: vi.fn() }),
+  mountEditorUI: vi.fn().mockReturnValue({
+    unmount: vi.fn(),
+  }),
 }))
 
 vi.mock('@mavonengine/core/Game', () => ({
-  default: { instance: vi.fn() },
+  default: {
+    instance: vi.fn(),
+  },
 }))
 
 function createMockGame() {
   return {
-    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
     trigger: vi.fn(),
     on: vi.fn(),
-    world: { destroy: vi.fn(), add: vi.fn(), entities: { items: new Map() } },
+    world: {
+      destroy: vi.fn(),
+      add: vi.fn(),
+      entities: {
+        items: new Map(),
+      },
+    },
     activeScene: undefined as any,
     openScene: vi.fn().mockRejectedValue(new Error('no scene file')),
     loadScene: vi.fn(),
@@ -84,31 +109,56 @@ function createMockGame() {
       remove: vi.fn(),
       children: [] as Object3D[],
     },
-    contextMenuAbort: { abort: vi.fn() },
-    uiRoot: { innerHTML: '', style: { opacity: '' } },
+    contextMenuAbort: {
+      abort: vi.fn(),
+    },
+    uiRoot: {
+      innerHTML: '',
+      style: { opacity: '' },
+    },
     camera: {
       instance: {
-        position: { set: vi.fn(), x: 0, y: 0, z: 0 },
-        rotation: { set: vi.fn() },
+        position: {
+          set: vi.fn(),
+          x: 0,
+          y: 0,
+          z: 0,
+        },
+        rotation: {
+          set: vi.fn(),
+        },
         rotateY: vi.fn(),
         rotateX: vi.fn(),
         getWorldDirection: vi.fn().mockReturnValue(new Vector3()),
-        quaternion: { setFromRotationMatrix: vi.fn() },
+        quaternion: {
+          setFromRotationMatrix: vi.fn(),
+        },
         projectionMatrix: new Matrix4(),
         matrixWorldInverse: new Matrix4(),
       },
     },
     renderer: {
-      composer: { addPass: vi.fn() },
+      composer: {
+        addPass: vi.fn(),
+      },
     },
     sizes: { width: 800, height: 600 },
-    canvas: { getBoundingClientRect: vi.fn().mockReturnValue({ left: 0, top: 0, width: 800, height: 600 }) },
+    canvas: {
+      getBoundingClientRect: vi.fn().mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 600,
+      }),
+    },
     input: {
       on: vi.fn(),
       getPointerWorldPosition: vi.fn(),
     },
     resources: {
       items: {} as Record<string, object>,
+      on: vi.fn(),
+      off: vi.fn(),
     },
     editor: undefined as Editor | undefined,
   }
@@ -162,6 +212,21 @@ describe('editor', () => {
   })
 
   describe('constructor', () => {
+    it('lists the categories of assets loaded after it booted', () => {
+      mockGame.resources.items = {
+        tree: { scene: {} },
+      }
+      const editor = new Editor()
+      expect(editor.availableAssetCategories).toEqual(['Object'])
+
+      const [[, onAdded]] = vi.mocked(mockGame.resources.on).mock.calls.filter(([event]) => event === 'assetsAdded')
+      class Texture {}
+      mockGame.resources.items.bark = new Texture()
+      onAdded()
+
+      expect(editor.availableAssetCategories).toEqual(['Object', 'Texture'])
+    })
+
     it('logs a boot message', () => {
       const _editor = new Editor()
 
@@ -243,7 +308,9 @@ describe('editor', () => {
 
     it('disposes the outline pass', () => {
       const editor = new Editor()
-      editor.reactRoot = { unmount: vi.fn() } as any
+      editor.reactRoot = {
+        unmount: vi.fn(),
+      } as any
 
       editor.destroy()
 
@@ -364,8 +431,12 @@ describe('editor', () => {
       const editor = new Editor()
       const callback = getDeleteKeydownCallback()
 
-      const mockGeometry = { dispose: vi.fn() }
-      const mockMaterial = { dispose: vi.fn() }
+      const mockGeometry = {
+        dispose: vi.fn(),
+      }
+      const mockMaterial = {
+        dispose: vi.fn(),
+      }
       const mesh = new Mesh()
       mesh.geometry = mockGeometry as any
       mesh.material = mockMaterial as any
@@ -386,7 +457,12 @@ describe('editor', () => {
         source: 'main',
         rebuild: vi.fn(),
         on: vi.fn(),
-        serialize: vi.fn().mockReturnValue({ version: 1, name: 'main', settings: {}, objects: [] }),
+        serialize: vi.fn().mockReturnValue({
+          version: 1,
+          name: 'main',
+          settings: {},
+          objects: [],
+        }),
         markSaved: vi.fn(),
         entryOfObject3D: vi.fn(),
         getEntries: vi.fn().mockReturnValue([]),
@@ -422,12 +498,18 @@ describe('editor', () => {
       const editor = new Editor()
       const saved = vi.fn()
       editor.on('sceneSaved', saved)
-      const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ file: '/project/scenes/main.json' }) })
+      const fetchFn = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ file: '/project/scenes/main.json' }),
+      })
 
       await expect(editor.saveScene(fetchFn as any)).resolves.toBe(true)
 
       expect(fetchFn).toHaveBeenCalledWith('/__mavonengine/scene-save', expect.objectContaining({ method: 'POST' }))
-      expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ name: 'main', scene: scene.serialize() })
+      expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({
+        name: 'main',
+        scene: scene.serialize(),
+      })
       expect(scene.markSaved).toHaveBeenCalled()
       expect(saved).toHaveBeenCalledWith({ name: 'main', file: '/project/scenes/main.json' })
     })
@@ -437,7 +519,12 @@ describe('editor', () => {
       const editor = new Editor()
       const failed = vi.fn()
       editor.on('sceneSaveFailed', failed)
-      const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'nope' }) })
+      const fetchFn = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        json: async () => ({ error: 'nope' }),
+      })
 
       await expect(editor.saveScene(fetchFn as any)).resolves.toBe(false)
       expect(failed).toHaveBeenCalledWith({ name: 'main', error: 'nope' })
@@ -445,7 +532,9 @@ describe('editor', () => {
 
     it('removes a scene object through the scene on Delete', () => {
       const scene = mockScene()
-      scene.entryOfObject3D.mockReturnValue({ data: { id: 'box_1' } })
+      scene.entryOfObject3D.mockReturnValue({
+        data: { id: 'box_1' },
+      })
       mockGame.activeScene = scene
       const editor = new Editor()
       const callback = vi.mocked(mockGame.input.on).mock.calls.filter(([event]) => event === 'keydown').at(-1)![1]
@@ -462,9 +551,19 @@ describe('editor', () => {
 
   describe('panels', () => {
     it('registers custom panels before and after boot, and removes them', () => {
-      const removeEarly = Editor.registerPanel({ id: 'early', title: 'Early', location: 'left', mount: vi.fn() })
+      const removeEarly = Editor.registerPanel({
+        id: 'early',
+        title: 'Early',
+        location: 'left',
+        mount: vi.fn(),
+      })
       const editor = new Editor()
-      const removeLate = editor.addPanel({ id: 'late', title: 'Late', location: 'bottom', component: () => null })
+      const removeLate = editor.addPanel({
+        id: 'late',
+        title: 'Late',
+        location: 'bottom',
+        component: () => null,
+      })
 
       expect(getEditorPanels().map(p => p.id)).toEqual(['early', 'late'])
 

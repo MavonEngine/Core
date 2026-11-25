@@ -53,7 +53,9 @@ export default function DockArea({ location, builtins }: { location: EditorPanel
                   key={tab.id}
                   role="tab"
                   aria-selected={tab === active}
-                  className={`${styles.tab} ${tab === active ? styles.active : ''}`}
+                  className={`${styles.tab} ${tab === active
+                    ? styles.active
+                    : ''}`}
                   onClick={() => select(tab.id)}
                 >
                   {tab.title}
@@ -65,8 +67,14 @@ export default function DockArea({ location, builtins }: { location: EditorPanel
       {builtins.map(builtin => (
         <div
           key={builtin.id}
-          className={builtin.padded === false ? styles.unpadded : editorStyles.panelBody}
-          style={{ display: active?.builtin === builtin ? undefined : 'none' }}
+          className={builtin.padded === false
+            ? styles.unpadded
+            : editorStyles.panelBody}
+          style={{
+            display: active?.builtin === builtin
+              ? undefined
+              : 'none',
+          }}
         >
           {builtin.element}
         </div>

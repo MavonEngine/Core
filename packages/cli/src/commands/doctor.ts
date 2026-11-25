@@ -97,17 +97,31 @@ export async function runDoctor(root: string, options: Pick<DoctorOptions, 'offl
     packageManager: detectPackageManager(root),
     packageJson: JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')),
     nodeVersion: io.nodeVersion ?? process.versions.node,
-    npm: options.offline ? undefined : new NpmRegistry({ url: options.registry, fetch: io.fetch }),
+    npm: options.offline
+      ? undefined
+      : new NpmRegistry({ url: options.registry, fetch: io.fetch }),
   }
 
   const { findings: configFindings, config } = checkConfig(root, io.env ?? process.env)
   const [environment, plugins, migrations] = await Promise.all([
     checkEnvironment(ctx),
-    config ? checkPlugins(ctx, config) : [],
-    config ? checkMigrations(ctx, cliVersion) : [],
+    config
+      ? checkPlugins(ctx, config)
+      : [],
+    config
+      ? checkMigrations(ctx, cliVersion)
+      : [],
   ])
   const registry = registryFinding(ctx.npm)
-  const findings = [...environment, ...(registry ? [registry] : []), ...configFindings, ...plugins, ...migrations]
+  const findings = [
+    ...environment,
+    ...(registry
+      ? [registry]
+      : []),
+    ...configFindings,
+    ...plugins,
+    ...migrations,
+  ]
 
   return {
     root,
@@ -119,12 +133,26 @@ export async function runDoctor(root: string, options: Pick<DoctorOptions, 'offl
   }
 }
 
-const MARKS: Record<Level, string> = { ok: '✓', info: 'i', warn: '!', error: '✗' }
-const COLORS: Record<Level, string> = { ok: '32', info: '36', warn: '33', error: '31' }
+const MARKS: Record<Level, string> = {
+  ok: '✓',
+  info: 'i',
+  warn: '!',
+  error: '✗',
+}
+const COLORS: Record<Level, string> = {
+  ok: '32',
+  info: '36',
+  warn: '33',
+  error: '31',
+}
 
 export function formatReport(report: DoctorReport, { color = false }: { color?: boolean } = {}): string {
-  const paint = (code: string, text: string) => color ? `\x1B[${code}m${text}\x1B[0m` : text
-  const lines = [`MavonEngine project at ${report.root} (${report.packageManager}${report.coreVersion ? `, @mavonengine/core ${report.coreVersion}` : ''})`]
+  const paint = (code: string, text: string) => color
+    ? `\x1B[${code}m${text}\x1B[0m`
+    : text
+  const lines = [`MavonEngine project at ${report.root} (${report.packageManager}${report.coreVersion
+    ? `, @mavonengine/core ${report.coreVersion}`
+    : ''})`]
 
   for (const group of GROUPS) {
     const findings = report.findings.filter(finding => finding.group === group)
@@ -134,14 +162,18 @@ export function formatReport(report: DoctorReport, { color = false }: { color?: 
     const width = Math.min(40, Math.max(...findings.map(finding => finding.label.length)))
     lines.push('', paint('1', group))
     for (const finding of findings) {
-      const text = finding.detail ? `${finding.label.padEnd(width)}  ${finding.detail}` : finding.label
+      const text = finding.detail
+        ? `${finding.label.padEnd(width)}  ${finding.detail}`
+        : finding.label
       lines.push(`  ${paint(COLORS[finding.level], MARKS[finding.level])} ${text}`)
       if (finding.fix)
         lines.push(`      ${paint('2', `→ ${finding.fix}`)}`)
     }
   }
 
-  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const count = (n: number, word: string) => `${n} ${word}${n === 1
+    ? ''
+    : 's'}`
   lines.push('', report.errors || report.warnings
     ? `${count(report.errors, 'error')}, ${count(report.warnings, 'warning')}`
     : paint(COLORS.ok, 'Everything looks fine'))
@@ -149,14 +181,21 @@ export function formatReport(report: DoctorReport, { color = false }: { color?: 
   return `${lines.join('\n')}\n`
 }
 
-export async function runDoctorCommand(options: DoctorOptions, io: DoctorIO = { write: text => void process.stdout.write(text), color: !!process.stdout.isTTY && !process.env.NO_COLOR }): Promise<number> {
+export async function runDoctorCommand(options: DoctorOptions, io: DoctorIO = {
+  write: text => void process.stdout.write(text),
+  color: !!process.stdout.isTTY && !process.env.NO_COLOR,
+}): Promise<number> {
   const root = findProjectRoot(options.cwd)
   if (!root || !existsSync(join(root, 'package.json')))
     throw new UsageError(`no MavonEngine project found in ${options.cwd} or its parents (looking for a package.json with @mavonengine/core and a dev script)`)
 
   const report = await runDoctor(root, options, io)
 
-  io.write(options.json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report, { color: io.color }))
+  io.write(options.json
+    ? `${JSON.stringify(report, null, 2)}\n`
+    : formatReport(report, { color: io.color }))
 
-  return report.errors || (options.strict && report.warnings) ? 1 : 0
+  return report.errors || (options.strict && report.warnings)
+    ? 1
+    : 0
 }

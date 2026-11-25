@@ -31,7 +31,14 @@ const CONFIG = 'mavonengine.json'
 const RUNS_MAVONENGINE_DEV_RE = /\bmavonengine\s+dev\b/
 const TITLE_RE = /(<title[^>]*>)([\s\S]*?)(<\/title>)/i
 const ENTITY_RE = /&(amp|lt|gt|quot|#39|apos);/g
-const ENTITIES: Record<string, string> = { 'amp': '&', 'lt': '<', 'gt': '>', 'quot': '"', '#39': '\'', 'apos': '\'' }
+const ENTITIES: Record<string, string> = {
+  'amp': '&',
+  'lt': '<',
+  'gt': '>',
+  'quot': '"',
+  '#39': '\'',
+  'apos': '\'',
+}
 const APP_NAME_PLACEHOLDER = '%MAVONENGINE_APP_NAME%'
 const INDEX_HTML = ['client/index.html', 'index.html']
 
@@ -53,7 +60,14 @@ const devScript: Migration = {
     const pkg = files.readJson('package.json')!
     // dev:server right after dev, the rest in their order
     pkg.scripts = Object.fromEntries(Object.entries(pkg.scripts as Record<string, string>).flatMap(([name, script]) =>
-      name === 'dev' ? [['dev', 'mavonengine dev'], ['dev:server', script]] : [[name, script]]))
+      name === 'dev'
+        ? [
+            ['dev', 'mavonengine dev'],
+            ['dev:server', script],
+          ]
+        : [
+            [name, script],
+          ]))
 
     if (!pkg.dependencies?.['@mavonengine/cli'] && !pkg.devDependencies?.['@mavonengine/cli']) {
       const devDependencies = { ...pkg.devDependencies, '@mavonengine/cli': versions.cli ?? 'latest' }
@@ -67,8 +81,14 @@ const devScript: Migration = {
 function titleFiles(files: ProjectFiles): { path: string, html: string, title: string }[] {
   return INDEX_HTML.flatMap((path) => {
     const html = files.read(path)
-    const match = html === undefined ? undefined : TITLE_RE.exec(html)
-    return match && !match[2].includes(APP_NAME_PLACEHOLDER) ? [{ path, html: html!, title: match[2] }] : []
+    const match = html === undefined
+      ? undefined
+      : TITLE_RE.exec(html)
+    return match && !match[2].includes(APP_NAME_PLACEHOLDER)
+      ? [
+          { path, html: html!, title: match[2] },
+        ]
+      : []
   })
 }
 

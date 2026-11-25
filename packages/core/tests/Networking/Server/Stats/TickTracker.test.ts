@@ -29,7 +29,12 @@ describe('tickTracker', () => {
     tracker.record(10, 5)
     tracker.sample(1000)
 
-    expect(tracker.sample(2000)).toMatchObject({ ticks: 0, avgMs: 0, maxMs: 0, commandsPerSecond: 0 })
+    expect(tracker.sample(2000)).toMatchObject({
+      ticks: 0,
+      avgMs: 0,
+      maxMs: 0,
+      commandsPerSecond: 0,
+    })
   })
 
   it('caps the history length', () => {

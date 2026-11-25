@@ -36,7 +36,11 @@ class Flaky extends Job<string> {
   }
 }
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+const logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}
 const queues: Queue[] = []
 const dbs: Kysely<any>[] = []
 
@@ -58,7 +62,10 @@ async function databaseDriver(): Promise<DatabaseQueueDriver> {
 }
 
 const drivers: [string, () => Promise<QueueDriver>][] = [
-  ['memory', async () => new MemoryQueueDriver()],
+  [
+    'memory',
+    async () => new MemoryQueueDriver(),
+  ],
   ['database', databaseDriver],
 ]
 
@@ -76,7 +83,12 @@ describe.each(drivers)('queue on the %s driver', (_name, makeDriver) => {
 
     const id = await q.dispatch(new Record({ n: 1 }))
 
-    await vi.waitFor(() => expect(runs).toEqual([{ data: { n: 1 }, ctx: { id, queue: 'default', attempt: 1 } }]))
+    await vi.waitFor(() => expect(runs).toEqual([
+      {
+        data: { n: 1 },
+        ctx: { id, queue: 'default', attempt: 1 },
+      },
+    ]))
     await vi.waitFor(async () => expect(await q.size()).toBe(0))
   })
 
@@ -90,7 +102,10 @@ describe.each(drivers)('queue on the %s driver', (_name, makeDriver) => {
 
     q.start()
 
-    await vi.waitFor(() => expect(runs.map(run => run.data)).toEqual([{ n: 1 }, { n: 2 }]))
+    await vi.waitFor(() => expect(runs.map(run => run.data)).toEqual([
+      { n: 1 },
+      { n: 2 },
+    ]))
   })
 
   it('waits for a delayed job', async () => {
@@ -132,7 +147,13 @@ describe.each(drivers)('queue on the %s driver', (_name, makeDriver) => {
     expect(failedCalls[0].ctx).toEqual({ id, queue: 'rewards', attempt: 3 })
 
     const [failed] = await q.failed()
-    expect(failed).toMatchObject({ id, queue: 'rewards', name: 'flaky', payload: '"x"', attempts: 3 })
+    expect(failed).toMatchObject({
+      id,
+      queue: 'rewards',
+      name: 'flaky',
+      payload: '"x"',
+      attempts: 3,
+    })
     expect(failed.error).toContain('try 3 broke')
     expect(await q.size()).toBe(0)
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(`Job flaky (${id}) failed all 3 tries`))
@@ -158,14 +179,19 @@ describe.each(drivers)('queue on the %s driver', (_name, makeDriver) => {
   })
 
   it('works the queues it is given, the first first, and leaves the others', async () => {
-    const q = await queue({ queues: ['high', 'default'] })
+    const q = await queue({
+      queues: ['high', 'default'],
+    })
     await q.dispatch(new Record({ n: 1 }))
     await q.dispatch(new Record({ n: 2 }), { queue: 'other' })
     await q.dispatch(new Record({ n: 3 }), { queue: 'high' })
 
     q.start()
 
-    await vi.waitFor(() => expect(runs.map(run => run.data)).toEqual([{ n: 3 }, { n: 1 }]))
+    await vi.waitFor(() => expect(runs.map(run => run.data)).toEqual([
+      { n: 3 },
+      { n: 1 },
+    ]))
     expect(await q.size('other')).toBe(1)
   })
 
@@ -214,18 +240,39 @@ describe.each(drivers)('queue on the %s driver', (_name, makeDriver) => {
   it('runs a job taken by a worker that died again once `retryAfterMs` passed', async () => {
     const driver = await makeDriver()
     const id = 'abandoned'
-    await driver.push({ id, queue: 'default', name: 'record', payload: '{"n":1}', attempts: 0, availableAt: 0, createdAt: 0 })
+    await driver.push({
+      id,
+      queue: 'default',
+      name: 'record',
+      payload: '{"n":1}',
+      attempts: 0,
+      availableAt: 0,
+      createdAt: 0,
+    })
     const now = Date.now()
-    expect(await driver.reserve({ names: ['record'], now, staleBefore: now - 1000 })).toMatchObject({ id, attempts: 1 })
+    expect(await driver.reserve({
+      names: ['record'],
+      now,
+      staleBefore: now - 1000,
+    })).toMatchObject({ id, attempts: 1 })
     // Reserved, so not taken again yet
-    expect(await driver.reserve({ names: ['record'], now, staleBefore: now - 1000 })).toBeUndefined()
+    expect(await driver.reserve({
+      names: ['record'],
+      now,
+      staleBefore: now - 1000,
+    })).toBeUndefined()
 
     const q = new Queue(logger, { pollIntervalMs: 10, retryAfterMs: 50 }).register(Record)
     queues.push(q)
     await q.use(driver)
     q.start()
 
-    await vi.waitFor(() => expect(runs).toEqual([{ data: { n: 1 }, ctx: { id, queue: 'default', attempt: 2 } }]))
+    await vi.waitFor(() => expect(runs).toEqual([
+      {
+        data: { n: 1 },
+        ctx: { id, queue: 'default', attempt: 2 },
+      },
+    ]))
   })
 
   it('waits for running jobs when it stops, and takes no more', async () => {
@@ -283,7 +330,15 @@ describe('queue', () => {
 
     expect(await driver.size()).toBe(1)
     const rows = await (driver as unknown as { db: Kysely<any> }).db.selectFrom(JOBS_TABLE).selectAll().execute()
-    expect(rows).toEqual([expect.objectContaining({ name: 'record', payload: '{"n":1}', queue: 'default', attempts: 0, reserved_at: null })])
+    expect(rows).toEqual([
+      expect.objectContaining({
+        name: 'record',
+        payload: '{"n":1}',
+        queue: 'default',
+        attempts: 0,
+        reserved_at: null,
+      }),
+    ])
   })
 
   it('keeps its driver when the new one doesn\'t come', async () => {

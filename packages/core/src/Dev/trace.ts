@@ -109,9 +109,34 @@ const MAX_FRAMES = 4000
 
 const DRAWS = ['drawArrays', 'drawElements', 'drawRangeElements']
 const INSTANCED_DRAWS = ['drawArraysInstanced', 'drawElementsInstanced']
-const TEXTURE_UPLOADS = ['texImage2D', 'texSubImage2D', 'texImage3D', 'texSubImage3D', 'compressedTexImage2D', 'compressedTexSubImage2D', 'compressedTexImage3D', 'compressedTexSubImage3D', 'copyTexImage2D', 'copyTexSubImage2D', 'generateMipmap']
-const SHADER = ['compileShader', 'linkProgram', 'getShaderParameter', 'getProgramParameter', 'getShaderInfoLog', 'getProgramInfoLog']
-const SYNC = ['readPixels', 'getError', 'finish', 'clientWaitSync', 'getBufferSubData']
+const TEXTURE_UPLOADS = [
+  'texImage2D',
+  'texSubImage2D',
+  'texImage3D',
+  'texSubImage3D',
+  'compressedTexImage2D',
+  'compressedTexSubImage2D',
+  'compressedTexImage3D',
+  'compressedTexSubImage3D',
+  'copyTexImage2D',
+  'copyTexSubImage2D',
+  'generateMipmap',
+]
+const SHADER = [
+  'compileShader',
+  'linkProgram',
+  'getShaderParameter',
+  'getProgramParameter',
+  'getShaderInfoLog',
+  'getProgramInfoLog',
+]
+const SYNC = [
+  'readPixels',
+  'getError',
+  'finish',
+  'clientWaitSync',
+  'getBufferSubData',
+]
 
 function emptyCounts(): GlCounts {
   return {
@@ -202,7 +227,11 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
       durationMs: options.durationMs,
       userAgent: navigator.userAgent,
       visible: document.visibilityState === 'visible',
-      canvas: { width: game.canvas.width, height: game.canvas.height, pixelRatio: three.getPixelRatio() },
+      canvas: {
+        width: game.canvas.width,
+        height: game.canvas.height,
+        pixelRatio: three.getPixelRatio(),
+      },
       maxFps: renderer.maxFps ?? 0,
       passes: renderer.composer.passes.map(pass => pass.constructor.name || 'Pass'),
       gpuTiming: { enabled: false },
@@ -227,8 +256,14 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
       const result = original(...args)
       const ms = performance.now() - start
       after(ms, args)
-      if (ms >= SLOW_GL_CALL_MS)
-        span({ name: describeUpload(method, args), category: 'gl', start: round(start - t0), duration: round(ms) })
+      if (ms >= SLOW_GL_CALL_MS) {
+        span({
+          name: describeUpload(method, args),
+          category: 'gl',
+          start: round(start - t0),
+          duration: round(ms),
+        })
+      }
       return result
     })
     const counted = (method: string, count: (args: unknown[]) => void) => patch(gl, method, original => (...args: unknown[]) => {
@@ -252,7 +287,9 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     for (const method of ['bufferData', 'bufferSubData']) {
       timed(method, (_ms, args) => {
         counts.bufferUploads++
-        counts.bufferUploadBytes += byteLength(args[method === 'bufferData' ? 1 : 2])
+        counts.bufferUploadBytes += byteLength(args[method === 'bufferData'
+          ? 1
+          : 2])
       })
     }
     TEXTURE_UPLOADS.forEach(m => timed(m, (ms) => {
@@ -270,7 +307,9 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     }))
 
     // ---- GPU time per frame. three-perf times frames with the same extension and only one query can run at a time
-    const timer = options.gpu ? gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number, GPU_DISJOINT_EXT: number } | null : null
+    const timer = options.gpu
+      ? gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number, GPU_DISJOINT_EXT: number } | null
+      : null
     const pendingQueries: { query: WebGLQuery, frame: TraceFrame }[] = []
     if (!options.gpu) {
       capture.gpuTiming.note = 'Turned off'
@@ -318,7 +357,10 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     renderer.composer.passes.forEach((pass, index) => patch(pass, 'render', original => (...args: unknown[]) => {
       const start = performance.now()
       const result = original(...args)
-      passTimes[index] = [round(start - t0), round(performance.now() - start)]
+      passTimes[index] = [
+        round(start - t0),
+        round(performance.now() - start),
+      ]
       return result
     }))
 
@@ -349,13 +391,20 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
         const heap = (performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null
         const frame: TraceFrame = {
           start: round(start),
-          interval: lastStart === null ? null : round(start - lastStart),
+          interval: lastStart === null
+            ? null
+            : round(start - lastStart),
           cpu: round(now() - start),
           gpu: null,
           passes: passTimes,
           calls: info.render.calls,
           triangles: info.render.triangles,
-          gl: { ...frameCounts, textureUploadMs: round(frameCounts.textureUploadMs), shaderCompileMs: round(frameCounts.shaderCompileMs), syncMs: round(frameCounts.syncMs) },
+          gl: {
+            ...frameCounts,
+            textureUploadMs: round(frameCounts.textureUploadMs),
+            shaderCompileMs: round(frameCounts.shaderCompileMs),
+            syncMs: round(frameCounts.syncMs),
+          },
           heap,
         }
         lastStart = start
@@ -395,8 +444,13 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
         return original()
       }
       finally {
-        if (recording)
-          capture.ticks.push({ start: round(start), duration: round(now() - start), ...tickParts })
+        if (recording) {
+          capture.ticks.push({
+            start: round(start),
+            duration: round(now() - start),
+            ...tickParts,
+          })
+        }
       }
     })
 
@@ -423,7 +477,12 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
         category: 'long-animation-frame',
         start: round(entry.startTime - t0),
         duration: round(entry.duration),
-        detail: { blockingDuration: frame.blockingDuration, renderStartOffset: frame.renderStart ? round(frame.renderStart - entry.startTime) : undefined },
+        detail: {
+          blockingDuration: frame.blockingDuration,
+          renderStartOffset: frame.renderStart
+            ? round(frame.renderStart - entry.startTime)
+            : undefined,
+        },
       })
       for (const script of frame.scripts ?? []) {
         span({
@@ -434,16 +493,32 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
           detail: {
             invoker: script.invoker,
             invokerType: script.invokerType,
-            source: script.sourceURL ? `${script.sourceURL}${script.sourceCharPosition >= 0 ? `:${script.sourceCharPosition}` : ''}` : undefined,
-            forcedStyleAndLayout: script.forcedStyleAndLayoutDuration ? round(script.forcedStyleAndLayoutDuration) : undefined,
+            source: script.sourceURL
+              ? `${script.sourceURL}${script.sourceCharPosition >= 0
+                ? `:${script.sourceCharPosition}`
+                : ''}`
+              : undefined,
+            forcedStyleAndLayout: script.forcedStyleAndLayoutDuration
+              ? round(script.forcedStyleAndLayoutDuration)
+              : undefined,
           },
         })
       }
     })
     if (!loaf) {
-      observe('longtask', entry => span({ name: 'Long task', category: 'long-task', start: round(entry.startTime - t0), duration: round(entry.duration) }))
+      observe('longtask', entry => span({
+        name: 'Long task',
+        category: 'long-task',
+        start: round(entry.startTime - t0),
+        duration: round(entry.duration),
+      }))
     }
-    observe('measure', entry => span({ name: entry.name, category: 'measure', start: round(entry.startTime - t0), duration: round(entry.duration) }))
+    observe('measure', entry => span({
+      name: entry.name,
+      category: 'measure',
+      start: round(entry.startTime - t0),
+      duration: round(entry.duration),
+    }))
 
     // ---- JS sampling profiler
     let profiler: ProfilerLike | null = null
@@ -477,7 +552,10 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
           resources: trace.resources,
           frames: trace.frames,
           stacks: trace.stacks,
-          samples: trace.samples.map(sample => ({ ...sample, timestamp: round(sample.timestamp - t0) })),
+          samples: trace.samples.map(sample => ({
+            ...sample,
+            timestamp: round(sample.timestamp - t0),
+          })),
         }
       }
       catch (err) {

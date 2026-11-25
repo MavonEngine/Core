@@ -16,7 +16,10 @@ const packetFilters = {
 interface NetRecord { id: number, timestamp: number, kind: string, type: string, direction?: string, peer?: string, [key: string]: unknown }
 
 function withTime<T extends { timestamp: number }>({ timestamp, ...record }: T) {
-  return { ...record, time: new Date(timestamp).toISOString() }
+  return {
+    ...record,
+    time: new Date(timestamp).toISOString(),
+  }
 }
 
 function listing(list: { enabled?: boolean, latestId: number, matched: number, records: NetRecord[] }) {
@@ -24,7 +27,9 @@ function listing(list: { enabled?: boolean, latestId: number, matched: number, r
     latestId: list.latestId,
     matched: list.matched,
     records: list.records.map(withTime),
-    ...(list.enabled === false ? { note: 'Nothing is being recorded on this side' } : {}),
+    ...(list.enabled === false
+      ? { note: 'Nothing is being recorded on this side' }
+      : {}),
   }
 }
 
@@ -36,7 +41,11 @@ export function mergeTimeline(server: NetRecord[], client: NetRecord[]) {
   return [
     ...server.map(record => ({ side: 'server' as const, ...record })),
     ...client.map(record => ({ side: 'client' as const, ...record })),
-  ].sort((a, b) => a.timestamp - b.timestamp || (a.side === b.side ? a.id - b.id : a.side === 'server' ? -1 : 1))
+  ].sort((a, b) => a.timestamp - b.timestamp || (a.side === b.side
+    ? a.id - b.id
+    : a.side === 'server'
+      ? -1
+      : 1))
 }
 
 export function registerNetworkTools(server: McpServer, client: GameServerClient) {
@@ -46,7 +55,10 @@ export function registerNetworkTools(server: McpServer, client: GameServerClient
       + 'client (peer), size in bytes, server tick, input sequence id and a few facts about the payload (entity count, ack, command). '
       + 'The server keeps the last 2000. Pass the returned latestId as afterId to get only newer ones; network_packet shows a payload. '
       + 'Development only.',
-    inputSchema: { ...packetFilters, peer: z.string().optional().describe('Only one client: its player id (list_players, or playerId from list_clients)') },
+    inputSchema: {
+      ...packetFilters,
+      peer: z.string().optional().describe('Only one client: its player id (list_players, or playerId from list_clients)'),
+    },
     annotations: READ_ONLY,
   }, ({ afterId, ...query }) => run(async () => listing(await client.packets({ ...query, after: afterId }))))
 
@@ -54,7 +66,9 @@ export function registerNetworkTools(server: McpServer, client: GameServerClient
     title: 'One packet on the server',
     description: 'One record from network_packets with its payload, as it was serialized for the wire. Payloads of old records are '
       + 'dropped to bound memory (hasPayload false). Development only.',
-    inputSchema: { id: z.number().int().min(1) },
+    inputSchema: {
+      id: z.number().int().min(1),
+    },
     annotations: READ_ONLY,
   }, ({ id }) => run(async () => {
     const { record } = await client.packet(id)
@@ -78,8 +92,11 @@ export function registerNetworkTools(server: McpServer, client: GameServerClient
     const sync = await client.sync()
     const { entities = [], players = [], ...rest } = sync
 
-    if (!player)
-      return includeEntities ? sync : { ...rest, players, entityCount: entities.length }
+    if (!player) {
+      return includeEntities
+        ? sync
+        : { ...rest, players, entityCount: entities.length }
+    }
 
     const one = players.find((p: { id: string }) => p.id === player)
     if (!one)
@@ -90,7 +107,12 @@ export function registerNetworkTools(server: McpServer, client: GameServerClient
       ...rest,
       player: one,
       ...(includeEntities
-        ? { entities: entities.map((entity: { id: string }) => ({ ...entity, tracked: tracked.has(entity.id) })) }
+        ? {
+            entities: entities.map((entity: { id: string }) => ({
+              ...entity,
+              tracked: tracked.has(entity.id),
+            })),
+          }
         : { entityCount: entities.length }),
     }
   }))
@@ -106,7 +128,10 @@ export function registerNetworkTools(server: McpServer, client: GameServerClient
   server.registerTool('client_packet', {
     title: 'One packet on a client',
     description: 'One record from client_packets with its payload.',
-    inputSchema: { id: z.number().int().min(1), clientId },
+    inputSchema: {
+      id: z.number().int().min(1),
+      clientId,
+    },
     annotations: READ_ONLY,
   }, ({ id, clientId }) => run(async () => {
     const { record } = await client.client('packet', { id }, clientId)

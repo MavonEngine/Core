@@ -16,7 +16,9 @@ export default function ShadeModeButtons({ shadeMode, onChange, btnClass, active
         <button
           key={mode}
           title={label}
-          className={`${btnClass}${shadeMode === mode ? ` ${activeClass}` : ''}`}
+          className={`${btnClass}${shadeMode === mode
+            ? ` ${activeClass}`
+            : ''}`}
           onClick={() => onChange(mode)}
         >
           <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

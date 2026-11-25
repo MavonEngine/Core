@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LatencySimulator from '../../../src/Networking/Server/LatencySimulator'
 
 function makeLogger() {
-  return { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any
+  return {
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+  } as any
 }
 
 describe('latencySimulator', () => {

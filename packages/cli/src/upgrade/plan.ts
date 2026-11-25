@@ -80,22 +80,43 @@ export async function planUpgrade(root: string, packageJson: Record<string, any>
     throw new UpgradeError(npm.unreachable ?? `${npm.url} doesn't know @mavonengine/core`)
 
   const target = to ?? corePackument.latest
-  if (!target || !corePackument.versions[target])
-    throw new UpgradeError(to ? `@mavonengine/core ${to} isn't published, see 'npm view @mavonengine/core versions'` : `${npm.url} has no latest @mavonengine/core`)
+  if (!target || !corePackument.versions[target]) {
+    throw new UpgradeError(to
+      ? `@mavonengine/core ${to} isn't published, see 'npm view @mavonengine/core versions'`
+      : `${npm.url} has no latest @mavonengine/core`)
+  }
 
   const fields: DependencyField[] = ['dependencies', 'devDependencies']
-  const declared = fields.flatMap(field => Object.entries((packageJson[field] ?? {}) as Record<string, string>).map(([name, spec]) => ({ name, spec: String(spec), field })))
+  const declared = fields.flatMap(field => Object.entries((packageJson[field] ?? {}) as Record<string, string>).map(([name, spec]) => ({
+    name,
+    spec: String(spec),
+    field,
+  })))
 
   const candidates = declared.filter(({ name }) => name.startsWith('@mavonengine/') || installedJson(root, name)?.mavonengine)
-  const packuments = new Map(await Promise.all(candidates.map(async ({ name }) => [name, name === '@mavonengine/core' ? corePackument : await npm.get(name)] as const)))
+  const packuments = new Map(await Promise.all(candidates.map(async ({ name }) => [
+    name,
+    name === '@mavonengine/core'
+      ? corePackument
+      : await npm.get(name),
+  ] as const)))
   if (npm.unreachable)
     throw new UpgradeError(npm.unreachable)
 
   const bumps = candidates.map(({ name, spec, field }): Bump => {
     const json = installedJson(root, name)
-    const installed = typeof json?.version === 'string' ? json.version : undefined
+    const installed = typeof json?.version === 'string'
+      ? json.version
+      : undefined
     const plugin = !!json?.mavonengine || !!packuments.get(name)?.versions[packuments.get(name)?.latest ?? '']?.mavonengine
-    const bump: Bump = { name, field, spec, installed, plugin, exact: EXACT_RE.test(spec.trim()) }
+    const bump: Bump = {
+      name,
+      field,
+      spec,
+      installed,
+      plugin,
+      exact: EXACT_RE.test(spec.trim()),
+    }
 
     if (!REGISTRY_SPEC_RE.test(spec) || !spec.trim())
       return { ...bump, note: `stays: ${spec} isn't from the registry` }
@@ -129,11 +150,24 @@ export async function planUpgrade(root: string, packageJson: Record<string, any>
     return { ...bump, to: version }
   })
 
-  return { core: { from: installedJson(root, '@mavonengine/core')?.version, to: target }, bumps }
+  return {
+    core: { from: installedJson(root, '@mavonengine/core')?.version, to: target },
+    bumps,
+  }
 }
 
-const DEV_FLAG: Record<PackageManager, string> = { npm: '--save-dev', pnpm: '--save-dev', yarn: '--dev', bun: '--dev' }
-const EXACT_FLAG: Record<PackageManager, string> = { npm: '--save-exact', pnpm: '--save-exact', yarn: '--exact', bun: '--exact' }
+const DEV_FLAG: Record<PackageManager, string> = {
+  npm: '--save-dev',
+  pnpm: '--save-dev',
+  yarn: '--dev',
+  bun: '--dev',
+}
+const EXACT_FLAG: Record<PackageManager, string> = {
+  npm: '--save-exact',
+  pnpm: '--save-exact',
+  yarn: '--exact',
+  bun: '--exact',
+}
 
 /**
  * The install commands for the bumps: one per dependency field and pinning, so each package stays where it is
@@ -151,9 +185,15 @@ export function installCommands(pm: PackageManager, bumps: Bump[]): string[][] {
   }
 
   return Array.from(groups.values(), ({ field, exact, specs }) => [
-    pm === 'npm' ? 'install' : 'add',
+    pm === 'npm'
+      ? 'install'
+      : 'add',
     ...specs,
-    ...(field === 'devDependencies' ? [DEV_FLAG[pm]] : []),
-    ...(exact ? [EXACT_FLAG[pm]] : []),
+    ...(field === 'devDependencies'
+      ? [DEV_FLAG[pm]]
+      : []),
+    ...(exact
+      ? [EXACT_FLAG[pm]]
+      : []),
   ])
 }

@@ -62,7 +62,20 @@ export interface PluginManifest {
    * <package>` copies them into the project's `resources/<package>/`, and `ctx.publishedFile()` finds the copy
    */
   publish?: string
+  /**
+   * Dev entry, relative to the package: runs in the client's Vite dev server, never in a build. Any target can have
+   * one. See `DevPlugin`
+   */
+  dev?: string
+  /**
+   * Whether the game reloads when the plugin's `options` in mavonengine.json change. Default true. Turn it off for a
+   * plugin whose dev entry writes its options while the editor is open and whose client picks the change up itself
+   */
+  reloadOnOptions?: boolean
 }
+
+/** A side of the project a plugin entry is loaded on: the dev side is the client's Vite dev server */
+export type PluginSide = 'client' | 'server' | 'dev'
 
 export interface InstalledPlugin {
   package: string
@@ -183,7 +196,9 @@ export function addPluginToConfig(root: string, pkg: string): boolean {
     if (existing && existing.enabled !== false)
       return false
 
-    config.plugins[pkg] = existing ? { ...existing, enabled: true } : { enabled: true }
+    config.plugins[pkg] = existing
+      ? { ...existing, enabled: true }
+      : { enabled: true }
     return true
   })
 }
@@ -197,7 +212,9 @@ export function recordPrefabUsage(root: string, pkg: string, prefab: string): bo
     if (!entry)
       return false
 
-    const prefabs = Array.isArray(entry.prefabs) ? entry.prefabs : []
+    const prefabs = Array.isArray(entry.prefabs)
+      ? entry.prefabs
+      : []
     if (prefabs.includes(prefab))
       return false
 
@@ -229,7 +246,9 @@ export function installedPackageVersion(root: string, pkg: string): string | und
 
   try {
     const version = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version
-    return typeof version === 'string' ? version : undefined
+    return typeof version === 'string'
+      ? version
+      : undefined
   }
   catch {
     return undefined
@@ -252,6 +271,12 @@ function validateManifest(pkg: string, value: unknown): PluginManifest {
   if (manifest.publish !== undefined && (typeof manifest.publish !== 'string' || !manifest.publish))
     throw new PluginConfigError(`${pkg}: "mavonengine.publish" must be a directory of the package`)
 
+  if (manifest.dev !== undefined && (typeof manifest.dev !== 'string' || !manifest.dev))
+    throw new PluginConfigError(`${pkg}: "mavonengine.dev" must be a file of the package`)
+
+  if (manifest.reloadOnOptions !== undefined && typeof manifest.reloadOnOptions !== 'boolean')
+    throw new PluginConfigError(`${pkg}: "mavonengine.reloadOnOptions" must be true or false`)
+
   return manifest
 }
 
@@ -268,11 +293,25 @@ export function readPluginManifest(root: string, pkg: string): InstalledPlugin |
   if (packageJson.mavonengine === undefined)
     return undefined
 
-  return { package: pkg, version: packageJson.version, dir, manifest: validateManifest(pkg, packageJson.mavonengine) }
+  return {
+    package: pkg,
+    version: packageJson.version,
+    dir,
+    manifest: validateManifest(pkg, packageJson.mavonengine),
+  }
 }
 
 export function runsOn(target: PluginTarget, side: 'client' | 'server'): boolean {
   return target === 'both' || target === side
+}
+
+/** The entry of `manifest` for `side`, undefined when the plugin has none there */
+export function entryFor(manifest: PluginManifest, side: PluginSide): string | undefined {
+  if (side === 'dev')
+    return manifest.dev
+  return runsOn(manifest.target, side)
+    ? manifest[side]
+    : undefined
 }
 
 /**
@@ -281,7 +320,9 @@ export function runsOn(target: PluginTarget, side: 'client' | 'server'): boolean
 export function resolveInside(base: string, path: string): string | undefined {
   const full = resolve(base, path)
   const inside = relative(base, full)
-  return inside && !inside.startsWith('..') && !isAbsolute(inside) ? full : undefined
+  return inside && !inside.startsWith('..') && !isAbsolute(inside)
+    ? full
+    : undefined
 }
 
 export function assetsDir(plugin: InstalledPlugin): string {
@@ -289,11 +330,11 @@ export function assetsDir(plugin: InstalledPlugin): string {
 }
 
 /**
- * The enabled plugins in mavonengine.json that run on `side`, in config order.
+ * The enabled plugins in mavonengine.json that run on `side`, in config order. For `dev`, the ones with a dev entry.
  * Plugins that are missing or invalid are skipped and reported in `warnings`. Plugins made for another
  * @mavonengine/core are loaded, and reported in `incompatible`.
  */
-export function enabledPlugins(root: string, side: 'client' | 'server'): { plugins: EnabledPlugin[], warnings: string[], incompatible: string[] } {
+export function enabledPlugins(root: string, side: PluginSide): { plugins: EnabledPlugin[], warnings: string[], incompatible: string[] } {
   const plugins: EnabledPlugin[] = []
   const warnings: string[] = []
   const incompatible: string[] = []
@@ -317,23 +358,29 @@ export function enabledPlugins(root: string, side: 'client' | 'server'): { plugi
       continue
     }
 
-    if (!runsOn(installed.manifest.target, side))
+    const entryFile = entryFor(installed.manifest, side)
+    if (!entryFile)
       continue
 
     // Loaded anyway: the range may be too strict, and `mavonengine doctor` says what to do about it
-    if (engineCompat(installed.manifest.engine, coreVersion) === 'incompatible')
-      incompatible.push(`${pkg}${installed.version ? ` ${installed.version}` : ''} is made for @mavonengine/core ${installed.manifest.engine}, the project has ${coreVersion}, run 'mavonengine doctor'`)
+    if (engineCompat(installed.manifest.engine, coreVersion) === 'incompatible') {
+      incompatible.push(`${pkg}${installed.version
+        ? ` ${installed.version}`
+        : ''} is made for @mavonengine/core ${installed.manifest.engine}, the project has ${coreVersion}, run 'mavonengine doctor'`)
+    }
 
-    const entryPath = resolveInside(installed.dir, installed.manifest[side]!)
+    const entryPath = resolveInside(installed.dir, entryFile)
     if (!entryPath || !existsSync(entryPath)) {
-      warnings.push(`${pkg}: ${side} entry ${installed.manifest[side]} not found, is the plugin built?`)
+      warnings.push(`${pkg}: ${side} entry ${entryFile} not found, is the plugin built?`)
       continue
     }
 
     plugins.push({
       ...installed,
       options: entry?.options ?? {},
-      prefabs: Array.isArray(entry?.prefabs) ? entry.prefabs : [],
+      prefabs: Array.isArray(entry?.prefabs)
+        ? entry.prefabs
+        : [],
       entry: entryPath,
     })
   }
@@ -346,11 +393,15 @@ export function enabledPlugins(root: string, side: 'client' | 'server'): { plugi
  */
 export function shippedAssetPaths(manifest: PluginManifest, usedPrefabs: string[]): string[] {
   const assets = manifest.assets
-  const paths = [...(assets?.shared ?? [])]
+  const paths = [
+    ...(assets?.shared ?? []),
+  ]
   for (const prefab of usedPrefabs)
     paths.push(...(assets?.prefabs?.[prefab] ?? []))
 
-  return [...new Set(paths)]
+  return [
+    ...new Set(paths),
+  ]
 }
 
 /**
@@ -373,7 +424,12 @@ export function releaseAssets(root: string): { assets: ReleaseAsset[], warnings:
         warnings.push(`${plugin.package}: asset ${path} not found`)
         continue
       }
-      assets.push({ package: plugin.package, from, to: `plugins/${plugin.package}/${path}`, path })
+      assets.push({
+        package: plugin.package,
+        from,
+        to: `plugins/${plugin.package}/${path}`,
+        path,
+      })
     }
   }
 
@@ -392,7 +448,9 @@ function readReadme(dir: string): string | undefined {
       return undefined
 
     const text = readFileSync(join(dir, file), 'utf8')
-    return text.length > MAX_README_CHARS ? `${text.slice(0, MAX_README_CHARS)}\n\n… (cut off)` : text
+    return text.length > MAX_README_CHARS
+      ? `${text.slice(0, MAX_README_CHARS)}\n\n… (cut off)`
+      : text
   }
   catch {
     return undefined
@@ -400,7 +458,9 @@ function readReadme(dir: string): string | undefined {
 }
 
 function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined
+  return typeof value === 'string' && value
+    ? value
+    : undefined
 }
 
 /**
@@ -415,7 +475,9 @@ export function pluginInfos(root: string, { readme = true }: { readme?: boolean 
       enabled: entry?.enabled !== false,
       installed: false,
       declaredPrefabs: [],
-      usedPrefabs: Array.isArray(entry?.prefabs) ? entry.prefabs.filter(prefab => typeof prefab === 'string') : [],
+      usedPrefabs: Array.isArray(entry?.prefabs)
+        ? entry.prefabs.filter(prefab => typeof prefab === 'string')
+        : [],
     }
 
     const dir = findPackageDir(root, pkg)
@@ -435,8 +497,12 @@ export function pluginInfos(root: string, { readme = true }: { readme?: boolean 
       version: text(packageJson.version),
       description: text(packageJson.description),
       license: text(packageJson.license),
-      homepage: text(packageJson.homepage) ?? text(typeof repository === 'string' ? repository : repository?.url),
-      readme: readme ? readReadme(dir) : undefined,
+      homepage: text(packageJson.homepage) ?? text(typeof repository === 'string'
+        ? repository
+        : repository?.url),
+      readme: readme
+        ? readReadme(dir)
+        : undefined,
     })
 
     if (packageJson.mavonengine === undefined)

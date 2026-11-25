@@ -172,8 +172,12 @@ export default class AuthStore {
       name,
       guest: guest ? 1 : 0,
       email: email?.trim() ?? null,
-      email_key: email ? emailKey(email) : null,
-      email_verified_at: email && emailVerified ? now : null,
+      email_key: email
+        ? emailKey(email)
+        : null,
+      email_verified_at: email && emailVerified
+        ? now
+        : null,
       last_login_at: null,
       created_at: now,
       disabled_at: null,
@@ -203,8 +207,12 @@ export default class AuthStore {
   async setEmail(id: string, email: string | null, { verified = false } = {}): Promise<void> {
     await this.db.updateTable(this.table('accounts')).set({
       email: email?.trim() ?? null,
-      email_key: email ? emailKey(email) : null,
-      email_verified_at: email && verified ? this.now().toISOString() : null,
+      email_key: email
+        ? emailKey(email)
+        : null,
+      email_verified_at: email && verified
+        ? this.now().toISOString()
+        : null,
     }).where('id', '=', id).execute()
   }
 
@@ -217,7 +225,9 @@ export default class AuthStore {
   /** Mark the account's email confirmed, when it still is `email`. Returns whether it is */
   async markEmailVerified(id: string, email: string): Promise<boolean> {
     const result = await this.db.updateTable(this.table('accounts'))
-      .set({ email_verified_at: this.now().toISOString() })
+      .set({
+        email_verified_at: this.now().toISOString(),
+      })
       .where('id', '=', id)
       .where('email_key', '=', emailKey(email))
       .executeTakeFirst()
@@ -246,13 +256,23 @@ export default class AuthStore {
   /** What a token is, while it works: right purpose, not run out. Doesn't use it up */
   async token(token: string, purpose: TokenPurpose): Promise<TokenRow | undefined> {
     const row = await this.db.selectFrom(this.table('tokens'))
-      .select(['purpose', 'account_id', 'email', 'expires_at'])
+      .select([
+        'purpose',
+        'account_id',
+        'email',
+        'expires_at',
+      ])
       .where('token_hash', '=', hashToken(token))
       .where('purpose', '=', purpose)
       .executeTakeFirst()
     if (!row || row.expires_at <= this.now().toISOString())
       return undefined
-    return { purpose: row.purpose, accountId: row.account_id, email: row.email, expiresAt: row.expires_at }
+    return {
+      purpose: row.purpose,
+      accountId: row.account_id,
+      email: row.email,
+      expiresAt: row.expires_at,
+    }
   }
 
   /**
@@ -263,7 +283,9 @@ export default class AuthStore {
     if (!found)
       return undefined
     const result = await this.db.deleteFrom(this.table('tokens')).where('token_hash', '=', hashToken(token)).executeTakeFirst()
-    return Number(result.numDeletedRows) === 1 ? found : undefined
+    return Number(result.numDeletedRows) === 1
+      ? found
+      : undefined
   }
 
   /** Make the account's links stop working, those for `purpose` or all */
@@ -288,7 +310,11 @@ export default class AuthStore {
   /** Disable or enable it again. Returns whether there is such an account */
   async setDisabled(id: string, disabled: boolean): Promise<boolean> {
     const result = await this.db.updateTable(this.table('accounts'))
-      .set({ disabled_at: disabled ? this.now().toISOString() : null })
+      .set({
+        disabled_at: disabled
+          ? this.now().toISOString()
+          : null,
+      })
       .where('id', '=', id)
       .executeTakeFirst()
     return Number(result.numUpdatedRows) > 0
@@ -296,21 +322,41 @@ export default class AuthStore {
 
   async identity(provider: string, externalId: string): Promise<IdentityRow | undefined> {
     const row = await this.db.selectFrom(this.table('identities'))
-      .select(['provider', 'external_id', 'account_id', 'secret'])
+      .select([
+        'provider',
+        'external_id',
+        'account_id',
+        'secret',
+      ])
       .where('provider', '=', provider)
       .where('external_id', '=', externalId)
       .executeTakeFirst()
-    return row && { provider: row.provider, externalId: row.external_id, accountId: row.account_id, secret: row.secret ?? null }
+    return row && {
+      provider: row.provider,
+      externalId: row.external_id,
+      accountId: row.account_id,
+      secret: row.secret ?? null,
+    }
   }
 
   /** The provider's identity of an account, e.g. its username for `password` */
   async identityOf(accountId: string, provider: string): Promise<IdentityRow | undefined> {
     const row = await this.db.selectFrom(this.table('identities'))
-      .select(['provider', 'external_id', 'account_id', 'secret'])
+      .select([
+        'provider',
+        'external_id',
+        'account_id',
+        'secret',
+      ])
       .where('account_id', '=', accountId)
       .where('provider', '=', provider)
       .executeTakeFirst()
-    return row && { provider: row.provider, externalId: row.external_id, accountId: row.account_id, secret: row.secret ?? null }
+    return row && {
+      provider: row.provider,
+      externalId: row.external_id,
+      accountId: row.account_id,
+      secret: row.secret ?? null,
+    }
   }
 
   async addIdentity(identity: IdentityRow): Promise<void> {
@@ -339,7 +385,9 @@ export default class AuthStore {
       expires_at: expiresAt,
       last_seen_at: now.toISOString(),
     }).execute()
-    await this.db.updateTable(this.table('accounts')).set({ last_login_at: now.toISOString() }).where('id', '=', accountId).execute()
+    await this.db.updateTable(this.table('accounts')).set({
+      last_login_at: now.toISOString(),
+    }).where('id', '=', accountId).execute()
     return { token, expiresAt }
   }
 
@@ -353,7 +401,17 @@ export default class AuthStore {
     const now = this.now()
     const row = await this.db.selectFrom(`${this.table('sessions')} as s`)
       .innerJoin(`${this.table('accounts')} as a`, 'a.id', 's.account_id')
-      .select(['a.id', 'a.name', 'a.guest', 'a.email', 'a.email_verified_at', 'a.last_login_at', 'a.created_at', 'a.disabled_at', 's.expires_at'])
+      .select([
+        'a.id',
+        'a.name',
+        'a.guest',
+        'a.email',
+        'a.email_verified_at',
+        'a.last_login_at',
+        'a.created_at',
+        'a.disabled_at',
+        's.expires_at',
+      ])
       .where('s.token_hash', '=', hash)
       .executeTakeFirst()
     if (!row)
@@ -365,9 +423,14 @@ export default class AuthStore {
     }
 
     const account = toAccount(row)
-    const lifetimeMs = typeof lifetime === 'number' ? lifetime : lifetime(account)
+    const lifetimeMs = typeof lifetime === 'number'
+      ? lifetime
+      : lifetime(account)
     await this.db.updateTable(this.table('sessions'))
-      .set({ last_seen_at: now.toISOString(), expires_at: new Date(now.getTime() + lifetimeMs).toISOString() })
+      .set({
+        last_seen_at: now.toISOString(),
+        expires_at: new Date(now.getTime() + lifetimeMs).toISOString(),
+      })
       .where('token_hash', '=', hash)
       .execute()
     return account
@@ -440,12 +503,19 @@ export default class AuthStore {
     const rows = await where(this.db.selectFrom(accounts).selectAll()).orderBy('created_at', 'desc').orderBy('id').limit(limit).offset(offset).execute() as Record<string, any>[]
     const total = await where(this.db.selectFrom(accounts).select((eb: any) => eb.fn.countAll().as('count'))).executeTakeFirstOrThrow() as { count: unknown }
     const ids = rows.map(row => row.id as string)
-    if (ids.length === 0)
-      return { accounts: [], total: Number(total.count) }
+    if (ids.length === 0) {
+      return {
+        accounts: [],
+        total: Number(total.count),
+      }
+    }
 
     const identities = await this.db.selectFrom(this.table('identities')).select(['account_id', 'provider', 'external_id']).where('account_id', 'in', ids).execute()
     const sessions = await this.db.selectFrom(this.table('sessions'))
-      .select(['account_id', eb => eb.fn.countAll().as('count')])
+      .select([
+        'account_id',
+        eb => eb.fn.countAll().as('count'),
+      ])
       .where('account_id', 'in', ids)
       .where('expires_at', '>', this.now().toISOString())
       .groupBy('account_id')

@@ -40,7 +40,9 @@ export async function fetchRoutes(fetchFn: typeof fetch = fetch): Promise<HttpRo
     throw new Error(`The game server answered ${res.status} ${res.statusText}`)
 
   const { routes } = await res.json() as Partial<HttpRouteList>
-  return Array.isArray(routes) ? routes : []
+  return Array.isArray(routes)
+    ? routes
+    : []
 }
 
 export interface RouteGroup {
@@ -58,13 +60,25 @@ export function groupRoutes(routes: HttpRouteInfo[]): RouteGroup[] {
   const groups = new Map<string, RouteGroup>()
 
   for (const route of routes) {
-    const id = route.source === 'plugin' ? route.plugin ?? 'plugin' : route.source
-    const from = route.source === 'engine' ? 'Engine' : route.source === 'game' ? 'Game' : id
+    const id = route.source === 'plugin'
+      ? route.plugin ?? 'plugin'
+      : route.source
+    const from = route.source === 'engine'
+      ? 'Engine'
+      : route.source === 'game'
+        ? 'Game'
+        : id
     if (!groups.has(id))
       groups.set(id, { id, from, routes: [] })
     groups.get(id)!.routes.push(route)
   }
 
-  const rank = (group: RouteGroup) => group.id === 'game' ? 0 : group.id === 'engine' ? 2 : 1
-  return [...groups.values()].sort((a, b) => rank(a) - rank(b))
+  const rank = (group: RouteGroup) => group.id === 'game'
+    ? 0
+    : group.id === 'engine'
+      ? 2
+      : 1
+  return [
+    ...groups.values(),
+  ].sort((a, b) => rank(a) - rank(b))
 }

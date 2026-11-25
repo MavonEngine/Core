@@ -22,7 +22,9 @@ export function isSupportedNode(version: string): boolean {
 export function cliBinPath(from: string = import.meta.url): string {
   const pkgPath = createRequire(from).resolve('@mavonengine/cli/package.json')
   const { bin } = JSON.parse(readFileSync(pkgPath, 'utf8'))
-  return join(dirname(pkgPath), typeof bin === 'string' ? bin : bin.mavonengine)
+  return join(dirname(pkgPath), typeof bin === 'string'
+    ? bin
+    : bin.mavonengine)
 }
 
 /**
@@ -30,7 +32,11 @@ export function cliBinPath(from: string = import.meta.url): string {
  * Resolves with its exit code.
  */
 export function runCreate(args: string[]): Promise<number> {
-  const child = spawn(process.execPath, [cliBinPath(), 'create', ...args], { stdio: 'inherit' })
+  const child = spawn(process.execPath, [
+    cliBinPath(),
+    'create',
+    ...args,
+  ], { stdio: 'inherit' })
 
   // Ctrl-C reaches the cli through the terminal's process group, so wait for it to exit.
   // Signals sent to us alone (kill, closing the terminal) are passed on.

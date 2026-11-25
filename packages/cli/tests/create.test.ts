@@ -25,7 +25,10 @@ function templateZip(files: Record<string, string>) {
 }
 
 const template = {
-  [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/package.json`]: JSON.stringify({ name: '@mavonengine/multiplayer-template', scripts: { dev: 'x' } }),
+  [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/package.json`]: JSON.stringify({
+    name: '@mavonengine/multiplayer-template',
+    scripts: { dev: 'x' },
+  }),
   [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/server/index.ts`]: 'export {}',
   'Core-0.0.14-alpha/packages/core/package.json': '{}',
 }
@@ -33,12 +36,25 @@ const template = {
 function recorder() {
   const steps: string[] = []
   let output = ''
-  return { steps, output: () => output, report: { step: (s: string) => steps.push(s), output: (c: string) => output += c } }
+  return {
+    steps,
+    output: () => output,
+    report: {
+      step: (s: string) => steps.push(s),
+      output: (c: string) => output += c,
+    },
+  }
 }
 
 describe('parseCreateArgs', () => {
   it('takes the project name and the dev options', () => {
-    const options = parseCreateArgs(['my-game', '--port', '9000', '--cwd', 'games'], '/home') as any
+    const options = parseCreateArgs([
+      'my-game',
+      '--port',
+      '9000',
+      '--cwd',
+      'games',
+    ], '/home') as any
 
     expect(options.projectName).toBe('my-game')
     expect(options.cwd).toBe(resolve('/home/games'))
@@ -83,7 +99,13 @@ describe('createProject', () => {
   it('downloads, extracts and names the project, reporting each step', async () => {
     const { steps, output, report } = recorder()
 
-    const projectDir = await createProject({ projectName: 'my-game', parentDir: dir, report, fetch: fetchZip, install: false })
+    const projectDir = await createProject({
+      projectName: 'my-game',
+      parentDir: dir,
+      report,
+      fetch: fetchZip,
+      install: false,
+    })
 
     expect(projectDir).toBe(join(dir, 'my-game'))
     expect(JSON.parse(readFileSync(join(projectDir, 'package.json'), 'utf8')).name).toBe('my-game')
@@ -97,19 +119,45 @@ describe('createProject', () => {
   })
 
   it('names the game in the template\'s mavonengine.json, keeping the rest, and a name it sets', async () => {
-    const config = (body: object) => (async () => new Response(templateZip({ ...template, [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/mavonengine.json`]: JSON.stringify(body) }))) as typeof fetch
+    const config = (body: object) => (async () => new Response(templateZip({
+      ...template,
+      [`Core-0.0.14-alpha/${TEMPLATE_SUBPATH}/mavonengine.json`]: JSON.stringify(body),
+    }))) as typeof fetch
 
-    const named = await createProject({ projectName: 'tower-defense', parentDir: dir, report: recorder().report, fetch: config({ plugins: { '@acme/hud': {} } }), install: false })
-    expect(JSON.parse(readFileSync(join(named, 'mavonengine.json'), 'utf8'))).toEqual({ plugins: { '@acme/hud': {} }, appName: 'Tower Defense' })
+    const named = await createProject({
+      projectName: 'tower-defense',
+      parentDir: dir,
+      report: recorder().report,
+      fetch: config({
+        plugins: { '@acme/hud': {} },
+      }),
+      install: false,
+    })
+    expect(JSON.parse(readFileSync(join(named, 'mavonengine.json'), 'utf8'))).toEqual({
+      plugins: { '@acme/hud': {} },
+      appName: 'Tower Defense',
+    })
 
-    const kept = await createProject({ projectName: 'other', parentDir: dir, report: recorder().report, fetch: config({ plugins: {}, appName: 'Set By Template' }), install: false })
+    const kept = await createProject({
+      projectName: 'other',
+      parentDir: dir,
+      report: recorder().report,
+      fetch: config({ plugins: {}, appName: 'Set By Template' }),
+      install: false,
+    })
     expect(JSON.parse(readFileSync(join(kept, 'mavonengine.json'), 'utf8')).appName).toBe('Set By Template')
   })
 
   it('refuses an existing directory', async () => {
     mkdirSync(join(dir, 'taken'))
 
-    await expect(createProject({ projectName: 'taken', parentDir: dir, report: recorder().report, fetch: fetchZip, install: false }))
+    await expect(createProject({
+      projectName: 'taken',
+      parentDir: dir,
+      report: recorder().report,
+      fetch: fetchZip,
+      install: false,
+    }))
       .rejects
       .toThrow('already exists')
   })
@@ -117,7 +165,13 @@ describe('createProject', () => {
   it('reports a failed download', async () => {
     const notFound = (async () => new Response('nope', { status: 404, statusText: 'Not Found' })) as typeof fetch
 
-    await expect(createProject({ projectName: 'x', parentDir: dir, report: recorder().report, fetch: notFound, install: false }))
+    await expect(createProject({
+      projectName: 'x',
+      parentDir: dir,
+      report: recorder().report,
+      fetch: notFound,
+      install: false,
+    }))
       .rejects
       .toThrow('404 Not Found')
   })
@@ -126,7 +180,10 @@ describe('createProject', () => {
 describe('gatedSource', () => {
   it('keeps reporting connecting until ready', async () => {
     let ready = false
-    const source = gatedSource({ label: 'http://localhost:8050', fetch: async () => ({ ok: true }) }, () => ready)
+    const source = gatedSource({
+      label: 'http://localhost:8050',
+      fetch: async () => ({ ok: true }),
+    }, () => ready)
 
     await expect(source.fetch()).rejects.toMatchObject({ status: 'connecting' })
     ready = true

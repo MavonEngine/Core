@@ -52,19 +52,31 @@ export function pluginFiles({ name, target, engine }: PluginScaffoldOptions): Sc
     scripts: {
       typecheck: 'tsc -p tsconfig.json',
     },
-    ...(engine ? { peerDependencies: { '@mavonengine/core': engine } } : {}),
+    ...(engine
+      ? {
+          peerDependencies: { '@mavonengine/core': engine },
+        }
+      : {}),
     mavonengine: {
       target,
-      ...(client ? { client: './src/client.ts' } : {}),
-      ...(server ? { server: './src/server.ts' } : {}),
-      ...(engine ? { engine } : {}),
+      ...(client
+        ? { client: './src/client.ts' }
+        : {}),
+      ...(server
+        ? { server: './src/server.ts' }
+        : {}),
+      ...(engine
+        ? { engine }
+        : {}),
     },
   })
 
   files['tsconfig.json'] = json({
     compilerOptions: {
       target: 'es2022',
-      lib: client ? ['es2022', 'dom'] : ['es2022'],
+      lib: client
+        ? ['es2022', 'dom']
+        : ['es2022'],
       module: 'nodenext',
       moduleResolution: 'nodenext',
       strict: true,
@@ -156,8 +168,12 @@ export function linkPlugin(root: string, pm: PackageManager, name: string, dir: 
   }
   else {
     // `workspaces` is a list, or yarn's { packages: [...] }
-    const list: unknown = Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces?.packages
-    const globs = Array.isArray(list) ? list.map(String) : []
+    const list: unknown = Array.isArray(pkg.workspaces)
+      ? pkg.workspaces
+      : pkg.workspaces?.packages
+    const globs = Array.isArray(list)
+      ? list.map(String)
+      : []
     if (globs.includes(PLUGINS_WORKSPACE) || globs.includes(dir) || globs.includes(`./${dir}`))
       return undefined
 

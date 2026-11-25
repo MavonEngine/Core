@@ -37,9 +37,27 @@ export abstract class LightPrimitive extends WithEditorHelper(GameObject) {
     this.registerEditorHelper(position, label, {
       onMove: (delta: Vector3) => this.instance.position.add(delta),
       properties: [
-        { type: 'color', label: 'color', getValue: () => `#${this.instance.color.getHexString()}`, setValue: v => this.instance.color.set(v) },
-        { type: 'slider', label: 'intensity', min: 0, max: 10, step: 0.01, getValue: () => this.instance.intensity, setValue: v => (this.instance.intensity = v) },
-        { type: 'checkbox', label: 'castShadow', getValue: () => this.instance.castShadow, setValue: v => (this.instance.castShadow = v) },
+        {
+          type: 'color',
+          label: 'color',
+          getValue: () => `#${this.instance.color.getHexString()}`,
+          setValue: v => this.instance.color.set(v),
+        },
+        {
+          type: 'slider',
+          label: 'intensity',
+          min: 0,
+          max: 10,
+          step: 0.01,
+          getValue: () => this.instance.intensity,
+          setValue: v => (this.instance.intensity = v),
+        },
+        {
+          type: 'checkbox',
+          label: 'castShadow',
+          getValue: () => this.instance.castShadow,
+          setValue: v => (this.instance.castShadow = v),
+        },
       ],
     })
     this.tagWithHelper(this.instance)

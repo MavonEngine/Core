@@ -7,7 +7,9 @@
  * @returns {number} A random number in the range [-1, 1).
  */
 export function randomSigned() {
-  return Math.random() * (Math.random() < 0.5 ? -1 : 1)
+  return Math.random() * (Math.random() < 0.5
+    ? -1
+    : 1)
 }
 
 export function randRange(min: number, max: number): number {

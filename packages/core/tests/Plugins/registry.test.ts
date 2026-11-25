@@ -3,17 +3,28 @@ import { fetchPluginReadme, fetchPluginRegistry, MAX_REMOTE_README_CHARS, notInP
 
 describe('plugin registry', () => {
   it('reads plugins.json from the main branch on GitHub, uncached', async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ version: 1, plugins: [{ package: 'forest', target: 'both' }, { name: 'no package' }] })))
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      version: 1,
+      plugins: [
+        { package: 'forest', target: 'both' },
+        { name: 'no package' },
+      ],
+    })))
 
     const registry = await fetchPluginRegistry({ fetch })
 
     expect(PLUGIN_REGISTRY_URL).toBe('https://raw.githubusercontent.com/MavonEngine/Core/main/plugins.json')
     expect(fetch).toHaveBeenCalledWith(PLUGIN_REGISTRY_URL, expect.objectContaining({ cache: 'no-store' }))
-    expect(registry.plugins.map(plugin => [plugin.package, plugin.name, plugin.target])).toEqual([['forest', 'forest', 'both']])
+    expect(registry.plugins.map(plugin => [plugin.package, plugin.name, plugin.target])).toEqual([
+      ['forest', 'forest', 'both'],
+    ])
   })
 
   it('leaves out the plugins a project already has', () => {
-    const plugins = [{ package: 'forest', name: 'forest' }, { package: '@acme/chat', name: 'Chat' }]
+    const plugins = [
+      { package: 'forest', name: 'forest' },
+      { package: '@acme/chat', name: 'Chat' },
+    ]
 
     expect(notInProject(plugins, ['@acme/chat', 'unlisted'])).toEqual([plugins[0]])
     expect(notInProject(plugins, [])).toEqual(plugins)
@@ -35,9 +46,11 @@ describe('plugin registry', () => {
     expect(fetch).not.toHaveBeenCalled()
 
     await expect(fetchPluginReadme({ package: 'forest', readme: 'https://example.com/README.md' }, { fetch })).rejects.toThrow('was not found')
-    await expect(fetchPluginReadme({ package: 'forest', readme: 'https://example.com/README.md' }, { fetch: vi.fn(async () => {
-      throw new Error('offline')
-    }) })).rejects.toThrow(/Can't reach .*offline/)
+    await expect(fetchPluginReadme({ package: 'forest', readme: 'https://example.com/README.md' }, {
+      fetch: vi.fn(async () => {
+        throw new Error('offline')
+      }),
+    })).rejects.toThrow(/Can't reach .*offline/)
   })
 
   it('cuts off a very long readme', async () => {

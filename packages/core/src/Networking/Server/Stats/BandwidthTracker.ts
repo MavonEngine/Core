@@ -37,7 +37,10 @@ export default class BandwidthTracker {
    * Push the counters for `id` into the history and reset all counters.
    */
   sample(id: string, now = Date.now()): BandwidthSample {
-    const sample = { timestamp: now, ...this.getBandwidthUsage(id) }
+    const sample = {
+      timestamp: now,
+      ...this.getBandwidthUsage(id),
+    }
 
     this.history.push(sample)
     if (this.history.length > this.historyLength)
