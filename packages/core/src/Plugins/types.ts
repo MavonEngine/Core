@@ -309,9 +309,68 @@ export interface DevPlugin {
    * page this dev server serves, so another site open in the browser can't make them. Calling `next()` answers 404.
    */
   middleware?(ctx: DevPluginContext): DevMiddleware
+  /**
+   * Tools for AI assistants: `mavonengine mcp` offers them as MCP tools named `<plugin>_<name>`, e.g. `kenney_import`
+   * for `@mavonengine/kenney`, while the dev server runs. Called once, after `setup()`
+   */
+  mcpTools?(ctx: DevPluginContext): PluginTool[]
   /** Called when the dev server stops or the plugin was removed */
   destroy?(ctx: DevPluginContext): void | Promise<void>
 }
+
+/** A JSON Schema, as plain data */
+export type JsonSchema = Record<string, unknown>
+
+/**
+ * A tool a plugin offers AI assistants through `mavonengine mcp`. Its arguments come from a model: check them like
+ * any other input, e.g. paths with `resolveInside()`.
+ */
+export interface PluginTool {
+  /** Lowercase letters, digits and `_`, without the plugin's name: `import` becomes `kenney_import` */
+  name: string
+  /** A short name for people, e.g. shown when the assistant asks to run it */
+  title?: string
+  /** What it does and when to use it, for the model */
+  description: string
+  /** JSON Schema of its arguments, an object. Leave it out for a tool without arguments */
+  input?: JsonSchema
+  /**
+   * Changes nothing: not the project's files, not mavonengine.json, not the game. Assistants usually run read-only tools
+   * without asking. Default false: assume a tool changes something unless it says it doesn't, and `mavonengine mcp
+   * --read-only` leaves it out
+   */
+  readOnly?: boolean
+  /** Deletes or overwrites something that can't be had back. Only for tools that aren't read-only */
+  destructive?: boolean
+  /** Reaches outside the project, e.g. downloads from a website */
+  openWorld?: boolean
+  /** Do it. What it returns is sent to the model as JSON; a throw is reported as the tool's error */
+  run(args: Record<string, unknown>): unknown | Promise<unknown>
+}
+
+const SCOPE_RE = /^@[^/]+\//
+const NON_NAME_RE = /[^\w-]/g
+
+/** How `mavonengine mcp` names a plugin's tool: the package name without its scope, then the tool's name */
+export function pluginToolName(pkg: string, tool: string): string {
+  return `${pkg.replace(SCOPE_RE, '').replace(NON_NAME_RE, '_')}_${tool}`
+}
+
+/** A plugin tool as the dev server lists it on `DEV_TOOLS_PATH` */
+export interface PluginToolInfo {
+  /** The MCP tool name, see `pluginToolName` */
+  name: string
+  plugin: string
+  title?: string
+  description: string
+  input: JsonSchema
+  readOnly: boolean
+  destructive: boolean
+  openWorld: boolean
+}
+
+/** Dev only: GET lists the tools of the plugins' dev entries, POST `<this>/<name>` with `{ arguments }` runs one */
+export const DEV_TOOLS_PATH = '/__mavonengine/mcp/tools'
 
 export function defineDevPlugin(plugin: DevPlugin): DevPlugin {
   return plugin

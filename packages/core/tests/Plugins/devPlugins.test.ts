@@ -7,7 +7,7 @@ import { build, createServer } from 'vite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DevPluginHost, pluginDataDir } from '../../src/Plugins/DevPluginHost'
 import { enabledPlugins, readConfig } from '../../src/Plugins/ProjectConfig'
-import { devPluginBase } from '../../src/Plugins/types'
+import { DEV_TOOLS_PATH, devPluginBase, pluginToolName } from '../../src/Plugins/types'
 import { mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
@@ -312,5 +312,105 @@ describe('build', () => {
     expect(globalThis.devPluginEvents).toEqual([])
     expect(existsSync(join(outDir, 'index.html'))).toBe(true)
     expect(readFileSync(join(outDir, 'index.html'), 'utf8')).not.toContain('dev.js')
+  })
+})
+
+describe('mcp tools of dev entries', () => {
+  let vite: ViteDevServer
+  let base: string
+  let http: ReturnType<typeof createHttpServer>
+
+  const toolsEntry = `
+export default {
+  mcpTools(ctx) {
+    return [
+      {
+        name: 'count',
+        title: 'Count',
+        description: 'Adds to a counter in the options',
+        input: { type: 'object', properties: { by: { type: 'number' } }, required: ['by'] },
+        run(args) {
+          ctx.updateOptions(options => { options.count = (options.count ?? 0) + args.by })
+          return { count: ctx.options.count }
+        },
+      },
+      { name: 'peek', description: 'Reads the options', readOnly: true, run: () => ctx.options },
+      { name: 'wipe', description: 'Breaks', destructive: true, openWorld: true, run() { throw new Error('nothing to wipe') } },
+      { name: 'Bad Name', description: 'x', run() {} },
+      { name: 'no_run', description: 'x' },
+      { name: 'odd_input', description: 'x', input: { type: 'string' }, run() {} },
+    ]
+  },
+}
+`
+
+  beforeEach(async () => {
+    installPlugin(root, '@kit/tools', { target: 'client', client: './client.js', dev: './dev.js' }, { 'client.js': 'export default {}', 'dev.js': toolsEntry })
+    writeConfig(root, { plugins: { '@kit/tools': { options: { count: 1 } }, 'forest': {} } })
+    vite = await createServer({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [mavonEnginePlugins()],
+      server: { middlewareMode: true, hmr: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    })
+    http = createHttpServer(vite.middlewares)
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', resolve))
+    base = `http://127.0.0.1:${(http.address() as AddressInfo).port}`
+  })
+
+  afterEach(async () => {
+    await new Promise(resolve => http.close(resolve))
+    await vite.close()
+  })
+
+  const runTool = (name: string, args: unknown, headers: Record<string, string> = {}) => fetch(`${base}${DEV_TOOLS_PATH}/${name}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ arguments: args }),
+  })
+
+  it('lists the tools under the plugin\'s name, leaving out the ones described wrong', async () => {
+    const { tools } = await (await fetch(`${base}${DEV_TOOLS_PATH}`)).json() as { tools: any[] }
+
+    expect(tools).toEqual([
+      { name: 'tools_count', plugin: '@kit/tools', title: 'Count', description: 'Adds to a counter in the options', input: { type: 'object', properties: { by: { type: 'number' } }, required: ['by'] }, readOnly: false, destructive: false, openWorld: false },
+      { name: 'tools_peek', plugin: '@kit/tools', description: 'Reads the options', input: { type: 'object', properties: {} }, readOnly: true, destructive: false, openWorld: false },
+      { name: 'tools_wipe', plugin: '@kit/tools', description: 'Breaks', input: { type: 'object', properties: {} }, readOnly: false, destructive: true, openWorld: true },
+    ])
+  })
+
+  it('runs a tool and answers with what it returned', async () => {
+    const res = await runTool('tools_count', { by: 2 })
+
+    expect(await res.json()).toEqual({ result: { count: 3 } })
+    expect(readConfig(root).plugins['@kit/tools'].options).toEqual({ count: 3 })
+    expect(await (await runTool('tools_peek', {})).json()).toEqual({ result: { count: 3 } })
+  })
+
+  it('reports what a tool threw as its error', async () => {
+    expect(await (await runTool('tools_wipe', {})).json()).toEqual({ error: 'nothing to wipe' })
+  })
+
+  it('names the tools there are when asked for one that isn\'t', async () => {
+    const res = await runTool('tools_nope', {})
+
+    expect(res.status).toBe(404)
+    expect((await res.json() as { error: string }).error).toBe('No tool tools_nope: the plugins\' dev entries offer tools_count, tools_peek, tools_wipe')
+  })
+
+  it('refuses calls from another site, and bodies that aren\'t JSON objects', async () => {
+    expect((await runTool('tools_count', { by: 1 }, { 'Sec-Fetch-Site': 'cross-site' })).status).toBe(403)
+    expect((await fetch(`${base}${DEV_TOOLS_PATH}/tools_count`, { method: 'POST', body: '{"arguments":{}}' })).status).toBe(403)
+    expect((await runTool('tools_count', [1])).status).toBe(400)
+    expect(readConfig(root).plugins['@kit/tools'].options).toEqual({ count: 1 })
+  })
+})
+
+describe('pluginToolName', () => {
+  it('is the package without its scope, then the tool', () => {
+    expect(pluginToolName('@mavonengine/kenney', 'import')).toBe('kenney_import')
+    expect(pluginToolName('my.plugin', 'run')).toBe('my_plugin_run')
   })
 })

@@ -8,7 +8,7 @@ import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
 import { DevPluginHost } from './DevPluginHost.js'
-import { fromLocalhost, fromThisPage } from './devRequest.js'
+import { fromLocalhost, fromThisPage, readBody } from './devRequest.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
@@ -646,22 +646,6 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       }
     })
   }
-}
-
-function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let body = ''
-    req.setEncoding('utf8')
-    req.on('data', (chunk: string) => {
-      body += chunk
-      if (body.length > maxBytes) {
-        reject(new Error(`Body is larger than ${maxBytes} bytes`))
-        req.destroy()
-      }
-    })
-    req.on('end', () => resolve(body))
-    req.on('error', reject)
-  })
 }
 
 function shippedAssetsByPackage(root: string): Map<string, string[]> {
