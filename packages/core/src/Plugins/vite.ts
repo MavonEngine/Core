@@ -7,6 +7,8 @@ import process from 'node:process'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
+import { DevPluginHost } from './DevPluginHost.js'
+import { fromLocalhost, fromThisPage } from './devRequest.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
@@ -34,7 +36,6 @@ if (import.meta.hot)
 const MAX_BODY_BYTES = 4096
 const MAX_SCENE_BYTES = 20 * 1024 * 1024
 const SCENE_URL_RE = new RegExp(`^/${SCENES_DIR}/([\\w-]+)\\.json$`)
-const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 const CONTENT_TYPES: Record<string, string> = {
   '.glb': 'model/gltf-binary',
@@ -94,23 +95,55 @@ export function fillAppName(html: string, appName: string | undefined): string {
  * - in dev, under `mavonengine dev`, lets the editor install packages: the request is handed to that process
  * - on build, copies only the plugin assets the release needs into `plugins/<package>/`
  * - in dev, the dev bridge: tools can inspect the open game tabs (renderer, world, logs, screenshots)
+ * - in dev, runs the plugins' dev entries and routes `/__mavonengine/plugins/<package>/` to them
  */
 export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plugin {
   let config: ResolvedConfig
-  /** What the virtual module was last generated from, to reload only when that changes */
+  /** What the virtual module was last generated from, to regenerate it only when that changes */
   let loadedSignature: string | undefined
+  /** The same without the options of plugins that turned off `reloadOnOptions`, to reload only when that changes */
+  let loadedReloadSignature: string | undefined
 
   const projectRoot = () => options.root ?? findConfigRoot(config.root)
 
   const clientPlugins = (root: string) => {
     const result = enabledPlugins(root, 'client')
-    return { ...result, signature: JSON.stringify(result.plugins.map(p => [p.package, p.entry, p.options])) }
+    return {
+      ...result,
+      signature: JSON.stringify(result.plugins.map(p => [p.package, p.entry, p.options])),
+      reloadSignature: JSON.stringify(result.plugins.map(p => [p.package, p.entry, p.manifest.reloadOnOptions === false ? null : p.options])),
+    }
   }
 
   const warn = (message: string) => config.logger.warn(`[mavonengine] ${message}`)
 
   const devBridge = options.devBridge ?? true
   let bridge: DevBridgeHub | undefined
+  let devPlugins: DevPluginHost | undefined
+  let devPluginsRoot: string | undefined
+
+  /** Start, restart or stop the plugins' dev entries for the project root as it is now */
+  const syncDevPlugins = () => {
+    const root = projectRoot()
+    if (root !== devPluginsRoot) {
+      void devPlugins?.close()
+      devPluginsRoot = root
+      devPlugins = root
+        ? new DevPluginHost({
+            projectRoot: root,
+            // Vite's paths use / on Windows too: native ones, like projectRoot and dataDir, so plugins can compare them
+            clientRoot: resolve(config.root),
+            publicDir: resolve(config.publicDir || join(config.root, 'public')),
+            logger: {
+              info: message => config.logger.info(`[mavonengine] ${message}`),
+              warn,
+              error: message => config.logger.error(`[mavonengine] ${message}`),
+            },
+          })
+        : undefined
+    }
+    return devPlugins?.sync()
+  }
 
   return {
     name: 'mavonengine-plugins',
@@ -142,14 +175,15 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
       const root = projectRoot()
       if (!root) {
-        loadedSignature = JSON.stringify([])
+        loadedSignature = loadedReloadSignature = JSON.stringify([])
         return 'export default []\n'
       }
 
       this.addWatchFile(join(root, CONFIG_FILE))
 
-      const { plugins, warnings, incompatible, signature } = clientPlugins(root)
+      const { plugins, warnings, incompatible, signature, reloadSignature } = clientPlugins(root)
       loadedSignature = signature
+      loadedReloadSignature = reloadSignature
       warnings.forEach(warning => warn(`Plugin skipped: ${warning}`))
       incompatible.forEach(warning => warn(`Plugin loaded anyway: ${warning}`))
 
@@ -184,13 +218,17 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       },
     },
 
-    configureServer(server) {
+    async configureServer(server) {
       watchConfig(server)
       if (devBridge)
         bridge = new DevBridgeHub(server.ws)
+      await syncDevPlugins()
 
       server.middlewares.use((req, res, next) => {
         const url = (req.url ?? '').split('?')[0]
+
+        if (devPlugins?.handle(req, res))
+          return
 
         if (bridge && handleBridgeRequest(bridge, req, res))
           return
@@ -229,6 +267,13 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       })
     },
 
+    async closeBundle() {
+      // Also called when the dev server closes
+      const closing = devPlugins
+      devPlugins = devPluginsRoot = undefined
+      await closing?.close()
+    },
+
     generateBundle() {
       if (config.command !== 'build' || config.build.ssr)
         return
@@ -258,8 +303,9 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
   }
 
   /**
-   * Reload the page when the plugin set or options change. Changes to `prefabs`, which the editor
-   * writes while you work, don't reload since they only matter for the release.
+   * Reload the page when the plugin set or options change, and restart the dev entries when the plugin set changes.
+   * Changes to `prefabs`, which the editor writes while you work, don't reload since they only matter for the release,
+   * nor do changes to the options of a plugin that turned off `reloadOnOptions`.
    */
   function watchConfig(server: ViteDevServer) {
     const candidates = new Set<string>()
@@ -279,11 +325,14 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       if (!candidates.has(resolve(file)))
         return
 
+      void syncDevPlugins()
+
       const current = projectRoot()
       let signature = JSON.stringify([])
+      let reloadSignature = signature
       try {
         if (current)
-          signature = clientPlugins(current).signature
+          ({ signature, reloadSignature } = clientPlugins(current))
       }
       catch (err) {
         warn((err as Error).message)
@@ -293,10 +342,15 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       if (loadedSignature === undefined || signature === loadedSignature)
         return
 
-      config.logger.info(`[mavonengine] ${CONFIG_FILE} plugins changed, reloading`)
+      // Regenerated on the next request, so a reload later gets the current options even without one now
       const module = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_PLUGINS_ID)
       if (module)
         server.moduleGraph.invalidateModule(module)
+
+      if (reloadSignature === loadedReloadSignature)
+        return
+
+      config.logger.info(`[mavonengine] ${CONFIG_FILE} plugins changed, reloading`)
       server.ws.send({ type: 'full-reload' })
     }
 
@@ -379,7 +433,7 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       res.end(JSON.stringify(body))
     }
 
-    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+    if (!fromLocalhost(req)) {
       reply(403, { error: 'Only available from localhost' })
       return
     }
@@ -428,7 +482,7 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       res.end(JSON.stringify(body))
     }
 
-    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+    if (!fromLocalhost(req)) {
       reply(403, { error: 'Only available from localhost' })
       return
     }
@@ -507,7 +561,7 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       res.end(JSON.stringify(body))
     }
 
-    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+    if (!fromLocalhost(req)) {
       reply(403, { error: 'Only available from localhost' })
       return
     }
@@ -538,7 +592,7 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       }
     }
 
-    if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) {
+    if (!fromLocalhost(req)) {
       reply(403, { error: 'Only available from localhost' })
       return
     }
@@ -588,27 +642,6 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         reply(500, { error: (err as Error).message })
       }
     })
-  }
-}
-
-/**
- * Whether a request comes from a page of this dev server, or from no page at all (a tool on this machine).
- * A request another site makes from the browser says so in these headers.
- */
-function fromThisPage(req: IncomingMessage): boolean {
-  const site = req.headers['sec-fetch-site']
-  if (typeof site === 'string')
-    return site === 'same-origin'
-
-  const { origin } = req.headers
-  if (typeof origin !== 'string')
-    return true
-
-  try {
-    return new URL(origin).host === req.headers.host
-  }
-  catch {
-    return false
   }
 }
 

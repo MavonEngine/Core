@@ -149,6 +149,7 @@ describe('mavonengine doctor', () => {
           'unbuilt': {},
           'not-a-plugin': {},
           'forest': { prefabs: ['Tree'] },
+          'tooling': {},
         },
       },
     })
@@ -157,6 +158,7 @@ describe('mavonengine doctor', () => {
     plugin('unbuilt', '1.0.0', { engine: '>=0.0.22' }, [])
     write('node_modules/not-a-plugin/package.json', { name: 'not-a-plugin', version: '1.0.0' })
     plugin('forest', '2.0.0', { engine: '>=0.0.22', assets: { shared: ['bark.png'], prefabs: { Tree: ['tree.glb'] } } }, ['dist/server.js', 'assets/bark.png'])
+    plugin('tooling', '1.0.0', { engine: '>=0.0.22', dev: 'dist/dev.js' })
 
     const report = await runDoctor(root, { ...options, offline: true }, { nodeVersion: '24.4.0' })
     const plugins = report.findings.filter(finding => finding.group === 'Plugins')
@@ -168,6 +170,7 @@ describe('mavonengine doctor', () => {
       ['error', 'unbuilt 1.0.0', 'server entry dist/server.js not found, is the plugin built?'],
       ['error', 'not-a-plugin 1.0.0', 'not a MavonEngine plugin: its package.json has no "mavonengine" field'],
       ['warn', 'forest 2.0.0', 'asset missing from the release: tree.glb'],
+      ['warn', 'tooling 1.0.0', 'dev entry dist/dev.js not found, is the plugin built?'],
     ])
   })
 
