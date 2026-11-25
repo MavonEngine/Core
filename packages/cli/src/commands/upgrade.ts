@@ -110,7 +110,11 @@ export function parseUpgradeArgs(args: string[], cwd = process.cwd(), env: Recor
 
 function gitStatus(cwd: string): string | undefined {
   try {
-    return execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    return execFileSync('git', ['status', '--porcelain'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
   }
   catch {
     return undefined
@@ -126,7 +130,10 @@ function confirmOnTerminal(question: string): Promise<boolean> {
 
 const terminalIO: UpgradeIO = {
   run: (command, args, cwd) => runCommand(command, args, cwd, {
-    report: { step: () => {}, output: chunk => process.stdout.write(chunk) },
+    report: {
+      step: () => {},
+      output: chunk => process.stdout.write(chunk),
+    },
   }),
   confirm: confirmOnTerminal,
   get interactive() {
@@ -141,7 +148,9 @@ export function formatPlan(plan: UpgradePlan): string {
   const width = Math.max(...plan.bumps.map(bump => bump.name.length))
   const from = Math.max(...plan.bumps.map(bump => (bump.installed ?? '-').length))
   const line = (bump: Bump) => {
-    const head = `  ${bump.blocked ? '✗' : bump.to ? '↑' : '·'} ${bump.name.padEnd(width)}  ${(bump.installed ?? '-').padEnd(from)}`
+    const head = `  ${bump.blocked
+      ? '✗'
+      : bump.to ? '↑' : '·'} ${bump.name.padEnd(width)}  ${(bump.installed ?? '-').padEnd(from)}`
     if (bump.blocked)
       return `${head}  ${bump.note}`
     if (bump.to)
@@ -156,7 +165,9 @@ async function ask(io: UpgradeIO, options: UpgradeOptions, question: string, act
   if (options.yes)
     return true
   if (!io.interactive) {
-    io.write(`\nNothing ${action === 'install' ? 'installed' : 'written'}: there is no terminal to ask on, run with --yes to ${action}\n`)
+    io.write(`\nNothing ${action === 'install'
+      ? 'installed'
+      : 'written'}: there is no terminal to ask on, run with --yes to ${action}\n`)
     return false
   }
   return io.confirm(`\n${question} (Y/n) `)
@@ -200,7 +211,11 @@ export async function runUpgradeCommand(options: UpgradeOptions, io: UpgradeIO =
     io.write(formatPlan(plan))
     const blocked = plan.bumps.filter(bump => bump.blocked)
     if (blocked.length && !options.force) {
-      io.write(`\n${blocked.map(bump => bump.name).join(', ')} would stop working: no version of ${blocked.length === 1 ? 'it' : 'them'} supports @mavonengine/core ${plan.core.to}. Pick an older core with --to, remove ${blocked.length === 1 ? 'it' : 'them'}, or pass --force to upgrade anyway\n`)
+      io.write(`\n${blocked.map(bump => bump.name).join(', ')} would stop working: no version of ${blocked.length === 1
+        ? 'it'
+        : 'them'} supports @mavonengine/core ${plan.core.to}. Pick an older core with --to, remove ${blocked.length === 1
+        ? 'it'
+        : 'them'}, or pass --force to upgrade anyway\n`)
       return 1
     }
 
@@ -232,10 +247,17 @@ export async function runUpgradeCommand(options: UpgradeOptions, io: UpgradeIO =
   }
 
   const { module, from } = await loadMigrations(root)
-  const ctx = { files: new module.ProjectFiles(root), versions: { core: coreVersion, cli: cliVersion } }
+  const ctx = {
+    files: new module.ProjectFiles(root),
+    versions: { core: coreVersion, cli: cliVersion },
+  }
   const pending = module.pendingMigrations(ctx)
-  const dryRunNote = options.dryRun && !options.onlyMigrations ? ', for the core installed now; the new core may bring more' : ''
-  io.write(`\nMigrations, for @mavonengine/core ${coreVersion}${from === 'cli' ? ' (from the CLI: the installed core has none of its own)' : ''}${dryRunNote}\n`)
+  const dryRunNote = options.dryRun && !options.onlyMigrations
+    ? ', for the core installed now; the new core may bring more'
+    : ''
+  io.write(`\nMigrations, for @mavonengine/core ${coreVersion}${from === 'cli'
+    ? ' (from the CLI: the installed core has none of its own)'
+    : ''}${dryRunNote}\n`)
 
   let migrated = false
   if (!pending.length) {
@@ -247,7 +269,9 @@ export async function runUpgradeCommand(options: UpgradeOptions, io: UpgradeIO =
     for (const migration of pending)
       io.write(`  ${migration.id.padEnd(width)}  ${migration.description}\n`)
     for (const change of changes) {
-      io.write(`\n  ${change.before === undefined ? 'new ' : ''}${change.path}\n`)
+      io.write(`\n  ${change.before === undefined
+        ? 'new '
+        : ''}${change.path}\n`)
       io.write(`${lineDiff(change.before, change.after).map(line => `    ${line}`).join('\n')}\n`)
     }
 
@@ -256,13 +280,18 @@ export async function runUpgradeCommand(options: UpgradeOptions, io: UpgradeIO =
       return 0
     }
 
-    if (!await ask(io, options, `Write ${changes.length === 1 ? 'this change' : `these ${changes.length} changes`}?`, 'write the changes'))
+    if (!await ask(io, options, `Write ${changes.length === 1
+      ? 'this change'
+      : `these ${changes.length} changes`}?`, 'write the changes')) {
       return 1
+    }
 
     const before = JSON.stringify(readPackageJson())
     ctx.files.commit()
     migrated = true
-    io.write(`\nmavonengine: migrated ${pending.length === 1 ? '1 migration' : `${pending.length} migrations`}, recorded in ${CONFIG_FILE}\n`)
+    io.write(`\nmavonengine: migrated ${pending.length === 1
+      ? '1 migration'
+      : `${pending.length} migrations`}, recorded in ${CONFIG_FILE}\n`)
 
     // A migration that adds a dependency needs it installed
     if (JSON.stringify(readPackageJson()) !== before) {

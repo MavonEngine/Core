@@ -40,7 +40,9 @@ function audioBufferToUrl(buffer: AudioBuffer): string {
   for (let i = 0; i < samples; i++) {
     for (let ch = 0; ch < numChannels; ch++) {
       const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]))
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
+      view.setInt16(offset, s < 0
+        ? s * 0x8000
+        : s * 0x7FFF, true)
       offset += 2
     }
   }
@@ -88,9 +90,17 @@ export default ({ buffer }: Props) => {
         </div>
       </div>
       <AssetStats stats={[
-        { label: 'Duration', value: formatTime(buffer.duration) },
+        {
+          label: 'Duration',
+          value: formatTime(buffer.duration),
+        },
         { label: 'Sample Rate', value: `${(buffer.sampleRate / 1000).toFixed(1)} kHz` },
-        { label: 'Channels', value: buffer.numberOfChannels === 1 ? 'Mono' : 'Stereo' },
+        {
+          label: 'Channels',
+          value: buffer.numberOfChannels === 1
+            ? 'Mono'
+            : 'Stereo',
+        },
         { label: 'Samples', value: `${(buffer.length / 1000).toFixed(1)}k` },
       ]}
       />

@@ -43,7 +43,9 @@ describe('parseHtpasswd', () => {
   it('reads users, ignoring comments and blank lines', async () => {
     const { users, warnings } = parseHtpasswd(`# admins\nalice:${BCRYPT}\n\nbob:${APR1}\r\ncarol:${SHA}\n`)
 
-    expect([...users.keys()]).toEqual(['alice', 'bob', 'carol'])
+    expect([
+      ...users.keys(),
+    ]).toEqual(['alice', 'bob', 'carol'])
     expect(await users.get('bob')!('hunter2')).toBe(true)
     expect(warnings).toEqual([])
   })

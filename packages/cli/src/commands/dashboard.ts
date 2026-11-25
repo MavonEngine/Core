@@ -77,8 +77,14 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
   if (!Number.isInteger(intervalMs) || intervalMs < 100)
     throw new UsageError('--interval must be a whole number of ms, at least 100')
 
-  if (values.sim)
-    return { source: simulatedSource(), intervalMs, theme: values.theme, transparent: values.transparent }
+  if (values.sim) {
+    return {
+      source: simulatedSource(),
+      intervalMs,
+      theme: values.theme,
+      transparent: values.transparent,
+    }
+  }
 
   let url = values.url
   if (!url) {
@@ -86,7 +92,9 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
     if (!Number.isInteger(port) || port < 1 || port > 65535)
       throw new UsageError('--port must be between 1 and 65535')
 
-    const host = values.host!.includes(':') && !values.host!.startsWith('[') ? `[${values.host}]` : values.host
+    const host = values.host!.includes(':') && !values.host!.startsWith('[')
+      ? `[${values.host}]`
+      : values.host
     url = `http://${host}:${port}/api/game/metrics`
   }
 
@@ -100,7 +108,13 @@ export function parseDashboardArgs(args: string[], env: Record<string, string | 
   // The server's admin token reads the metrics too
   const token = values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN
 
-  return { source: httpSource({ url, token }), clientUrl: new URL('/', url).href, intervalMs, theme: values.theme, transparent: values.transparent }
+  return {
+    source: httpSource({ url, token }),
+    clientUrl: new URL('/', url).href,
+    intervalMs,
+    theme: values.theme,
+    transparent: values.transparent,
+  }
 }
 
 /**
@@ -116,7 +130,11 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
   })
   const view: ViewState = initialViewState()
 
-  const app = await createApp({ fps: 15, theme: readableTheme(options.theme), paintBackground: !options.transparent })
+  const app = await createApp({
+    fps: 15,
+    theme: readableTheme(options.theme),
+    paintBackground: !options.transparent,
+  })
 
   // Read from GitHub by the dashboard itself, the first time the Plugins tab is shown
   const available = new AvailablePlugins()
@@ -157,7 +175,9 @@ export async function runDashboard(options: DashboardOptions, signal?: AbortSign
     client.watchDatabase = watchDatabase
 
     // Another table or page of rows was picked: load it
-    const table = watchDatabase ? selectedTable(view, client.state.database) : undefined
+    const table = watchDatabase
+      ? selectedTable(view, client.state.database)
+      : undefined
     const detail = client.state.tableDetail
     if (table && (detail?.table !== table.name || detail.offset !== (view.tableOffset ?? 0)))
       void client.inspectTable(table.name, view.tableOffset ?? 0)

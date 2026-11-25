@@ -49,7 +49,9 @@ export default class TickTracker {
       timestamp: now,
       ticks: this.ticks,
       ticksPerSecond: round(this.ticks / elapsedSeconds),
-      avgMs: this.ticks > 0 ? round(this.totalMs / this.ticks) : 0,
+      avgMs: this.ticks > 0
+        ? round(this.totalMs / this.ticks)
+        : 0,
       maxMs: round(this.maxMs),
       commandsPerSecond: round(this.commands / elapsedSeconds),
       maxCommandsPerTick: this.maxCommandsPerTick,

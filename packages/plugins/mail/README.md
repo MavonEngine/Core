@@ -152,7 +152,12 @@ Mail is sent with [nodemailer](https://nodemailer.com), so its transports work t
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import { mail } from '@mavonengine/mail'
 
-mail(server)?.useNodemailer({ SES: { sesClient: new SESv2Client({ region: 'eu-west-1' }), SendEmailCommand } }, 'ses')
+mail(server)?.useNodemailer({
+  SES: {
+    sesClient: new SESv2Client({ region: 'eu-west-1' }),
+    SendEmailCommand
+  }
+}, 'ses')
 ```
 
 Community transports such as `nodemailer-mailgun-transport` work the same way.
@@ -171,7 +176,13 @@ const postmark: MailTransport = {
     const res = await fetch('https://api.postmarkapp.com/email', {
       method: 'POST',
       headers: { 'X-Postmark-Server-Token': token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ From: formatAddress(message.from!), To: message.to.map(formatAddress).join(', '), Subject: message.subject, TextBody: message.text, HtmlBody: message.html }),
+      body: JSON.stringify({
+        From: formatAddress(message.from!),
+        To: message.to.map(formatAddress).join(', '),
+        Subject: message.subject,
+        TextBody: message.text,
+        HtmlBody: message.html
+      }),
     })
     if (!res.ok)
       throw new Error(`Postmark answered ${res.status}`)

@@ -116,7 +116,14 @@ export class DevPluginHost {
       try {
         await plugin.setup?.(ctx)
         const middleware = plugin.middleware?.(ctx)
-        this.running.push({ package: enabled.package, entry: enabled.entry, plugin, ctx, middleware, tools: this.tools(enabled.package, plugin, ctx) })
+        this.running.push({
+          package: enabled.package,
+          entry: enabled.entry,
+          plugin,
+          ctx,
+          middleware,
+          tools: this.tools(enabled.package, plugin, ctx),
+        })
       }
       catch (err) {
         this.fail(enabled.package, `its dev entry failed to start: ${(err as Error).message}`)
@@ -136,7 +143,9 @@ export class DevPluginHost {
     }
 
     const taken = new Set(this.running.flatMap(running => running.tools.map(({ info }) => info.name)))
-    return (Array.isArray(tools) ? tools : []).flatMap((tool) => {
+    return (Array.isArray(tools)
+      ? tools
+      : []).flatMap((tool) => {
       const problem = !tool || typeof tool !== 'object'
         ? 'not an object'
         : typeof tool.name !== 'string' || !TOOL_NAME_RE.test(tool.name)
@@ -148,7 +157,9 @@ export class DevPluginHost {
               : tool.input !== undefined && (typeof tool.input !== 'object' || (tool.input as { type?: unknown }).type !== 'object')
                 ? 'its input is not a JSON Schema of an object'
                 : undefined
-      const name = problem ? '' : pluginToolName(pkg, tool.name)
+      const name = problem
+        ? ''
+        : pluginToolName(pkg, tool.name)
       if (!problem && taken.has(name)) {
         this.options.logger.warn(`${pkg}: MCP tool ${name} left out, another plugin has one by that name`)
         return []
@@ -158,19 +169,21 @@ export class DevPluginHost {
         return []
       }
       taken.add(name)
-      return [{
-        tool,
-        info: {
-          name,
-          plugin: pkg,
-          title: tool.title,
-          description: tool.description,
-          input: tool.input ?? { type: 'object', properties: {} },
-          readOnly: tool.readOnly === true,
-          destructive: tool.readOnly !== true && tool.destructive === true,
-          openWorld: tool.openWorld === true,
+      return [
+        {
+          tool,
+          info: {
+            name,
+            plugin: pkg,
+            title: tool.title,
+            description: tool.description,
+            input: tool.input ?? { type: 'object', properties: {} },
+            readOnly: tool.readOnly === true,
+            destructive: tool.readOnly !== true && tool.destructive === true,
+            openWorld: tool.openWorld === true,
+          },
         },
-      }]
+      ]
     })
   }
 
@@ -305,7 +318,9 @@ export class DevPluginHost {
     let args: unknown
     try {
       const body = await readBody(req, MAX_TOOL_ARGS_BYTES)
-      args = body ? (JSON.parse(body) as { arguments?: unknown }).arguments ?? {} : {}
+      args = body
+        ? (JSON.parse(body) as { arguments?: unknown }).arguments ?? {}
+        : {}
     }
     catch (err) {
       reply(400, { error: `Expected { arguments }: ${(err as Error).message}` })
@@ -366,7 +381,9 @@ export class DevPluginHost {
     if (!match) {
       const pkg = path.slice(DEV_PLUGINS_PATH.length + 1)
       const reason = [...this.failed].find(([failed]) => pkg === failed || pkg.startsWith(`${failed}/`))?.[1]
-      reply(404, reason ? `Its dev entry is not running: ${reason}` : 'No plugin with a dev entry answers here')
+      reply(404, reason
+        ? `Its dev entry is not running: ${reason}`
+        : 'No plugin with a dev entry answers here')
       return
     }
 
@@ -376,7 +393,9 @@ export class DevPluginHost {
     }
 
     // The rest as it was sent, with its query, unless the base itself was encoded
-    const query = url.includes('?') ? url.slice(url.indexOf('?')) : ''
+    const query = url.includes('?')
+      ? url.slice(url.indexOf('?'))
+      : ''
     req.url = url.startsWith(match.ctx.base)
       ? url.slice(match.ctx.base.length - 1)
       : `${encodeURI(path.slice(match.ctx.base.length - 1) || '/')}${query}`

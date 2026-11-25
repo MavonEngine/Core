@@ -31,7 +31,9 @@ async function get<T>(path: string, params: Record<string, unknown> = {}, fetchF
 
   let res: Response
   try {
-    res = await fetchFn(`${serverUrl()}/api/game/dev/net/${path}${query ? `?${query}` : ''}`)
+    res = await fetchFn(`${serverUrl()}/api/game/dev/net/${path}${query
+      ? `?${query}`
+      : ''}`)
   }
   catch {
     throw new Error('The game server is not reachable')

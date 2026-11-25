@@ -136,7 +136,10 @@ ctx.plugin('@mavonengine/notifications')?.channel('discord', {
   queued: true,
   route: to => discordWebhookOf(to),
   async send(delivery) {
-    await fetch(delivery.route as string, { method: 'POST', body: JSON.stringify(delivery.payload) })
+    await fetch(delivery.route as string, {
+      method: 'POST',
+      body: JSON.stringify(delivery.payload)
+    })
   },
 })
 ```

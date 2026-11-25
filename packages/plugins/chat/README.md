@@ -97,8 +97,12 @@ hooks.intercept((message, tools) => {
 // A whisper: /w <player id> <text>
 hooks.intercept((message) => {
   const whisper = /^\/w (\S+) (.+)$/.exec(message.text)
-  if (whisper)
-    return { text: whisper[2], to: [whisper[1]] }
+  if (whisper) {
+    return {
+      text: whisper[2],
+      to: [whisper[1]]
+    }
+  }
 })
 ```
 

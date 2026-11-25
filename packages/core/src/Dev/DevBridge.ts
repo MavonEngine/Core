@@ -95,7 +95,9 @@ export function info(): BridgeClientInfo {
     editor: !!current?.editor,
     visible: document.visibilityState === 'visible',
     focused: document.hasFocus(),
-    fps: current ? Math.round(current.renderer.fps) : null,
+    fps: current
+      ? Math.round(current.renderer.fps)
+      : null,
   }
 }
 
@@ -103,7 +105,10 @@ const isPlayer = (entity: GameObject) => typeof (entity as { isLocalPlayer?: unk
 const isLocalPlayer = (entity: GameObject) => (entity as { isLocalPlayer?: unknown }).isLocalPlayer === true || window.Game?.localPlayer === entity
 
 function summarize(entity: GameObject): ClientEntitySummary {
-  return { ...summarizeEntity(entity, game().activeScene, isPlayer), localPlayer: isLocalPlayer(entity) }
+  return {
+    ...summarizeEntity(entity, game().activeScene, isPlayer),
+    localPlayer: isLocalPlayer(entity),
+  }
 }
 
 /**
@@ -128,7 +133,9 @@ function localPlayer(): GameObject | undefined {
 
 /** The world's entities, plus the local player when it isn't in the world itself */
 function entities(): GameObject[] {
-  const list = [...game().world.entities.items.values()]
+  const list = [
+    ...game().world.entities.items.values(),
+  ]
   const local = localPlayer()
   if (local && !list.includes(local))
     list.push(local)
@@ -174,10 +181,17 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
     renderer.info.autoReset = false
     renderer.info.reset()
     // Ends as soon as a frame rendered, so the limit only matters for a tab that renders slowly or not at all (hidden)
-    const waitMs = document.visibilityState === 'visible' ? 4000 : 500
+    const waitMs = document.visibilityState === 'visible'
+      ? 4000
+      : 500
     const measured = await nextFrame(waitMs)
     const { render, memory, programs } = renderer.info
-    const frame = { calls: render.calls, triangles: render.triangles, points: render.points, lines: render.lines }
+    const frame = {
+      calls: render.calls,
+      triangles: render.triangles,
+      points: render.points,
+      lines: render.lines,
+    }
     renderer.info.autoReset = true
 
     const heap = (performance as { memory?: { usedJSHeapSize: number, totalJSHeapSize: number, jsHeapSizeLimit: number } }).memory
@@ -193,9 +207,21 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
           ? `No frame was rendered within ${Math.round(waitMs)}ms`
           : 'The tab is in the background, so the browser does not render it',
       gpuMemory: { geometries: memory.geometries, textures: memory.textures, programs: programs?.length ?? 0 },
-      jsHeap: heap ? { used: heap.usedJSHeapSize, total: heap.totalJSHeapSize, limit: heap.jsHeapSizeLimit } : null,
-      canvas: { width: current.canvas.width, height: current.canvas.height, pixelRatio: renderer.getPixelRatio() },
-      camera: { position: vec(camera.position), rotation: vec(camera.rotation), fov: camera.fov, near: camera.near, far: camera.far },
+      jsHeap: heap
+        ? { used: heap.usedJSHeapSize, total: heap.totalJSHeapSize, limit: heap.jsHeapSizeLimit }
+        : null,
+      canvas: {
+        width: current.canvas.width,
+        height: current.canvas.height,
+        pixelRatio: renderer.getPixelRatio(),
+      },
+      camera: {
+        position: vec(camera.position),
+        rotation: vec(camera.rotation),
+        fov: camera.fov,
+        near: camera.near,
+        far: camera.far,
+      },
       entities: current.world.entities.length,
       scene: current.activeScene?.name ?? null,
       resources: { loaded: current.resources.loaded, toLoad: current.resources.toLoad },
@@ -205,7 +231,7 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
   entities(params) {
     const query = parseEntityQuery(params)
     if (typeof query === 'string')
-      throw new Error(query)
+      throw new TypeError(query)
     return queryEntities(entities().map(summarize), query)
   },
 
@@ -215,12 +241,21 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
     const entity = findEntity(id)
     if (!entity)
       return { entity: null }
-    return { entity: { ...detailEntity(entity, game().activeScene, isPlayer), localPlayer: isLocalPlayer(entity) } }
+    return {
+      entity: {
+        ...detailEntity(entity, game().activeScene, isPlayer),
+        localPlayer: isLocalPlayer(entity),
+      },
+    }
   },
 
   scene() {
     const scene = game().activeScene
-    return { scene: scene ? describeScene(scene) : null }
+    return {
+      scene: scene
+        ? describeScene(scene)
+        : null,
+    }
   },
 
   network() {
@@ -243,7 +278,9 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
           tick: network.serverView.tick,
           serverTime: network.serverView.serverTime,
           ack: network.serverView.ack,
-          ageMs: network.serverView.receivedAt === null ? null : Math.round(performance.now() - network.serverView.receivedAt),
+          ageMs: network.serverView.receivedAt === null
+            ? null
+            : Math.round(performance.now() - network.serverView.receivedAt),
           missedStates: network.serverView.missedStates,
         },
         recording: network.net?.enabled ?? false,
@@ -254,7 +291,7 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
   packets(params) {
     const query = parseNetRecordQuery(params)
     if (typeof query === 'string')
-      throw new Error(query)
+      throw new TypeError(query)
     const net = game().network?.net
     if (!net)
       throw new Error('This tab has no NetworkManager: it is not connected to a game server')
@@ -270,13 +307,18 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
 
   logs({ after }) {
     const afterId = Number(after ?? 0) || 0
-    return { entries: logs.filter(entry => entry.id > afterId), latestId: nextLogId - 1 }
+    return {
+      entries: logs.filter(entry => entry.id > afterId),
+      latestId: nextLogId - 1,
+    }
   },
 
   async screenshot({ maxWidth, format }) {
     const current = game()
     const width = Math.max(64, Math.min(Number(maxWidth) || 1024, 4096))
-    const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
+    const mimeType = format === 'png'
+      ? 'image/png'
+      : 'image/jpeg'
 
     // Without preserveDrawingBuffer the canvas is cleared after each frame: render one now and copy it in the same task
     current.renderer.composer.render()
@@ -288,7 +330,12 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
     copy.getContext('2d')!.drawImage(source, 0, 0, copy.width, copy.height)
 
     const dataUrl = copy.toDataURL(mimeType, 0.85)
-    return { mimeType, width: copy.width, height: copy.height, data: dataUrl.slice(dataUrl.indexOf(',') + 1) }
+    return {
+      mimeType,
+      width: copy.width,
+      height: copy.height,
+      data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+    }
   },
 
   trace({ durationMs, gpu, jsProfile, sampleIntervalMs }) {
@@ -316,7 +363,13 @@ export async function answer({ requestId, query, params }: BridgeRequest): Promi
  * Keep the console output and uncaught errors of the tab. The console still prints as usual
  */
 function captureConsole() {
-  for (const level of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+  for (const level of [
+    'log',
+    'info',
+    'warn',
+    'error',
+    'debug',
+  ] as const) {
     // eslint-disable-next-line no-console
     const original = console[level].bind(console)
     // eslint-disable-next-line no-console
@@ -327,16 +380,27 @@ function captureConsole() {
   }
 
   window.addEventListener('error', (event) => {
-    pushLog('error', `Uncaught ${event.error instanceof Error ? (event.error.stack ?? event.error.message) : event.message}`)
+    pushLog('error', `Uncaught ${event.error instanceof Error
+      ? (event.error.stack ?? event.error.message)
+      : event.message}`)
   })
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason
-    pushLog('error', `Unhandled rejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : formatArgs([reason])}`)
+    pushLog('error', `Unhandled rejection: ${reason instanceof Error
+      ? (reason.stack ?? reason.message)
+      : formatArgs([reason])}`)
   })
 }
 
 export function pushLog(level: ClientLogEntry['level'], message: string, now = Date.now()) {
-  logs.push({ id: nextLogId++, timestamp: now, level, message: message.length > MAX_MESSAGE_LENGTH ? `${message.slice(0, MAX_MESSAGE_LENGTH)}…` : message })
+  logs.push({
+    id: nextLogId++,
+    timestamp: now,
+    level,
+    message: message.length > MAX_MESSAGE_LENGTH
+      ? `${message.slice(0, MAX_MESSAGE_LENGTH)}…`
+      : message,
+  })
   if (logs.length > MAX_LOG_ENTRIES)
     logs.splice(0, logs.length - MAX_LOG_ENTRIES)
 }
@@ -351,14 +415,22 @@ export function formatArgs(args: unknown[]): string {
   if (typeof rest[0] === 'string') {
     // Directives take the arguments after the format left to right; %c takes a CSS string, which is dropped
     message = (rest.shift() as string).replace(FORMAT_RE, (directive) => {
-      if (!rest.length)
-        return directive === '%c' ? '' : directive
+      if (!rest.length) {
+        return directive === '%c'
+          ? ''
+          : directive
+      }
       const value = rest.shift()
-      return directive === '%c' ? '' : stringify(value)
+      return directive === '%c'
+        ? ''
+        : stringify(value)
     }).trim()
   }
 
-  return [message, ...rest.map(stringify)].filter(Boolean).join(' ')
+  return [
+    message,
+    ...rest.map(stringify),
+  ].filter(Boolean).join(' ')
 }
 
 function stringify(value: unknown): string {

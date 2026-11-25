@@ -33,7 +33,11 @@ const NUMERIC_RE = /^\d+$/
 const WILDCARD_RE = /^[x*]$/i
 
 function prereleaseOf(text: string | undefined): (string | number)[] {
-  return text ? text.split('.').map(part => NUMERIC_RE.test(part) ? Number(part) : part) : []
+  return text
+    ? text.split('.').map(part => NUMERIC_RE.test(part)
+        ? Number(part)
+        : part)
+    : []
 }
 
 /** A full version like `1.2.3` or `1.2.3-beta.1`, or undefined */
@@ -42,7 +46,12 @@ export function parseVersion(version: string): SemVer | undefined {
   if (!match)
     return undefined
 
-  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: prereleaseOf(match[4]) }
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: prereleaseOf(match[4]),
+  }
 }
 
 /** Negative when `a` is older than `b`, positive when newer, 0 when the same */
@@ -59,16 +68,24 @@ export function compareVersions(a: SemVer, b: SemVer): number {
   for (let i = 0; i < Math.max(a.prerelease.length, b.prerelease.length); i++) {
     const x = a.prerelease[i]
     const y = b.prerelease[i]
-    if (x === undefined || y === undefined)
-      return x === undefined ? -1 : 1
+    if (x === undefined || y === undefined) {
+      return x === undefined
+        ? -1
+        : 1
+    }
     if (x === y)
       continue
     if (typeof x === 'number' && typeof y === 'number')
       return x - y
     // Numbers sort before words
-    if (typeof x === 'number' || typeof y === 'number')
-      return typeof x === 'number' ? -1 : 1
-    return x < y ? -1 : 1
+    if (typeof x === 'number' || typeof y === 'number') {
+      return typeof x === 'number'
+        ? -1
+        : 1
+    }
+    return x < y
+      ? -1
+      : 1
   }
 
   return 0
@@ -91,7 +108,9 @@ function desugar(text: string): Comparator[] | undefined {
   if (!match)
     return undefined
 
-  const op = match[1] === '~>' ? '~' : match[1] ?? ''
+  const op = match[1] === '~>'
+    ? '~'
+    : match[1] ?? ''
   const partial = PARTIAL_RE.exec(match[2])
   if (!partial)
     return undefined
@@ -99,32 +118,75 @@ function desugar(text: string): Comparator[] | undefined {
   const parts = [partial[1], partial[2], partial[3]]
   // Everything after a wildcard is a wildcard too: 1.x.3 is 1.x
   const wild = parts.findIndex(part => part === undefined || WILDCARD_RE.test(part))
-  const given = wild === -1 ? 3 : wild
-  const [major, minor, patch] = parts.map((part, i) => i < given ? Number(part) : 0)
-  const pre = given === 3 ? prereleaseOf(partial[4]) : []
+  const given = wild === -1
+    ? 3
+    : wild
+  const [major, minor, patch] = parts.map((part, i) => i < given
+    ? Number(part)
+    : 0)
+  const pre = given === 3
+    ? prereleaseOf(partial[4])
+    : []
   const exact = version(major, minor, patch, pre)
   const make = (o: Op, v: SemVer, explicit = false): Comparator => ({ op: o, version: v, explicit })
 
-  if (given === 0)
-    return op === '<' || op === '>' ? [make('<', floor(0, 0, 0))] : []
+  if (given === 0) {
+    return op === '<' || op === '>'
+      ? [
+          make('<', floor(0, 0, 0)),
+        ]
+      : []
+  }
 
   // The first version past what is given: 1.2 → 1.3.0, 1 → 2.0.0
-  const next = given === 1 ? floor(major + 1, 0, 0) : floor(major, minor + 1, 0)
+  const next = given === 1
+    ? floor(major + 1, 0, 0)
+    : floor(major, minor + 1, 0)
 
   switch (op) {
     case '':
     case '=':
-      return given === 3 ? [make('=', exact, true)] : [make('>=', version(major, minor, 0)), make('<', next)]
+      return given === 3
+        ? [
+            make('=', exact, true),
+          ]
+        : [
+            make('>=', version(major, minor, 0)),
+            make('<', next),
+          ]
     case '>':
-      return given === 3 ? [make('>', exact, true)] : [make('>=', version(next.major, next.minor, 0))]
+      return given === 3
+        ? [
+            make('>', exact, true),
+          ]
+        : [
+            make('>=', version(next.major, next.minor, 0)),
+          ]
     case '>=':
-      return [make('>=', exact, true)]
+      return [
+        make('>=', exact, true),
+      ]
     case '<':
-      return [make('<', given === 3 ? exact : floor(major, minor, 0), given === 3)]
+      return [
+        make('<', given === 3
+          ? exact
+          : floor(major, minor, 0), given === 3),
+      ]
     case '<=':
-      return given === 3 ? [make('<=', exact, true)] : [make('<', next)]
+      return given === 3
+        ? [
+            make('<=', exact, true),
+          ]
+        : [
+            make('<', next),
+          ]
     case '~':
-      return [make('>=', exact, true), make('<', given === 1 ? floor(major + 1, 0, 0) : floor(major, minor + 1, 0))]
+      return [
+        make('>=', exact, true),
+        make('<', given === 1
+          ? floor(major + 1, 0, 0)
+          : floor(major, minor + 1, 0)),
+      ]
     case '^': {
       let upper: SemVer
       if (major > 0 || given === 1)
@@ -133,7 +195,10 @@ function desugar(text: string): Comparator[] | undefined {
         upper = floor(0, minor + 1, 0)
       else
         upper = floor(0, 0, patch + 1)
-      return [make('>=', exact, true), make('<', upper)]
+      return [
+        make('>=', exact, true),
+        make('<', upper),
+      ]
     }
   }
 
@@ -220,7 +285,9 @@ export function maxSatisfying(versions: Iterable<string>, range: string): string
 /** The range of @mavonengine/core versions a package.json says it supports: `mavonengine.engine`, else its peer dependency */
 export function engineRangeOf(packageJson: Record<string, any> | undefined): string | undefined {
   const engine = packageJson?.mavonengine?.engine ?? packageJson?.peerDependencies?.['@mavonengine/core']
-  return typeof engine === 'string' && engine.trim() ? engine.trim() : undefined
+  return typeof engine === 'string' && engine.trim()
+    ? engine.trim()
+    : undefined
 }
 
 export type EngineCompat = 'compatible' | 'incompatible' | 'unknown'
@@ -233,5 +300,7 @@ export function engineCompat(engine: string | undefined, coreVersion: string | u
   if (!engine || !coreVersion || !validRange(engine) || !parseVersion(coreVersion))
     return 'unknown'
 
-  return satisfies(coreVersion, engine) ? 'compatible' : 'incompatible'
+  return satisfies(coreVersion, engine)
+    ? 'compatible'
+    : 'incompatible'
 }

@@ -26,13 +26,27 @@ function inspect(options: { scene?: boolean, file?: string, watched?: boolean } 
   const game = { world } as unknown as BaseGame
 
   if (options.scene) {
-    registerSceneObject({ type: 'Spawner', server: () => new Rock(), plugin: '@acme/spawners' })
-    registerSceneObject({ type: 'Tree', client: () => new Rock() })
+    registerSceneObject({
+      type: 'Spawner',
+      server: () => new Rock(),
+      plugin: '@acme/spawners',
+    })
+    registerSceneObject({
+      type: 'Tree',
+      client: () => new Rock(),
+    })
     game.activeScene = new GameScene({
       version: 1,
       name: 'Forest',
       objects: [
-        { id: 'spawn', type: '@acme/spawners:Spawner', name: 'North spawn', transform: { position: [5, 0, 0] } },
+        {
+          id: 'spawn',
+          type: '@acme/spawners:Spawner',
+          name: 'North spawn',
+          transform: {
+            position: [5, 0, 0],
+          },
+        },
         { id: 'tree', type: 'Tree' },
         { id: 'ghost', type: 'Missing' },
       ],
@@ -63,7 +77,13 @@ describe('worldInspector', () => {
     const { inspector } = inspect({ scene: true, file: '/game/scenes/forest.json', watched: true })
 
     const scene = inspector.scene()!
-    expect(scene).toMatchObject({ name: 'Forest', source: 'forest', file: '/game/scenes/forest.json', watching: true, dirty: false })
+    expect(scene).toMatchObject({
+      name: 'Forest',
+      source: 'forest',
+      file: '/game/scenes/forest.json',
+      watching: true,
+      dirty: false,
+    })
     expect(scene.objects.map(o => [o.id, o.built, o.plugin])).toEqual([
       ['spawn', true, '@acme/spawners'],
       ['tree', false, null],
@@ -84,7 +104,9 @@ describe('worldInspector', () => {
 
   it('lists entities with their scene objects', () => {
     const { inspector, world } = inspect({ scene: true })
-    world.add({ rock: new Rock('rock', new Vector3(1, 2, 3)) })
+    world.add({
+      rock: new Rock('rock', new Vector3(1, 2, 3)),
+    })
 
     const { total, entities } = inspector.entities()
     expect(total).toBe(2)
@@ -100,7 +122,9 @@ describe('worldInspector', () => {
 
   it('filters by type, case-insensitively, on the class or the scene object type', () => {
     const { inspector, world } = inspect({ scene: true })
-    world.add({ c: new Circular('c') })
+    world.add({
+      c: new Circular('c'),
+    })
 
     expect(inspector.entities({ type: 'circular' }).entities.map(e => e.id)).toEqual(['c'])
     expect(inspector.entities({ type: '@acme/spawners:spawner' }).entities.map(e => e.id)).toEqual(['spawn'])
@@ -114,14 +138,22 @@ describe('worldInspector', () => {
       mid: new Rock('mid', new Vector3(0, 5, 0)),
     })
 
-    expect(inspector.entities({ near: { x: 0, y: 0, z: 0 } }).entities.map(e => e.id)).toEqual(['near', 'mid', 'far'])
-    expect(inspector.entities({ near: { x: 0, y: 0, z: 0 }, radius: 10 }).entities.map(e => e.id)).toEqual(['near', 'mid'])
+    expect(inspector.entities({
+      near: { x: 0, y: 0, z: 0 },
+    }).entities.map(e => e.id)).toEqual(['near', 'mid', 'far'])
+    expect(inspector.entities({
+      near: { x: 0, y: 0, z: 0 },
+      radius: 10,
+    }).entities.map(e => e.id)).toEqual(['near', 'mid'])
   })
 
   it('pages with limit and offset, and caps the limit', () => {
     const { inspector, world } = inspect()
-    for (let i = 0; i < 600; i++)
-      world.add({ [`r${i}`]: new Rock(`r${i}`) })
+    for (let i = 0; i < 600; i++) {
+      world.add({
+        [`r${i}`]: new Rock(`r${i}`),
+      })
+    }
 
     expect(inspector.entities().entities).toHaveLength(50)
     expect(inspector.entities({ limit: 10_000 }).entities).toHaveLength(500)
@@ -133,9 +165,15 @@ describe('worldInspector', () => {
 
   it('returns one entity with its serialized state', () => {
     const { inspector, world } = inspect()
-    world.add({ rock: new Rock('rock', new Vector3(1, 2, 3)), c: new Circular('c') })
+    world.add({
+      rock: new Rock('rock', new Vector3(1, 2, 3)),
+      c: new Circular('c'),
+    })
 
-    expect(inspector.entity('rock')!.serialized).toMatchObject({ id: 'rock', position: { x: 1, y: 2, z: 3 } })
+    expect(inspector.entity('rock')!.serialized).toMatchObject({
+      id: 'rock',
+      position: { x: 1, y: 2, z: 3 },
+    })
     expect(inspector.entity('c')!.serialized).toBeNull()
     expect(inspector.entity('nope')).toBeNull()
   })
@@ -149,10 +187,25 @@ describe('scene graph and physics stats', () => {
     // A box: 12 triangles, indexed
     group.add(new Mesh(new BoxGeometry(), new MeshBasicMaterial()), new Mesh(new BoxGeometry(), new MeshBasicMaterial()))
     scene.add(group, new PointLight())
-    const inspector = new WorldInspector({ game: { scene } as unknown as BaseGame, sceneWatched: false })
+    const inspector = new WorldInspector({
+      game: { scene } as unknown as BaseGame,
+      sceneWatched: false,
+    })
 
-    expect(inspector.sceneGraph()).toEqual({ objects: 4, byType: { Mesh: 2, Group: 1, PointLight: 1 }, meshes: 2, triangles: 24, lights: 1 })
-    expect(new WorldInspector({ game: {} as BaseGame, sceneWatched: false }).sceneGraph()).toEqual({ objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 })
+    expect(inspector.sceneGraph()).toEqual({
+      objects: 4,
+      byType: { Mesh: 2, Group: 1, PointLight: 1 },
+      meshes: 2,
+      triangles: 24,
+      lights: 1,
+    })
+    expect(new WorldInspector({ game: {} as BaseGame, sceneWatched: false }).sceneGraph()).toEqual({
+      objects: 0,
+      byType: {},
+      meshes: 0,
+      triangles: 0,
+      lights: 0,
+    })
   })
 
   it('counts the physics world\'s bodies by kind, and is null without one', async () => {
@@ -165,8 +218,18 @@ describe('scene graph and physics stats', () => {
     world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased())
     world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()).sleep()
 
-    const stats = new WorldInspector({ game: { physicsWorld: world } as unknown as BaseGame, sceneWatched: false }).physics()
-    expect(stats).toMatchObject({ bodies: 4, dynamic: 2, fixed: 1, kinematic: 1, colliders: 2, gravity: { x: 0, y: -9.81, z: 0 } })
+    const stats = new WorldInspector({
+      game: { physicsWorld: world } as unknown as BaseGame,
+      sceneWatched: false,
+    }).physics()
+    expect(stats).toMatchObject({
+      bodies: 4,
+      dynamic: 2,
+      fixed: 1,
+      kinematic: 1,
+      colliders: 2,
+      gravity: { x: 0, y: -9.81, z: 0 },
+    })
     expect(stats!.sleeping).toBeGreaterThanOrEqual(1)
     expect(stats!.timestep).toBeCloseTo(1 / 60)
     expect(new WorldInspector({ game: {} as BaseGame, sceneWatched: false }).physics()).toBeNull()

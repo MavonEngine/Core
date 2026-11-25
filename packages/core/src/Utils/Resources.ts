@@ -94,22 +94,31 @@ export default class Resources extends EventEmitter {
     const results = await Promise.allSettled(sources.map(async (source) => {
       const item = await this.loadSource(source)
       this.items[source.name] = item
-      this.sources = [...this.sources.filter(existing => existing.name !== source.name), source]
+      this.sources = [
+        ...this.sources.filter(existing => existing.name !== source.name),
+        source,
+      ]
       return source.name
     }))
 
-    const names = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+    const names = results.flatMap(result => result.status === 'fulfilled'
+      ? [result.value]
+      : [])
     if (names.length)
       this.trigger('assetsAdded', { names })
 
-    const failed = results.flatMap((result, i) => result.status === 'rejected' ? [`${sources[i].name}: ${(result.reason as Error)?.message ?? result.reason}`] : [])
+    const failed = results.flatMap((result, i) => result.status === 'rejected'
+      ? [`${sources[i].name}: ${(result.reason as Error)?.message ?? result.reason}`]
+      : [])
     if (failed.length)
       throw new Error(`Could not load ${failed.join(', ')}`)
   }
 
   private loadSource(source: Asset): Promise<AssetType> {
     const { type } = source
-    const path = type !== 'cubeTexture' && Array.isArray(source.path) ? source.path[0] : source.path
+    const path = type !== 'cubeTexture' && Array.isArray(source.path)
+      ? source.path[0]
+      : source.path
     const loader = {
       gltfModel: this.loaders.gltfLoader,
       texture: this.loaders.textureLoader,
@@ -121,7 +130,9 @@ export default class Resources extends EventEmitter {
 
     if (!loader)
       return Promise.reject(new Error(`unknown asset type ${type}`))
-    return loader.loadAsync(type === 'cubeTexture' ? [...path] : path)
+    return loader.loadAsync(type === 'cubeTexture'
+      ? [...path]
+      : path)
   }
 
   private sourceLoaded(source: Asset, file: AssetType) {

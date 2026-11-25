@@ -58,7 +58,9 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
       ...bootBanner({
         version: ENGINE_VERSION,
         threeRevision: THREE_REVISION,
-        rapierVersion: physicsWorld ? RAPIER_VERSION() : undefined,
+        rapierVersion: physicsWorld
+          ? RAPIER_VERSION()
+          : undefined,
         // eslint-disable-next-line node/prefer-global/process
         mode: process.env.NODE_ENV ?? 'development',
       }),

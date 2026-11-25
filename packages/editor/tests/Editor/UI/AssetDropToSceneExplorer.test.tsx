@@ -14,26 +14,45 @@ import SceneExplorer from '../../../src/Editor/UI/SceneExplorer'
 
 vi.mock('../../../src/Editor/UI/SceneExplorer.module.css', () => ({ default: {} }))
 vi.mock('../../../src/Editor/UI/Assets/Assets.module.css', () => ({ default: {} }))
-vi.mock('../../../src/Editor/UI/Window', () => ({ default: () => null }))
-vi.mock('../../../src/Editor/UI/Assets/AudioPlayer', () => ({ default: () => null }))
-vi.mock('../../../src/Editor/UI/Assets/ModelViewer', () => ({ default: () => null }))
-vi.mock('../../../src/Editor/UI/Assets/ParticleViewer', () => ({ default: () => null }))
+vi.mock('../../../src/Editor/UI/Window', () => ({
+  default: () => null,
+}))
+vi.mock('../../../src/Editor/UI/Assets/AudioPlayer', () => ({
+  default: () => null,
+}))
+vi.mock('../../../src/Editor/UI/Assets/ModelViewer', () => ({
+  default: () => null,
+}))
+vi.mock('../../../src/Editor/UI/Assets/ParticleViewer', () => ({
+  default: () => null,
+}))
 vi.mock('../../../src/Editor/UI/Assets/TextureViewer', () => ({
   default: () => null,
   getTextureUrl: () => '',
 }))
-vi.mock('@mavonengine/core/Editor/EditorHelper', () => ({ default: { from: () => null } }))
+vi.mock('@mavonengine/core/Editor/EditorHelper', () => ({
+  default: {
+    from: () => null,
+  },
+}))
 vi.mock('@mavonengine/core/Renderer/AssetRenderer', () => ({
-  default: vi.fn().mockImplementation(() => ({ render: vi.fn().mockReturnValue('') })),
+  default: vi.fn().mockImplementation(() => ({
+    render: vi.fn().mockReturnValue(''),
+  })),
 }))
 vi.mock('@mavonengine/core/Prefab/Water/Water', () => ({
   default: vi.fn().mockImplementation(() => ({ material: {} })),
 }))
 vi.mock('@mavonengine/core/Prefab/Water/WaterManager', () => ({
-  default: { instance: null, init: vi.fn() },
+  default: {
+    instance: null,
+    init: vi.fn(),
+  },
 }))
 vi.mock('@mavonengine/core/Prefab/Grass/Grass', () => ({
-  default: vi.fn().mockImplementation(() => ({ addBindings: vi.fn() })),
+  default: vi.fn().mockImplementation(() => ({
+    addBindings: vi.fn(),
+  })),
 }))
 vi.mock('@mavonengine/core/Particles/System/ParticlePreviewRegistry', () => ({
   getPreviewMap: () => ({}),
@@ -41,7 +60,9 @@ vi.mock('@mavonengine/core/Particles/System/ParticlePreviewRegistry', () => ({
   registerParticle: vi.fn(),
 }))
 vi.mock('@mavonengine/core/Game', () => ({
-  default: { instance: vi.fn() },
+  default: {
+    instance: vi.fn(),
+  },
 }))
 
 class MockEditor extends EventEmitter {
@@ -54,20 +75,42 @@ class MockEditor extends EventEmitter {
 function makeGame(editor: MockEditor, scene: Scene) {
   const canvas = document.createElement('canvas')
   canvas.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => {} } as DOMRect)
+    ({
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect)
   return {
     scene,
     canvas,
     editor,
-    resources: { items: {} as Record<string, any>, sources: [] as any[], on: vi.fn(), off: vi.fn() },
-    world: { add: vi.fn() },
+    resources: {
+      items: {} as Record<string, any>,
+      sources: [] as any[],
+      on: vi.fn(),
+      off: vi.fn(),
+    },
+    world: {
+      add: vi.fn(),
+    },
     rayCaster: {
       setFromCamera: vi.fn(),
-      ray: { intersectPlane: vi.fn().mockReturnValue(new Vector3()) },
+      ray: {
+        intersectPlane: vi.fn().mockReturnValue(new Vector3()),
+      },
       intersectObjects: vi.fn().mockReturnValue([]),
     },
     camera: { instance: {} },
-    logger: { info: vi.fn(), warn: vi.fn() },
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+    },
   }
 }
 
@@ -76,7 +119,9 @@ function createDropEvent(mimeType: string, data: string) {
   Object.defineProperty(event, 'dataTransfer', {
     value: {
       types: [mimeType, 'text/plain'],
-      getData: (type: string) => (type === mimeType ? data : ''),
+      getData: (type: string) => (type === mimeType
+        ? data
+        : ''),
     },
   })
   return event
@@ -274,7 +319,9 @@ describe('dropped assets appear in SceneExplorer', () => {
       fetchMock.mockReset().mockResolvedValue({ ok: true })
       vi.stubGlobal('fetch', fetchMock)
       resetRecordedPrefabs()
-      spawnTree.mockReset().mockReturnValue({ object: new Object3D() })
+      spawnTree.mockReset().mockReturnValue({
+        object: new Object3D(),
+      })
       registerPrefab({ name: 'Tree', plugin: 'forest', spawn: spawnTree })
     })
 

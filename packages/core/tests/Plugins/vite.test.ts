@@ -17,7 +17,13 @@ const forest = {
   target: 'both' as const,
   client: './client.js',
   server: './server.js',
-  assets: { shared: ['bark.txt'], prefabs: { Tree: ['tree.txt'], Rock: ['rock.txt'] } },
+  assets: {
+    shared: ['bark.txt'],
+    prefabs: {
+      Tree: ['tree.txt'],
+      Rock: ['rock.txt'],
+    },
+  },
 }
 
 beforeEach(() => {
@@ -29,7 +35,14 @@ beforeEach(() => {
     'assets/tree.txt': 'tree',
     'assets/rock.txt': 'rock',
   })
-  writeConfig(root, { plugins: { forest: { prefabs: ['Tree'], options: { density: 2 } } } })
+  writeConfig(root, {
+    plugins: {
+      forest: {
+        prefabs: ['Tree'],
+        options: { density: 2 },
+      },
+    },
+  })
   writeFile(join(root, 'client', 'index.html'), '<script type="module" src="./main.js"></script>')
   writeFile(join(root, 'client', 'main.js'), 'import plugins from \'virtual:mavonengine/plugins\'\nwindow.plugins = plugins\n')
 })
@@ -40,7 +53,13 @@ afterEach(() => {
 
 describe('generatePluginsModule', () => {
   it('imports each entry and exports the loaded plugins', () => {
-    const code = generatePluginsModule([{ package: 'forest', entry: '/x/forest/client.js', options: { a: 1 } }])
+    const code = generatePluginsModule([
+      {
+        package: 'forest',
+        entry: '/x/forest/client.js',
+        options: { a: 1 },
+      },
+    ])
 
     expect(code).toBe([
       'import plugin0 from "/x/forest/client.js"',
@@ -53,7 +72,14 @@ describe('generatePluginsModule', () => {
   })
 
   it('adds the shipped assets in a release', () => {
-    const code = generatePluginsModule([{ package: 'forest', entry: '/x/client.js', options: {} }], new Map([['forest', ['tree.txt']]]))
+    const code = generatePluginsModule([
+      { package: 'forest', entry: '/x/client.js', options: {} },
+    ], new Map([
+      [
+        'forest',
+        ['tree.txt'],
+      ],
+    ]))
 
     expect(code).toContain('shippedAssets: ["tree.txt"]')
   })
@@ -76,10 +102,25 @@ describe('build', () => {
   const titledPage = `<!doctype html><html><head><title>${APP_NAME_PLACEHOLDER}</title></head><body><script type="module" src="./main.js"></script></body></html>`
 
   it('writes the game\'s name into the built page', async () => {
-    writeConfig(root, { plugins: { forest: { prefabs: ['Tree'] } }, appName: 'Space & <Game>' })
+    writeConfig(root, {
+      plugins: {
+        forest: {
+          prefabs: ['Tree'],
+        },
+      },
+      appName: 'Space & <Game>',
+    })
     writeFile(join(root, 'client', 'index.html'), titledPage)
     const outDir = join(root, 'client', 'dist')
-    await build({ root: join(root, 'client'), logLevel: 'silent', configFile: false, plugins: [mavonEnginePlugins()], build: { outDir, minify: false } })
+    await build({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [
+        mavonEnginePlugins(),
+      ],
+      build: { outDir, minify: false },
+    })
 
     const html = readFileSync(join(outDir, 'index.html'), 'utf8')
     expect(html).toContain('<title>Space &amp; &lt;Game&gt;</title>')
@@ -91,7 +132,15 @@ describe('build', () => {
   it('names a game without an appName MavonEngine', async () => {
     writeFile(join(root, 'client', 'index.html'), titledPage)
     const outDir = join(root, 'client', 'dist')
-    await build({ root: join(root, 'client'), logLevel: 'silent', configFile: false, plugins: [mavonEnginePlugins()], build: { outDir, minify: false } })
+    await build({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [
+        mavonEnginePlugins(),
+      ],
+      build: { outDir, minify: false },
+    })
 
     expect(readFileSync(join(outDir, 'index.html'), 'utf8')).toContain('<title>MavonEngine</title>')
   })
@@ -102,7 +151,9 @@ describe('build', () => {
       root: join(root, 'client'),
       logLevel: 'silent',
       configFile: false,
-      plugins: [mavonEnginePlugins()],
+      plugins: [
+        mavonEnginePlugins(),
+      ],
       build: { outDir, minify: false },
     })
 
@@ -123,7 +174,9 @@ describe('build', () => {
       root: join(root, 'client'),
       logLevel: 'silent',
       configFile: false,
-      plugins: [mavonEnginePlugins()],
+      plugins: [
+        mavonEnginePlugins(),
+      ],
       build: { outDir, minify: false },
     })
 
@@ -141,7 +194,9 @@ describe('dev server', () => {
       root: join(root, 'client'),
       logLevel: 'silent',
       configFile: false,
-      plugins: [mavonEnginePlugins()],
+      plugins: [
+        mavonEnginePlugins(),
+      ],
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
     })
@@ -196,21 +251,31 @@ describe('dev server', () => {
 
     expect(res.status).toBe(200)
     expect(listedRoot).toBe(root)
-    expect(plugins).toEqual([{
-      package: 'forest',
-      enabled: true,
-      installed: true,
-      version: '1.0.0',
-      target: 'both',
-      readme: '# Forest\n\nTrees and rocks.',
-      declaredPrefabs: ['Tree', 'Rock'],
-      usedPrefabs: ['Tree'],
-    }])
+    expect(plugins).toEqual([
+      {
+        package: 'forest',
+        enabled: true,
+        installed: true,
+        version: '1.0.0',
+        target: 'both',
+        readme: '# Forest\n\nTrees and rocks.',
+        declaredPrefabs: ['Tree', 'Rock'],
+        usedPrefabs: ['Tree'],
+      },
+    ])
 
     // A plugin added to mavonengine.json shows up without restarting the dev server
-    writeConfig(root, { plugins: { forest: {}, missing: { enabled: false } } })
+    writeConfig(root, {
+      plugins: {
+        forest: {},
+        missing: { enabled: false },
+      },
+    })
     const again = await (await fetch(`${base}${PLUGINS_INFO_PATH}`)).json() as { plugins: any[] }
-    expect(again.plugins.map(plugin => [plugin.package, plugin.enabled, plugin.installed])).toEqual([['forest', true, true], ['missing', false, false]])
+    expect(again.plugins.map(plugin => [plugin.package, plugin.enabled, plugin.installed])).toEqual([
+      ['forest', true, true],
+      ['missing', false, false],
+    ])
   })
 
   describe('installing packages', () => {
@@ -233,11 +298,25 @@ describe('dev server', () => {
           received.push({ url: req.url, token: req.headers[DEV_CONTROL_TOKEN_HEADER], body })
           res.setHeader('Content-Type', 'application/json')
           if (req.url === '/status') {
-            res.end(JSON.stringify({ job: { id: 1, packages: ['forest'], status: 'installing', output: 'added 1 package' } }))
+            res.end(JSON.stringify({
+              job: {
+                id: 1,
+                packages: ['forest'],
+                status: 'installing',
+                output: 'added 1 package',
+              },
+            }))
           }
           else {
             res.statusCode = 202
-            res.end(JSON.stringify({ job: { id: 2, packages: JSON.parse(body).packages, status: 'installing', output: '' } }))
+            res.end(JSON.stringify({
+              job: {
+                id: 2,
+                packages: JSON.parse(body).packages,
+                status: 'installing',
+                output: '',
+              },
+            }))
           }
         })
       })
@@ -255,15 +334,40 @@ describe('dev server', () => {
       const res = await install(['@acme/weather', 'forest@1.2.0'])
 
       expect(res.status).toBe(202)
-      expect(await res.json()).toEqual({ job: { id: 2, packages: ['@acme/weather', 'forest@1.2.0'], status: 'installing', output: '' } })
-      expect(received).toEqual([{ url: '/install', token: 'secret', body: JSON.stringify({ packages: ['@acme/weather', 'forest@1.2.0'] }) }])
+      expect(await res.json()).toEqual({
+        job: {
+          id: 2,
+          packages: ['@acme/weather', 'forest@1.2.0'],
+          status: 'installing',
+          output: '',
+        },
+      })
+      expect(received).toEqual([
+        {
+          url: '/install',
+          token: 'secret',
+          body: JSON.stringify({
+            packages: ['@acme/weather', 'forest@1.2.0'],
+          }),
+        },
+      ])
     })
 
     it('says whether packages can be installed and how the last install goes', async () => {
       const status = await (await fetch(`${base}${PLUGIN_INSTALL_PATH}`)).json()
 
-      expect(status).toEqual({ available: true, job: { id: 1, packages: ['forest'], status: 'installing', output: 'added 1 package' } })
-      expect(received).toEqual([{ url: '/status', token: 'secret', body: '' }])
+      expect(status).toEqual({
+        available: true,
+        job: {
+          id: 1,
+          packages: ['forest'],
+          status: 'installing',
+          output: 'added 1 package',
+        },
+      })
+      expect(received).toEqual([
+        { url: '/status', token: 'secret', body: '' },
+      ])
     })
 
     it('can\'t install without mavonengine dev', async () => {
@@ -279,7 +383,16 @@ describe('dev server', () => {
     })
 
     it('refuses what a shell or the package manager could read as more than a package', async () => {
-      for (const packages of [['forest; rm -rf ~'], ['--global'], ['a b'], ['forest@^1.0.0'], ['$(whoami)'], [], 'forest', [7]]) {
+      for (const packages of [
+        ['forest; rm -rf ~'],
+        ['--global'],
+        ['a b'],
+        ['forest@^1.0.0'],
+        ['$(whoami)'],
+        [],
+        'forest',
+        [7],
+      ]) {
         const res = await install(packages)
         expect(res.status, JSON.stringify(packages)).toBe(400)
       }
@@ -291,7 +404,13 @@ describe('dev server', () => {
       const crossSite = await install(['forest'], { 'Sec-Fetch-Site': 'cross-site' })
       const otherOrigin = await install(['forest'], { Origin: 'https://evil.example' })
       // What a form or a no-cors request can send without the browser asking first
-      const plainText = await fetch(`${base}${PLUGIN_INSTALL_PATH}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ packages: ['forest'] }) })
+      const plainText = await fetch(`${base}${PLUGIN_INSTALL_PATH}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          packages: ['forest'],
+        }),
+      })
 
       expect(crossSite.status).toBe(403)
       expect(otherOrigin.status).toBe(403)
@@ -304,7 +423,10 @@ describe('dev server', () => {
   })
 
   it('records the prefabs the editor places in mavonengine.json', async () => {
-    const post = (body: unknown) => fetch(`${base}${PREFAB_USED_PATH}`, { method: 'POST', body: JSON.stringify(body) })
+    const post = (body: unknown) => fetch(`${base}${PREFAB_USED_PATH}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
 
     const first = await post({ plugin: 'forest', prefab: 'Rock' })
     const again = await post({ plugin: 'forest', prefab: 'Rock' })
@@ -327,9 +449,22 @@ describe('dev server', () => {
       version: 1,
       name: 'main',
       settings: {},
-      objects: [{ id: 'box_1', type: 'Primitive:Box', transform: { position: [1, 2, 3], rotation: [0, 0, 0], scale: [1, 1, 1] } }],
+      objects: [
+        {
+          id: 'box_1',
+          type: 'Primitive:Box',
+          transform: {
+            position: [1, 2, 3],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+          },
+        },
+      ],
     }
-    const save = (body: unknown) => fetch(`${base}${SCENE_SAVE_PATH}`, { method: 'POST', body: JSON.stringify(body) })
+    const save = (body: unknown) => fetch(`${base}${SCENE_SAVE_PATH}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
 
     it('saves a scene to scenes/<name>.json in the project root and serves it back', async () => {
       const res = await save({ name: 'main', scene })
@@ -353,7 +488,14 @@ describe('dev server', () => {
 
     it('rejects invalid scenes and keeps the file as it was', async () => {
       await save({ name: 'main', scene })
-      const res = await save({ name: 'main', scene: { objects: [{ type: 'Primitive:Box' }] } })
+      const res = await save({
+        name: 'main',
+        scene: {
+          objects: [
+            { type: 'Primitive:Box' },
+          ],
+        },
+      })
 
       expect(res.status).toBe(400)
       expect((await res.json()).error).toContain('needs an "id"')

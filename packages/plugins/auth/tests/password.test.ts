@@ -12,7 +12,13 @@ describe('password', () => {
   })
 
   it('says no to hashes it can\'t read instead of throwing', async () => {
-    for (const bad of ['', 'plain', 'bcrypt$1$2$3$4$5', 'scrypt$x$8$1$AAAA$AAAA', 'scrypt$16384$8$1$AAAA$AAAA'])
+    for (const bad of [
+      '',
+      'plain',
+      'bcrypt$1$2$3$4$5',
+      'scrypt$x$8$1$AAAA$AAAA',
+      'scrypt$16384$8$1$AAAA$AAAA',
+    ])
       expect(await verifyPassword('anything', bad)).toBe(false)
   })
 

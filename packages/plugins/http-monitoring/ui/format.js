@@ -16,7 +16,9 @@ export function formatBytes(bytes, decimals = 1) {
   const exponent = Math.max(0, Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1))
   const value = bytes / 1024 ** exponent
 
-  return `${exponent === 0 ? value : value.toFixed(decimals)} ${BYTE_UNITS[exponent]}`
+  return `${exponent === 0
+    ? value
+    : value.toFixed(decimals)} ${BYTE_UNITS[exponent]}`
 }
 
 export function formatRate(bytesPerSecond) {
@@ -40,7 +42,9 @@ export function formatDuration(totalSeconds) {
 }
 
 export function formatMs(ms) {
-  return `${ms.toFixed(ms < 10 ? 2 : 1)} ms`
+  return `${ms.toFixed(ms < 10
+    ? 2
+    : 1)} ms`
 }
 
 export function formatPercent(value) {
@@ -49,7 +53,11 @@ export function formatPercent(value) {
 
 export function formatTime(timestamp) {
   const date = new Date(timestamp)
-  return [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => n.toString().padStart(2, '0')).join(':')
+  return [
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+  ].map(n => n.toString().padStart(2, '0')).join(':')
 }
 
 /** CSS class for an HTTP status: no response or 5xx is an error, 4xx a warning, 3xx info */
@@ -76,7 +84,9 @@ export function showNames(players) {
 /** Add new feed entries, keeping the newest `max` */
 export function appendFeed(entries, added, max = MAX_FEED_ENTRIES) {
   const combined = entries.concat(added)
-  return combined.length > max ? combined.slice(combined.length - max) : combined
+  return combined.length > max
+    ? combined.slice(combined.length - max)
+    : combined
 }
 
 /** Strip blank lines around a multi-line message, like the boot banner */
@@ -91,7 +101,9 @@ export function trimMessage(message) {
 
 /** Delay before the next poll: the interval, doubling per failure up to `maxMs`, like the CLI */
 export function backoff(intervalMs, failures, maxMs = 10000) {
-  return failures === 0 ? intervalMs : Math.min(intervalMs * 2 ** failures, Math.max(maxMs, intervalMs))
+  return failures === 0
+    ? intervalMs
+    : Math.min(intervalMs * 2 ** failures, Math.max(maxMs, intervalMs))
 }
 
 /** An account in a table cell: its name, marked when it is a guest. A dash without one, like the CLI */
@@ -99,7 +111,9 @@ export function accountLabel(account) {
   if (!account)
     return '—'
   const name = account.name ?? account.id
-  return account.guest ? `${name} (guest)` : name
+  return account.guest
+    ? `${name} (guest)`
+    : name
 }
 
 /** Whether to show the Account column: only when some player has an account, so servers without auth look as before */
@@ -120,6 +134,10 @@ export function queueTotals(queue) {
 /** How long the queue's history spans, `45s` or `2m`, for the totals' labels */
 export function queueWindow(queue) {
   const { history } = queue
-  const seconds = Math.round(history.length > 1 ? (history.at(-1).timestamp - history[0].timestamp) / 1000 : 0)
-  return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`
+  const seconds = Math.round(history.length > 1
+    ? (history.at(-1).timestamp - history[0].timestamp) / 1000
+    : 0)
+  return seconds >= 60
+    ? `${Math.round(seconds / 60)}m`
+    : `${seconds}s`
 }

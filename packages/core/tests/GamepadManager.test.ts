@@ -14,9 +14,13 @@ function makePad(overrides: Partial<{ index: number, id: string, pressed: number
     buttons: Array.from({ length: 17 }, (_, i) => ({
       pressed: pressed.includes(i),
       touched: pressed.includes(i),
-      value: values[i] ?? (pressed.includes(i) ? 1 : 0),
+      value: values[i] ?? (pressed.includes(i)
+        ? 1
+        : 0),
     })),
-    vibrationActuator: { playEffect: vi.fn().mockResolvedValue('complete') },
+    vibrationActuator: {
+      playEffect: vi.fn().mockResolvedValue('complete'),
+    },
   } as unknown as Gamepad
 }
 
@@ -24,7 +28,9 @@ let pads: (Gamepad | null)[] = []
 
 beforeEach(() => {
   pads = []
-  vi.stubGlobal('navigator', { getGamepads: () => pads })
+  vi.stubGlobal('navigator', {
+    getGamepads: () => pads,
+  })
 })
 
 afterEach(() => {
@@ -62,7 +68,9 @@ describe('gamepadManager', () => {
     const connected = vi.fn()
     manager.on('connected', connected)
 
-    pads = [makePad()]
+    pads = [
+      makePad(),
+    ]
     manager.poll()
 
     expect(connected).toHaveBeenCalledTimes(1)
@@ -76,7 +84,11 @@ describe('gamepadManager', () => {
     manager.on('buttondown', down)
     manager.on('buttonup', up)
 
-    pads = [makePad({ pressed: [GamepadButton.A] })]
+    pads = [
+      makePad({
+        pressed: [GamepadButton.A],
+      }),
+    ]
     manager.poll()
     expect(manager.isPressed(GamepadButton.Cross)).toBe(true)
     expect(manager.justPressed(GamepadButton.South)).toBe(true)
@@ -86,7 +98,9 @@ describe('gamepadManager', () => {
     expect(manager.isPressed(GamepadButton.A)).toBe(true)
     expect(manager.justPressed(GamepadButton.A)).toBe(false)
 
-    pads = [makePad()]
+    pads = [
+      makePad(),
+    ]
     manager.poll()
     expect(manager.isPressed(GamepadButton.A)).toBe(false)
     expect(manager.primary?.justReleased(GamepadButton.A)).toBe(true)
@@ -96,19 +110,31 @@ describe('gamepadManager', () => {
   it('treats analog triggers as pressed above the threshold', () => {
     const manager = new GamepadManager()
 
-    pads = [makePad({ values: { [GamepadButton.RT]: 0.3 } })]
+    pads = [
+      makePad({
+        values: { [GamepadButton.RT]: 0.3 },
+      }),
+    ]
     manager.poll()
     expect(manager.primary?.value(GamepadButton.RT)).toBe(0.3)
     expect(manager.isPressed(GamepadButton.RT)).toBe(false)
 
-    pads = [makePad({ values: { [GamepadButton.RT]: 0.8 } })]
+    pads = [
+      makePad({
+        values: { [GamepadButton.RT]: 0.8 },
+      }),
+    ]
     manager.poll()
     expect(manager.isPressed(GamepadButton.RT)).toBe(true)
   })
 
   it('exposes sticks with deadzone and up as positive Y', () => {
     const manager = new GamepadManager()
-    pads = [makePad({ axes: [0, -1, 0, 0.1] })]
+    pads = [
+      makePad({
+        axes: [0, -1, 0, 0.1],
+      }),
+    ]
     manager.poll()
 
     expect(manager.primary?.leftStick.x).toBe(0)
@@ -121,7 +147,9 @@ describe('gamepadManager', () => {
     const disconnected = vi.fn()
     manager.on('disconnected', disconnected)
 
-    pads = [makePad()]
+    pads = [
+      makePad(),
+    ]
     manager.poll()
     pads = [null]
     manager.poll()
@@ -133,7 +161,9 @@ describe('gamepadManager', () => {
   it('handles the gamepadconnected window event', () => {
     const manager = new GamepadManager()
     const event = new Event('gamepadconnected') as GamepadEvent
-    Object.defineProperty(event, 'gamepad', { value: makePad({ index: 1, id: 'DualSense Wireless Controller' }) })
+    Object.defineProperty(event, 'gamepad', {
+      value: makePad({ index: 1, id: 'DualSense Wireless Controller' }),
+    })
     window.dispatchEvent(event)
 
     expect(manager.get(1)?.type).toBe('playstation')

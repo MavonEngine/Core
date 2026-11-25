@@ -7,7 +7,9 @@ import Server from '../../../src/Networking/Server/Server'
 const mockGeckosOnConnection = vi.fn()
 const mockGeckosServer = {
   onConnection: mockGeckosOnConnection,
-  connectionsManager: { connections: new Map() as Map<string, any> },
+  connectionsManager: {
+    connections: new Map() as Map<string, any>,
+  },
   emit: vi.fn(),
 }
 
@@ -54,7 +56,11 @@ function buildScenario(syncDistance: number) {
   for (let i = 0; i < PLAYER_COUNT; i++) {
     const id = `player-${i}`
     const emit = vi.fn()
-    connections.set(id, { id, emit, channel: { emit } })
+    connections.set(id, {
+      id,
+      emit,
+      channel: { emit },
+    })
 
     const player = new BenchClient(id)
     // Spread players in a line so some are in range, some are not

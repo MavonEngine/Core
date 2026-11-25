@@ -13,7 +13,18 @@ import { mavonEnginePlugins, VIRTUAL_DEV_BRIDGE_ID } from '../../src/Plugins/vit
 import { tempProject, writeFile } from './fixtures'
 
 function tabInfo(id: string, extra: Partial<BridgeClientInfo> = {}): BridgeClientInfo {
-  return { id, url: `http://localhost/${id}`, title: 'Game', userAgent: 'test', playerId: null, editor: false, visible: true, focused: true, fps: 60, ...extra }
+  return {
+    id,
+    url: `http://localhost/${id}`,
+    title: 'Game',
+    userAgent: 'test',
+    playerId: null,
+    editor: false,
+    visible: true,
+    focused: true,
+    fps: 60,
+    ...extra,
+  }
 }
 
 /** A Vite WebSocket server stand-in, with tabs that answer requests through `respond` */
@@ -35,7 +46,9 @@ function fakeSocketServer() {
           return
         queueMicrotask(() => {
           try {
-            const data = request.query === 'info' ? info : respond(request)
+            const data = request.query === 'info'
+              ? info
+              : respond(request)
             listeners.get(BRIDGE_RESPONSE)!({ requestId: request.requestId, ok: true, data }, client)
           }
           catch (err) {
@@ -45,7 +58,9 @@ function fakeSocketServer() {
       },
     }
     listeners.get(BRIDGE_HELLO)!(info, client)
-    return { close: () => listeners.get('vite:client:disconnect')!(undefined, client) }
+    return {
+      close: () => listeners.get('vite:client:disconnect')!(undefined, client),
+    }
   }
 
   return { ws, connect, broadcasts }
@@ -57,7 +72,10 @@ describe('devBridgeHub', () => {
     const hub = new DevBridgeHub(ws)
     connect(tabInfo('a'), request => ({ query: request.query, params: request.params }))
 
-    expect(await hub.ask('a', 'status', { x: '1' })).toEqual({ query: 'status', params: { x: '1' } })
+    expect(await hub.ask('a', 'status', { x: '1' })).toEqual({
+      query: 'status',
+      params: { x: '1' },
+    })
   })
 
   it('turns a failed query into an error', async () => {
@@ -140,7 +158,10 @@ describe('handleBridgeRequest', () => {
     })
     await new Promise<void>(resolve => listener!.listen(0, '127.0.0.1', resolve))
     const base = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`
-    return { connect, request: (path: string, init?: RequestInit) => fetch(`${base}${path}`, init) }
+    return {
+      connect,
+      request: (path: string, init?: RequestInit) => fetch(`${base}${path}`, init),
+    }
   }
 
   it('lists tabs and forwards queries with their parameters', async () => {
@@ -152,7 +173,10 @@ describe('handleBridgeRequest', () => {
 
     const res = await request('/__mavonengine/clients/auto/entities?type=Rock&near=1,2,3')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ query: 'entities', params: { type: 'Rock', near: '1,2,3' } })
+    expect(await res.json()).toEqual({
+      query: 'entities',
+      params: { type: 'Rock', near: '1,2,3' },
+    })
   })
 
   it('maps errors to statuses', async () => {
@@ -178,7 +202,9 @@ describe('handleBridgeRequest', () => {
     expect((await request('/__mavonengine/clients')).status).toBe(401)
     expect((await request('/__mavonengine/clients?token=wrong')).status).toBe(401)
 
-    const res = await request('/__mavonengine/clients/a/logs?after=2', { headers: { Authorization: 'Bearer secret' } })
+    const res = await request('/__mavonengine/clients/a/logs?after=2', {
+      headers: { Authorization: 'Bearer secret' },
+    })
     expect(await res.json()).toEqual({ after: '2' })
     expect(await (await request('/__mavonengine/clients/a/logs?token=secret')).json()).toEqual({})
   })
@@ -196,7 +222,9 @@ describe('the vite plugin', () => {
   })
 
   afterEach(async () => {
-    await new Promise(resolve => http ? http.close(resolve) : resolve(undefined))
+    await new Promise(resolve => http
+      ? http.close(resolve)
+      : resolve(undefined))
     await vite?.close()
     http = undefined
     vite = undefined
@@ -209,12 +237,22 @@ describe('the vite plugin', () => {
       root: join(root, 'client'),
       logLevel: 'silent',
       configFile: false,
-      plugins: [mavonEnginePlugins(options)],
-      server: { middlewareMode: true, hmr: { server: http }, watch: null },
+      plugins: [
+        mavonEnginePlugins(options),
+      ],
+      server: {
+        middlewareMode: true,
+        hmr: { server: http },
+        watch: null,
+      },
       optimizeDeps: { noDiscovery: true },
       appType: 'spa',
       // Like the template in this repository: core from its source
-      resolve: { alias: { '@mavonengine/core': join(import.meta.dirname, '../../src') } },
+      resolve: {
+        alias: {
+          '@mavonengine/core': join(import.meta.dirname, '../../src'),
+        },
+      },
     })
     http.on('request', vite.middlewares)
     await new Promise<void>(resolve => http!.listen(0, '127.0.0.1', resolve))
@@ -238,7 +276,9 @@ describe('the vite plugin', () => {
       root: join(root, 'client'),
       logLevel: 'silent',
       configFile: false,
-      plugins: [mavonEnginePlugins()],
+      plugins: [
+        mavonEnginePlugins(),
+      ],
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
     })
@@ -269,7 +309,13 @@ describe('the vite plugin', () => {
       const payload = JSON.parse(String(message.data))
       if (payload.type === 'custom' && payload.event === BRIDGE_REQUEST) {
         const request = payload.data as BridgeRequest
-        send(BRIDGE_RESPONSE, { requestId: request.requestId, ok: true, data: request.query === 'info' ? tabInfo('tab-1') : { answered: request.query } })
+        send(BRIDGE_RESPONSE, {
+          requestId: request.requestId,
+          ok: true,
+          data: request.query === 'info'
+            ? tabInfo('tab-1')
+            : { answered: request.query },
+        })
       }
     })
     send(BRIDGE_HELLO, tabInfo('tab-1'))
@@ -291,11 +337,21 @@ describe('the vite plugin', () => {
 
   it('leaves the bridge out of a build', async () => {
     const outDir = join(root, 'client', 'dist')
-    await build({ root: join(root, 'client'), logLevel: 'silent', configFile: false, plugins: [mavonEnginePlugins()], build: { outDir, minify: false } })
+    await build({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [
+        mavonEnginePlugins(),
+      ],
+      build: { outDir, minify: false },
+    })
 
     expect(readFileSync(join(outDir, 'index.html'), 'utf8')).not.toContain('dev-bridge')
     const assets = join(outDir, 'assets')
-    const js = existsSync(assets) ? readdirSync(assets).map(f => readFileSync(join(assets, f), 'utf8')).join('\n') : ''
+    const js = existsSync(assets)
+      ? readdirSync(assets).map(f => readFileSync(join(assets, f), 'utf8')).join('\n')
+      : ''
     expect(js).not.toContain('startDevBridge')
   })
 })

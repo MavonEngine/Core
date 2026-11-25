@@ -37,9 +37,21 @@ export function prefabType(key: string) {
 
 type Props = Record<string, unknown>
 
-const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
-const bool = (v: unknown) => (typeof v === 'boolean' ? v : undefined)
+function str(v: unknown) {
+  return typeof v === 'string'
+    ? v
+    : undefined
+}
+function num(v: unknown) {
+  return typeof v === 'number' && Number.isFinite(v)
+    ? v
+    : undefined
+}
+function bool(v: unknown) {
+  return typeof v === 'boolean'
+    ? v
+    : undefined
+}
 
 function primitiveProps(primitive: Primitive): Props {
   const props: Props = {}
@@ -216,7 +228,9 @@ export function registerBuiltinSceneObjects() {
     label: 'Model',
     client(data) {
       const resource = str(data.props?.resource)
-      const gltf = resource ? Game.instance().resources.items[resource] : undefined
+      const gltf = resource
+        ? Game.instance().resources.items[resource]
+        : undefined
       if (!resource || !gltf || !('scene' in gltf))
         throw new Error(`Model needs the name of a loaded gltfModel resource in props.resource, got "${resource}"`)
 

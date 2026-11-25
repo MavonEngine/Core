@@ -45,7 +45,9 @@ const registry = new Map<string, SceneObjectDefinition>()
 const resolvers: SceneObjectResolver[] = []
 
 export function sceneObjectKey(definition: Pick<SceneObjectDefinition, 'type' | 'plugin'>): string {
-  return definition.plugin ? `${definition.plugin}:${definition.type}` : definition.type
+  return definition.plugin
+    ? `${definition.plugin}:${definition.type}`
+    : definition.type
 }
 
 /**
@@ -54,7 +56,11 @@ export function sceneObjectKey(definition: Pick<SceneObjectDefinition, 'type' | 
 export function registerSceneObject<T extends GameObject>(definition: SceneObjectDefinition<T>): void {
   const key = sceneObjectKey(definition)
   const existing = registry.get(key)
-  registry.set(key, { ...existing, ...(definition as unknown as SceneObjectDefinition), type: definition.type })
+  registry.set(key, {
+    ...existing,
+    ...(definition as unknown as SceneObjectDefinition),
+    type: definition.type,
+  })
 }
 
 export function unregisterSceneObject(key: string): void {

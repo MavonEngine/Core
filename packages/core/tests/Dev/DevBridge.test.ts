@@ -32,15 +32,43 @@ function fakeGame() {
   net.packet('out', 'command', { type: 'cl_move', sequenceId: 16 })
   net.packet('in', 'sv_state', { tick: 12, ack: 16, entities: [] })
 
-  const info = { autoReset: true, reset: vi.fn(), render: { calls: 12, triangles: 3400, points: 0, lines: 2 }, memory: { geometries: 5, textures: 3 }, programs: [{}, {}] }
+  const info = {
+    autoReset: true,
+    reset: vi.fn(),
+    render: {
+      calls: 12,
+      triangles: 3400,
+      points: 0,
+      lines: 2,
+    },
+    memory: { geometries: 5, textures: 3 },
+    programs: [{}, {}],
+  }
   return {
     world,
     tickRate: 30,
     activeScene: undefined,
     editor: undefined,
     canvas: { width: 800, height: 600 },
-    renderer: { fps: 59.6, instance: { info, getPixelRatio: () => 2 }, composer: { render: vi.fn() } },
-    camera: { instance: { position: new Vector3(0, 5, 10), rotation: new Vector3(), fov: 75, near: 0.1, far: 1000 } },
+    renderer: {
+      fps: 59.6,
+      instance: {
+        info,
+        getPixelRatio: () => 2,
+      },
+      composer: {
+        render: vi.fn(),
+      },
+    },
+    camera: {
+      instance: {
+        position: new Vector3(0, 5, 10),
+        rotation: new Vector3(),
+        fov: 75,
+        near: 0.1,
+        far: 1000,
+      },
+    },
     resources: { loaded: 2, toLoad: 2 },
     network: {
       connected: true,
@@ -50,7 +78,14 @@ function fakeGame() {
       localCommandQueue: [{}, {}, {}],
       currentSequenceId: 17,
       net,
-      serverView: { tick: 12, serverTime: 5000, ack: 16, receivedAt: performance.now(), missedStates: 1, entities: new Map() },
+      serverView: {
+        tick: 12,
+        serverTime: 5000,
+        ack: 16,
+        receivedAt: performance.now(),
+        missedStates: 1,
+        entities: new Map(),
+      },
     },
   }
 }
@@ -69,7 +104,10 @@ afterEach(() => {
 describe('answer', () => {
   it('reports the tab and its player id', async () => {
     const res = await ask('info')
-    expect(res).toMatchObject({ ok: true, data: { playerId: 'socket-1', editor: false, fps: 60 } })
+    expect(res).toMatchObject({
+      ok: true,
+      data: { playerId: 'socket-1', editor: false, fps: 60 },
+    })
   })
 
   it('reports renderer stats for one frame', async () => {
@@ -79,7 +117,10 @@ describe('answer', () => {
       tickRate: 30,
       gpuMemory: { geometries: 5, textures: 3, programs: 2 },
       canvas: { width: 800, height: 600, pixelRatio: 2 },
-      camera: { position: { x: 0, y: 5, z: 10 }, fov: 75 },
+      camera: {
+        position: { x: 0, y: 5, z: 10 },
+        fov: 75,
+      },
       entities: 3,
       scene: null,
     })
@@ -100,7 +141,11 @@ describe('answer', () => {
 
   it('finds the local player by its server id', async () => {
     const res = await ask('entity', { id: 'socket-1' }) as any
-    expect(res.data.entity).toMatchObject({ id: 'localPlayer', localPlayer: true, position: { x: 1, y: 0, z: 0 } })
+    expect(res.data.entity).toMatchObject({
+      id: 'localPlayer',
+      localPlayer: true,
+      position: { x: 1, y: 0, z: 0 },
+    })
     expect(res.data.entity.serialized).toMatchObject({ id: 'localPlayer' })
 
     expect(((await ask('entity', { id: 'missing' })) as any).data).toEqual({ entity: null })
@@ -109,14 +154,27 @@ describe('answer', () => {
 
   it('lists the recorded packets and shows one with its payload', async () => {
     const res = await ask('packets', { direction: 'in', limit: '5' }) as any
-    expect(res.data).toMatchObject({ enabled: true, latestId: 2, matched: 1, records: [{ id: 2, type: 'sv_state', tick: 12 }] })
+    expect(res.data).toMatchObject({
+      enabled: true,
+      latestId: 2,
+      matched: 1,
+      records: [
+        { id: 2, type: 'sv_state', tick: 12 },
+      ],
+    })
 
-    expect(((await ask('packet', { id: '1' })) as any).data.record).toMatchObject({ type: 'command', payload: { type: 'cl_move', sequenceId: 16 } })
+    expect(((await ask('packet', { id: '1' })) as any).data.record).toMatchObject({
+      type: 'command',
+      payload: { type: 'cl_move', sequenceId: 16 },
+    })
     expect(((await ask('packet', { id: '9' })) as any).data).toEqual({ record: null })
     expect(await ask('packets', { kind: 'frame' })).toMatchObject({ ok: false, error: 'kind must be packet or event' })
 
     delete (window as any).Game.network
-    expect(await ask('packets')).toMatchObject({ ok: false, error: expect.stringContaining('no NetworkManager') })
+    expect(await ask('packets')).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('no NetworkManager'),
+    })
   })
 
   it('reports the network state', async () => {
@@ -128,7 +186,13 @@ describe('answer', () => {
       editorMode: false,
       pendingCommands: 3,
       nextSequenceId: 17,
-      lastState: { tick: 12, serverTime: 5000, ack: 16, ageMs: expect.any(Number), missedStates: 1 },
+      lastState: {
+        tick: 12,
+        serverTime: 5000,
+        ack: 16,
+        ageMs: expect.any(Number),
+        missedStates: 1,
+      },
       recording: true,
     })
 
@@ -151,7 +215,10 @@ describe('answer', () => {
 
   it('fails without a game, and for unknown queries', async () => {
     delete (window as any).Game
-    expect(await ask('status')).toMatchObject({ ok: false, error: expect.stringContaining('No game is running') })
+    expect(await ask('status')).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('No game is running'),
+    })
     expect(await ask('bogus' as any)).toMatchObject({ ok: false, error: 'Unknown query bogus' })
   })
 })
@@ -159,7 +226,12 @@ describe('answer', () => {
 describe('formatArgs', () => {
   it('drops %c styles like the engine logger uses', () => {
     expect(formatArgs(['%c ERROR %c Socket error', 'color: red', 'color: grey'])).toBe('ERROR  Socket error')
-    expect(formatArgs(['%c INFO %c joined', 'a', 'b', { id: 1 }])).toBe('INFO  joined {"id":1}')
+    expect(formatArgs([
+      '%c INFO %c joined',
+      'a',
+      'b',
+      { id: 1 },
+    ])).toBe('INFO  joined {"id":1}')
   })
 
   it('substitutes values in order and stringifies the rest', () => {
@@ -169,7 +241,9 @@ describe('formatArgs', () => {
     const circular: any = { a: 1 }
     circular.self = circular
     expect(formatArgs([circular])).toBe('{"a":1,"self":"[Circular]"}')
-    expect(formatArgs([new Error('boom')])).toContain('Error: boom')
+    expect(formatArgs([
+      new Error('boom'),
+    ])).toContain('Error: boom')
   })
 })
 
@@ -186,10 +260,16 @@ describe('startDevBridge', () => {
 
     try {
       startDevBridge(hot)
-      expect(sent[0]).toMatchObject({ event: BRIDGE_HELLO, data: { playerId: 'socket-1' } })
+      expect(sent[0]).toMatchObject({
+        event: BRIDGE_HELLO,
+        data: { playerId: 'socket-1' },
+      })
 
       console.warn('%c WARN %c careful', 'x', 'y')
-      window.dispatchEvent(new ErrorEvent('error', { error: new Error('kaput'), message: 'kaput' }))
+      window.dispatchEvent(new ErrorEvent('error', {
+        error: new Error('kaput'),
+        message: 'kaput',
+      }))
 
       listeners.get(BRIDGE_REQUEST)!({ requestId: 'req-1', query: 'logs', params: {} })
       await vi.waitFor(() => expect(sent.some(s => s.event === BRIDGE_RESPONSE)).toBe(true))

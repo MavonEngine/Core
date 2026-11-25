@@ -23,7 +23,10 @@ function useInputLog() {
 
     const push = (text: string) => {
       const time = new Date().toLocaleTimeString(undefined, { hour12: false })
-      setLog(prev => [{ id: ++logId, time, text }, ...prev].slice(0, MAX_LOG))
+      setLog(prev => [
+        { id: ++logId, time, text },
+        ...prev,
+      ].slice(0, MAX_LOG))
     }
 
     const onDown = ({ gamepad, button }: GamepadButtonEvent) => push(`#${gamepad.index} ${gamepad.buttonLabel(button)} down`)
@@ -123,7 +126,12 @@ function ControllerCard({ gamepad }: { gamepad: GamepadState }) {
       <div className={styles.sectionTitle}>Buttons</div>
       <div className={styles.rows}>
         {gamepad.buttonValues.map((value, i) => (
-          <div key={i} className={`${styles.row}${gamepad.isPressed(i) ? ` ${styles.rowPressed}` : ''}`}>
+          <div
+            key={i}
+            className={`${styles.row}${gamepad.isPressed(i)
+              ? ` ${styles.rowPressed}`
+              : ''}`}
+          >
             <span className={styles.rowLabel}>
               {i}
               {' '}

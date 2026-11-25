@@ -96,13 +96,20 @@ export default abstract class Player extends NetworkedLivingActor implements Not
       const rtt = peer.rtt()
       return {
         address: peer.getSelectedCandidatePair()?.remote.address ?? null,
-        rttMs: rtt >= 0 ? rtt : null,
+        rttMs: rtt >= 0
+          ? rtt
+          : null,
         bytesSent: peer.bytesSent(),
         bytesReceived: peer.bytesReceived(),
       }
     }
     catch {
-      return { address: null, rttMs: null, bytesSent: 0, bytesReceived: 0 }
+      return {
+        address: null,
+        rttMs: null,
+        bytesSent: 0,
+        bytesReceived: 0,
+      }
     }
   }
 

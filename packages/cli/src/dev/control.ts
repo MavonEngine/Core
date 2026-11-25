@@ -82,12 +82,16 @@ export function startDevControl(installer: PluginInstaller): Promise<DevControl>
       }
 
       try {
-        reply(202, { job: installer.start(packages) })
+        reply(202, {
+          job: installer.start(packages),
+        })
       }
       catch (err) {
         if (!(err instanceof InstallRefused))
           throw err
-        reply(err.reason === 'busy' ? 409 : 400, { error: err.message })
+        reply(err.reason === 'busy'
+          ? 409
+          : 400, { error: err.message })
       }
       return
     }

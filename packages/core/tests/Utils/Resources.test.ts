@@ -31,24 +31,38 @@ describe('resources.add', () => {
     await res.add([
       { name: 'tree', type: 'gltfModel', path: '/kenney/tree.glb' },
       { name: 'bark', type: 'texture', path: '/kenney/bark.png' },
-      { name: 'sky', type: 'cubeTexture', path: ['px.png', 'nx.png'] },
+      {
+        name: 'sky',
+        type: 'cubeTexture',
+        path: ['px.png', 'nx.png'],
+      },
     ])
 
     expect(res.items.tree).toMatchObject({ path: '/kenney/tree.glb' })
     expect(res.items.bark).toEqual({ texture: '/kenney/bark.png' })
-    expect(res.items.sky).toEqual({ cube: ['px.png', 'nx.png'] })
+    expect(res.items.sky).toEqual({
+      cube: ['px.png', 'nx.png'],
+    })
     expect(res.sources.map(source => source.name)).toEqual(['tree', 'bark', 'sky'])
-    expect(added).toHaveBeenCalledWith({ names: ['tree', 'bark', 'sky'] })
+    expect(added).toHaveBeenCalledWith({
+      names: ['tree', 'bark', 'sky'],
+    })
     expect(loaded).not.toHaveBeenCalled()
   })
 
   it('replaces an asset with the same name', async () => {
     const res = resources()
-    await res.add([{ name: 'tree', type: 'gltfModel', path: '/a.glb' }])
-    await res.add([{ name: 'tree', type: 'gltfModel', path: '/b.glb' }])
+    await res.add([
+      { name: 'tree', type: 'gltfModel', path: '/a.glb' },
+    ])
+    await res.add([
+      { name: 'tree', type: 'gltfModel', path: '/b.glb' },
+    ])
 
     expect(res.items.tree).toMatchObject({ path: '/b.glb' })
-    expect(res.sources).toEqual([{ name: 'tree', type: 'gltfModel', path: '/b.glb' }])
+    expect(res.sources).toEqual([
+      { name: 'tree', type: 'gltfModel', path: '/b.glb' },
+    ])
   })
 
   it('keeps the assets that loaded and rejects naming the ones that didn\'t', async () => {
@@ -62,6 +76,8 @@ describe('resources.add', () => {
     ])).rejects.toThrow('Could not load rock: 404')
 
     expect(Object.keys(res.items)).toEqual(['tree'])
-    expect(added).toHaveBeenCalledWith({ names: ['tree'] })
+    expect(added).toHaveBeenCalledWith({
+      names: ['tree'],
+    })
   })
 })

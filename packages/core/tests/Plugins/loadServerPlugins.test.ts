@@ -16,7 +16,13 @@ afterEach(() => {
 describe('loadServerPlugins', () => {
   it('imports the server entries of enabled plugins', async () => {
     installPlugin(root, 'chat', { target: 'server', server: './server.js' }, { 'server.js': 'export default { name: "Chat", tick() {} }' })
-    writeConfig(root, { plugins: { chat: { options: { max: 3 } } } })
+    writeConfig(root, {
+      plugins: {
+        chat: {
+          options: { max: 3 },
+        },
+      },
+    })
 
     const { plugins, warnings } = await loadServerPlugins(root)
 
@@ -29,7 +35,9 @@ describe('loadServerPlugins', () => {
 
   it('skips client-only plugins', async () => {
     installPlugin(root, 'hud', { target: 'client', client: './client.js' }, { 'client.js': 'export default {}' })
-    writeConfig(root, { plugins: { hud: {} } })
+    writeConfig(root, {
+      plugins: { hud: {} },
+    })
 
     expect(await loadServerPlugins(root)).toEqual({ plugins: [], warnings: [], incompatible: [] })
   })
@@ -37,7 +45,9 @@ describe('loadServerPlugins', () => {
   it('reports entries without a default export or that fail to import', async () => {
     installPlugin(root, 'nodefault', { target: 'server', server: './server.js' }, { 'server.js': 'export const x = 1' })
     installPlugin(root, 'throws', { target: 'server', server: './server.js' }, { 'server.js': 'throw new Error("bad plugin")' })
-    writeConfig(root, { plugins: { nodefault: {}, throws: {} } })
+    writeConfig(root, {
+      plugins: { nodefault: {}, throws: {} },
+    })
 
     const { plugins, warnings } = await loadServerPlugins(root)
 

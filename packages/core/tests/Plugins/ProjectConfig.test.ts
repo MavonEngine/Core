@@ -33,7 +33,10 @@ const trees = {
   server: './dist/server.js',
   assets: {
     shared: ['textures/bark.png'],
-    prefabs: { Tree: ['models/tree.glb'], Rock: ['models/rock.glb'] },
+    prefabs: {
+      Tree: ['models/tree.glb'],
+      Rock: ['models/rock.glb'],
+    },
   },
 }
 
@@ -82,19 +85,43 @@ describe('addPluginToConfig', () => {
   it('creates mavonengine.json with the plugin', () => {
     expect(addPluginToConfig(root, 'trees')).toBe(true)
 
-    expect(JSON.parse(readFileSync(join(root, 'mavonengine.json'), 'utf8'))).toEqual({ plugins: { trees: { enabled: true } } })
+    expect(JSON.parse(readFileSync(join(root, 'mavonengine.json'), 'utf8'))).toEqual({
+      plugins: {
+        trees: { enabled: true },
+      },
+    })
   })
 
   it('keeps other keys and the settings of an existing entry', () => {
-    writeConfig(root, { custom: 1, plugins: { trees: { enabled: false, prefabs: ['Tree'] } } } as any)
+    writeConfig(root, {
+      custom: 1,
+      plugins: {
+        trees: {
+          enabled: false,
+          prefabs: ['Tree'],
+        },
+      },
+    } as any)
 
     expect(addPluginToConfig(root, 'trees')).toBe(true)
 
-    expect(readConfig(root)).toEqual({ custom: 1, plugins: { trees: { enabled: true, prefabs: ['Tree'] } } })
+    expect(readConfig(root)).toEqual({
+      custom: 1,
+      plugins: {
+        trees: {
+          enabled: true,
+          prefabs: ['Tree'],
+        },
+      },
+    })
   })
 
   it('leaves an enabled plugin alone', () => {
-    writeConfig(root, { plugins: { trees: { enabled: true } } })
+    writeConfig(root, {
+      plugins: {
+        trees: { enabled: true },
+      },
+    })
 
     expect(addPluginToConfig(root, 'trees')).toBe(false)
   })
@@ -108,7 +135,9 @@ describe('addPluginToConfig', () => {
 
 describe('recordPrefabUsage', () => {
   it('adds the prefab once', () => {
-    writeConfig(root, { plugins: { trees: {} } })
+    writeConfig(root, {
+      plugins: { trees: {} },
+    })
 
     expect(recordPrefabUsage(root, 'trees', 'Tree')).toBe(true)
     expect(recordPrefabUsage(root, 'trees', 'Tree')).toBe(false)
@@ -127,7 +156,12 @@ describe('readPluginManifest', () => {
   it('reads the manifest of an installed plugin', () => {
     const dir = installPlugin(root, 'trees', trees, treeFiles)
 
-    expect(readPluginManifest(root, 'trees')).toEqual({ package: 'trees', version: '1.0.0', dir, manifest: trees })
+    expect(readPluginManifest(root, 'trees')).toEqual({
+      package: 'trees',
+      version: '1.0.0',
+      dir,
+      manifest: trees,
+    })
   })
 
   it('finds scoped packages hoisted to a parent directory', () => {
@@ -162,7 +196,15 @@ describe('enabledPlugins', () => {
     installPlugin(root, 'trees', trees, treeFiles)
     installPlugin(root, 'chat', { target: 'server', server: './server.js' }, { 'server.js': '' })
     installPlugin(root, 'hud', { target: 'client', client: './client.js' }, { 'client.js': '' })
-    writeConfig(root, { plugins: { chat: {}, trees: { options: { density: 2 } }, hud: {} } })
+    writeConfig(root, {
+      plugins: {
+        chat: {},
+        trees: {
+          options: { density: 2 },
+        },
+        hud: {},
+      },
+    })
 
     expect(enabledPlugins(root, 'server').plugins.map(p => p.package)).toEqual(['chat', 'trees'])
     const client = enabledPlugins(root, 'client').plugins
@@ -173,7 +215,11 @@ describe('enabledPlugins', () => {
 
   it('skips disabled plugins', () => {
     installPlugin(root, 'trees', trees, treeFiles)
-    writeConfig(root, { plugins: { trees: { enabled: false } } })
+    writeConfig(root, {
+      plugins: {
+        trees: { enabled: false },
+      },
+    })
 
     expect(enabledPlugins(root, 'client')).toEqual({ plugins: [], warnings: [], incompatible: [] })
   })
@@ -181,7 +227,9 @@ describe('enabledPlugins', () => {
   it('warns about plugins that are missing, invalid or unbuilt', () => {
     installPlugin(root, 'bad', { target: 'nope' } as any)
     installPlugin(root, 'unbuilt', { target: 'client', client: './dist/client.js' })
-    writeConfig(root, { plugins: { missing: {}, bad: {}, unbuilt: {} } })
+    writeConfig(root, {
+      plugins: { missing: {}, bad: {}, unbuilt: {} },
+    })
 
     const { plugins, warnings } = enabledPlugins(root, 'client')
 
@@ -195,7 +243,9 @@ describe('enabledPlugins', () => {
   it('refuses entries outside the package', () => {
     installPlugin(root, 'sneaky', { target: 'client', client: '../other/client.js' })
     installPlugin(root, 'other', undefined, { 'client.js': '' })
-    writeConfig(root, { plugins: { sneaky: {} } })
+    writeConfig(root, {
+      plugins: { sneaky: {} },
+    })
 
     expect(enabledPlugins(root, 'client').plugins).toEqual([])
   })
@@ -209,27 +259,60 @@ describe('release assets', () => {
 
   it('maps them into plugins/<package>/ in the release', () => {
     const dir = installPlugin(root, 'trees', trees, treeFiles)
-    writeConfig(root, { plugins: { trees: { prefabs: ['Tree'] } } })
+    writeConfig(root, {
+      plugins: {
+        trees: {
+          prefabs: ['Tree'],
+        },
+      },
+    })
 
     expect(releaseAssets(root)).toEqual({
       assets: [
-        { package: 'trees', from: join(dir, 'assets', 'textures', 'bark.png'), to: 'plugins/trees/textures/bark.png', path: 'textures/bark.png' },
-        { package: 'trees', from: join(dir, 'assets', 'models', 'tree.glb'), to: 'plugins/trees/models/tree.glb', path: 'models/tree.glb' },
+        {
+          package: 'trees',
+          from: join(dir, 'assets', 'textures', 'bark.png'),
+          to: 'plugins/trees/textures/bark.png',
+          path: 'textures/bark.png',
+        },
+        {
+          package: 'trees',
+          from: join(dir, 'assets', 'models', 'tree.glb'),
+          to: 'plugins/trees/models/tree.glb',
+          path: 'models/tree.glb',
+        },
       ],
       warnings: [],
     })
   })
 
   it('uses the assets dir from the manifest', () => {
-    installPlugin(root, 'trees', { ...trees, assets: { dir: './public', shared: ['a.png'] } }, { ...treeFiles, 'public/a.png': '' })
-    writeConfig(root, { plugins: { trees: {} } })
+    installPlugin(root, 'trees', {
+      ...trees,
+      assets: {
+        dir: './public',
+        shared: ['a.png'],
+      },
+    }, { ...treeFiles, 'public/a.png': '' })
+    writeConfig(root, {
+      plugins: { trees: {} },
+    })
 
-    expect(releaseAssets(root).assets.map(a => a.from)).toEqual([join(root, 'node_modules', 'trees', 'public', 'a.png')])
+    expect(releaseAssets(root).assets.map(a => a.from)).toEqual([
+      join(root, 'node_modules', 'trees', 'public', 'a.png'),
+    ])
   })
 
   it('warns about missing assets and paths outside the assets dir', () => {
-    installPlugin(root, 'trees', { ...trees, assets: { shared: ['gone.png', '../package.json'] } }, treeFiles)
-    writeConfig(root, { plugins: { trees: {} } })
+    installPlugin(root, 'trees', {
+      ...trees,
+      assets: {
+        shared: ['gone.png', '../package.json'],
+      },
+    }, treeFiles)
+    writeConfig(root, {
+      plugins: { trees: {} },
+    })
 
     const { assets, warnings } = releaseAssets(root)
 
@@ -250,7 +333,16 @@ describe('resolveInside', () => {
 })
 
 describe('plugin infos', () => {
-  const manifest = { target: 'server' as const, server: './server.js', engine: '^0.1.0', assets: { prefabs: { Tree: ['tree.glb'] } } }
+  const manifest = {
+    target: 'server' as const,
+    server: './server.js',
+    engine: '^0.1.0',
+    assets: {
+      prefabs: {
+        Tree: ['tree.glb'],
+      },
+    },
+  }
 
   it('describes a plugin from its package.json, manifest and readme', () => {
     const dir = installPlugin(root, '@acme/chat', manifest, { 'Readme.md': '# Chat\n\nTalk to each other.' })
@@ -262,29 +354,44 @@ describe('plugin infos', () => {
       repository: { url: 'https://example.com/chat.git' },
       mavonengine: manifest,
     }))
-    writeConfig(root, { plugins: { '@acme/chat': { prefabs: ['Tree', 7 as any] } } })
+    writeConfig(root, {
+      plugins: {
+        '@acme/chat': {
+          prefabs: ['Tree', 7 as any],
+        },
+      },
+    })
 
-    expect(pluginInfos(root)).toEqual([{
-      package: '@acme/chat',
-      enabled: true,
-      installed: true,
-      version: '2.3.1',
-      description: 'In-game chat',
-      license: 'MIT',
-      homepage: 'https://example.com/chat.git',
-      target: 'server',
-      engine: '^0.1.0',
-      readme: '# Chat\n\nTalk to each other.',
-      declaredPrefabs: ['Tree'],
-      usedPrefabs: ['Tree'],
-    }])
+    expect(pluginInfos(root)).toEqual([
+      {
+        package: '@acme/chat',
+        enabled: true,
+        installed: true,
+        version: '2.3.1',
+        description: 'In-game chat',
+        license: 'MIT',
+        homepage: 'https://example.com/chat.git',
+        target: 'server',
+        engine: '^0.1.0',
+        readme: '# Chat\n\nTalk to each other.',
+        declaredPrefabs: ['Tree'],
+        usedPrefabs: ['Tree'],
+      },
+    ])
   })
 
   it('lists plugins that are turned off, missing or invalid, and says what is wrong', () => {
     installPlugin(root, 'off', manifest)
     installPlugin(root, 'not-a-plugin', undefined)
     installPlugin(root, 'broken', { target: 'sideways' } as any)
-    writeConfig(root, { plugins: { 'off': { enabled: false }, 'missing': {}, 'not-a-plugin': {}, 'broken': {} } })
+    writeConfig(root, {
+      plugins: {
+        'off': { enabled: false },
+        'missing': {},
+        'not-a-plugin': {},
+        'broken': {},
+      },
+    })
 
     const infos = pluginInfos(root)
 
@@ -303,8 +410,12 @@ describe('plugin infos', () => {
   })
 
   it('cuts off a very long readme', () => {
-    installPlugin(root, 'wordy', manifest, { 'README.md': 'x'.repeat(MAX_README_CHARS + 50) })
-    writeConfig(root, { plugins: { wordy: {} } })
+    installPlugin(root, 'wordy', manifest, {
+      'README.md': 'x'.repeat(MAX_README_CHARS + 50),
+    })
+    writeConfig(root, {
+      plugins: { wordy: {} },
+    })
 
     const [{ readme }] = pluginInfos(root)
 

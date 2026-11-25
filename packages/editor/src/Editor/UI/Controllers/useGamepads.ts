@@ -33,5 +33,9 @@ export function useGamepads(live = false): GamepadState[] {
     }
   }, [manager, live])
 
-  return manager ? [...manager.gamepads.values()] : []
+  return manager
+    ? [
+        ...manager.gamepads.values(),
+      ]
+    : []
 }

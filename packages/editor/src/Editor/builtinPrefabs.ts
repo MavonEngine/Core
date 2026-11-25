@@ -22,7 +22,9 @@ export function registerBuiltinPrefabs() {
       // One pane controls every water surface, so it is only added for the first
       return {
         object: water,
-        addBindings: isFirst ? WaterManager.instance!.addBindings.bind(WaterManager.instance!) : undefined,
+        addBindings: isFirst
+          ? WaterManager.instance!.addBindings.bind(WaterManager.instance!)
+          : undefined,
       }
     },
   })
@@ -39,7 +41,11 @@ export function registerBuiltinPrefabs() {
       }
 
       const grass = new Grass(grassGltfs[0][1] as GLTF, grassGltfs[1][1] as GLTF, 10000, 12.5, position)
-      return { object: grass, addBindings: grass.addBindings.bind(grass), clearPanes: true }
+      return {
+        object: grass,
+        addBindings: grass.addBindings.bind(grass),
+        clearPanes: true,
+      }
     },
   })
 }

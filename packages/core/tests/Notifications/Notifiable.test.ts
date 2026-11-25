@@ -8,7 +8,14 @@ import Server from '../../src/Networking/Server/Server'
 import { account, currentNotifier, notifiable, notify, resetNotifyWarning, setNotifier } from '../../src/Notifications/Notifiable'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestPlayer extends Player {
@@ -28,7 +35,9 @@ class TestServer extends Server<TestPlayer> {
   }
 }
 
-const levelUp: NotificationLike = { via: () => ['game'] }
+const levelUp: NotificationLike = {
+  via: () => ['game'],
+}
 
 class BaseGuild {
   constructor(readonly id: string) {}
@@ -50,14 +59,26 @@ afterEach(() => {
 describe('notify', () => {
   it('sends through the process\'s notifier, to one recipient or several', async () => {
     const sent: { to: string[], notification: NotificationLike }[] = []
-    setNotifier(async (to, notification) => void sent.push({ to: to.map(r => `${r.notifiableType}:${r.notifiableId()}`), notification }))
+    setNotifier(async (to, notification) => void sent.push({
+      to: to.map(r => `${r.notifiableType}:${r.notifiableId()}`),
+      notification,
+    }))
 
     await notify(account('a1'), levelUp)
-    await notify([new Guild('g1'), account('a2')], levelUp)
+    await notify([
+      new Guild('g1'),
+      account('a2'),
+    ], levelUp)
 
     expect(sent).toEqual([
-      { to: ['account:a1'], notification: levelUp },
-      { to: ['guild:g1', 'account:a2'], notification: levelUp },
+      {
+        to: ['account:a1'],
+        notification: levelUp,
+      },
+      {
+        to: ['guild:g1', 'account:a2'],
+        notification: levelUp,
+      },
     ])
   })
 
@@ -97,7 +118,9 @@ describe('notify', () => {
     expect(player.notifiableType).toBe('account')
     expect(player.notifiableId()).toBeUndefined()
 
-    player.channel = { userData: { id: 'acc-1', name: 'Ada' } } as unknown as ServerChannel
+    player.channel = {
+      userData: { id: 'acc-1', name: 'Ada' },
+    } as unknown as ServerChannel
     expect(player.notifiableId()).toBe('acc-1')
 
     await player.notify(levelUp)
@@ -119,13 +142,28 @@ describe('server notifications', () => {
 
   it('sends notify() through the notifications plugin, with its context', async () => {
     const calls: unknown[][] = []
-    const plugin: ServerPlugin = { notify: (to, notification, ctx) => void calls.push([to, notification, ctx.package]) }
-    const server = startable(new TestServer(logger, undefined, { stopOnSignals: false, plugins: [{ package: '@mavonengine/notifications', options: {}, plugin }] }))
+    const plugin: ServerPlugin = {
+      notify: (to, notification, ctx) => void calls.push([to, notification, ctx.package]),
+    }
+    const server = startable(new TestServer(logger, undefined, {
+      stopOnSignals: false,
+      plugins: [
+        { package: '@mavonengine/notifications', options: {}, plugin },
+      ],
+    }))
     await server.start()
 
     await notify(account('a1'), levelUp)
 
-    expect(calls).toEqual([[[expect.objectContaining({ notifiableType: 'account' })], levelUp, '@mavonengine/notifications']])
+    expect(calls).toEqual([
+      [
+        [
+          expect.objectContaining({ notifiableType: 'account' }),
+        ],
+        levelUp,
+        '@mavonengine/notifications',
+      ],
+    ])
     expect(server.notificationsProvider).toBe('@mavonengine/notifications')
     expect(server.pluginInfos().find(info => info.package === '@mavonengine/notifications')?.notifications).toBe(true)
     await server.stop()
@@ -140,7 +178,12 @@ describe('server notifications', () => {
           throw new Error('no route')
       },
     }
-    const server = startable(new TestServer(logger, undefined, { stopOnSignals: false, plugins: [{ package: 'n', options: {}, plugin }] }))
+    const server = startable(new TestServer(logger, undefined, {
+      stopOnSignals: false,
+      plugins: [
+        { package: 'n', options: {}, plugin },
+      ],
+    }))
     await server.start()
 
     await expect(notify(account('a1'), levelUp)).rejects.toThrow('no route')
@@ -167,7 +210,18 @@ describe('server notifications', () => {
     const server = startable(new TestServer(logger, undefined, {
       stopOnSignals: false,
       notifications: 'b',
-      plugins: [{ package: 'a', options: {}, plugin: { notify: a } }, { package: 'b', options: {}, plugin: { notify: b } }],
+      plugins: [
+        {
+          package: 'a',
+          options: {},
+          plugin: { notify: a },
+        },
+        {
+          package: 'b',
+          options: {},
+          plugin: { notify: b },
+        },
+      ],
     }))
     await server.start()
 

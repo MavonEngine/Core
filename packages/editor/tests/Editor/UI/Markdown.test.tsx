@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import Markdown from '../../../src/Editor/UI/Plugins/Markdown'
 
 vi.mock('../../../src/Editor/UI/Plugins/Markdown.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 afterEach(cleanup)
@@ -42,11 +44,28 @@ describe('markdown', () => {
 
   it('links only to http(s), and opens them outside the editor', () => {
     const { container } = render(<Markdown source={'[docs](https://example.com/docs "Docs") and [bad](javascript:alert(1)) and ![shot](https://example.com/a.png)'} />)
-    const links = [...container.querySelectorAll('a')]
+    const links = [
+      ...container.querySelectorAll('a'),
+    ]
 
-    expect(links.map(a => [a.textContent, a.getAttribute('href'), a.target, a.rel])).toEqual([
-      ['docs', 'https://example.com/docs', '_blank', 'noreferrer'],
-      ['shot', 'https://example.com/a.png', '_blank', 'noreferrer'],
+    expect(links.map(a => [
+      a.textContent,
+      a.getAttribute('href'),
+      a.target,
+      a.rel,
+    ])).toEqual([
+      [
+        'docs',
+        'https://example.com/docs',
+        '_blank',
+        'noreferrer',
+      ],
+      [
+        'shot',
+        'https://example.com/a.png',
+        '_blank',
+        'noreferrer',
+      ],
     ])
     expect(container.textContent).toContain('bad')
     // Images are not loaded

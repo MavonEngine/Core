@@ -54,7 +54,9 @@ export function tapMessages(target: unknown, method: string, direction: NetDirec
       if (!reliable) {
         recorder.packet(direction, eventName, data, {
           peer,
-          json: data && typeof data === 'object' ? serialized.get(data) : undefined,
+          json: data && typeof data === 'object'
+            ? serialized.get(data)
+            : undefined,
         })
       }
       else if (!seenReliable.has(wrapped.ID!)) {

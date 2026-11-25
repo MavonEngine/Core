@@ -25,7 +25,12 @@ function inputSchema(input: PluginToolInfo['input']) {
 function annotations(tool: PluginToolInfo) {
   return tool.readOnly
     ? { ...READ_ONLY, openWorldHint: tool.openWorld }
-    : { readOnlyHint: false, destructiveHint: tool.destructive, idempotentHint: false, openWorldHint: tool.openWorld }
+    : {
+        readOnlyHint: false,
+        destructiveHint: tool.destructive,
+        idempotentHint: false,
+        openWorldHint: tool.openWorld,
+      }
 }
 
 /**
@@ -45,7 +50,9 @@ export class ProjectPluginTools {
 
   /** The names of the plugin tools offered now */
   get names(): string[] {
-    return [...this.registered.keys()]
+    return [
+      ...this.registered.keys(),
+    ]
   }
 
   async refresh(): Promise<void> {
@@ -87,7 +94,10 @@ export class ProjectPluginTools {
         this.warned.add(name)
         continue
       }
-      this.registered.set(name, { tool, signature: JSON.stringify(info) })
+      this.registered.set(name, {
+        tool,
+        signature: JSON.stringify(info),
+      })
     }
   }
 

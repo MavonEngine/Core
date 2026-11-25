@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import MetricsClient, { httpSource, MAX_LOG_LINES, MetricsSourceError } from '../src/dashboard/MetricsClient'
 
 function response(status: number, body: unknown = {}) {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 describe('httpSource', () => {
@@ -22,7 +25,10 @@ describe('httpSource', () => {
     [404, 'disabled'],
     [500, 'unreachable'],
   ])('maps HTTP %i to %s', async (status, expected) => {
-    const source = httpSource({ url: 'http://x.test', fetch: async () => response(status) })
+    const source = httpSource({
+      url: 'http://x.test',
+      fetch: async () => response(status),
+    })
 
     await expect(source.fetch()).rejects.toMatchObject({ status: expected })
   })
@@ -35,7 +41,10 @@ describe('httpSource', () => {
       },
     })
 
-    await expect(source.fetch()).rejects.toMatchObject({ status: 'unreachable', message: expect.stringContaining('ECONNREFUSED') })
+    await expect(source.fetch()).rejects.toMatchObject({
+      status: 'unreachable',
+      message: expect.stringContaining('ECONNREFUSED'),
+    })
   })
 })
 
@@ -45,7 +54,10 @@ describe('metricsClient', () => {
   })
 
   it('goes live after a successful poll', async () => {
-    const client = new MetricsClient({ label: 'test', fetch: async () => ({ uptime: 42 }) })
+    const client = new MetricsClient({
+      label: 'test',
+      fetch: async () => ({ uptime: 42 }),
+    })
     const listener = vi.fn()
     client.onChange(listener)
 
@@ -89,7 +101,10 @@ describe('metricsClient', () => {
 
   it('backs off exponentially while failing, up to the max', async () => {
     const client = new MetricsClient(
-      { label: 'test', fetch: async () => { throw new Error('nope') } },
+      {
+        label: 'test',
+        fetch: async () => { throw new Error('nope') },
+      },
       { intervalMs: 1000, maxBackoffMs: 5000 },
     )
 
@@ -105,11 +120,14 @@ describe('metricsClient', () => {
   it('polls quickly without backoff until a starting server first answers', async () => {
     let up = false
     const client = new MetricsClient(
-      { label: 'test', fetch: async () => {
-        if (!up)
-          throw new Error('nope')
-        return {}
-      } },
+      {
+        label: 'test',
+        fetch: async () => {
+          if (!up)
+            throw new Error('nope')
+          return {}
+        },
+      },
       { intervalMs: 1000, startupIntervalMs: 250 },
     )
 
@@ -178,12 +196,28 @@ describe('metricsClient', () => {
       }
     }
 
-    const entry = (id: number) => ({ id, timestamp: 0, level: 'info', message: `line ${id}` })
+    const entry = (id: number) => ({
+      id,
+      timestamp: 0,
+      level: 'info',
+      message: `line ${id}`,
+    })
 
     it('appends only new lines and asks for what comes after', async () => {
       const { source, calls } = logSource([
-        { entries: [entry(1), entry(2)], latestId: 2 },
-        { entries: [entry(3)], latestId: 3 },
+        {
+          entries: [
+            entry(1),
+            entry(2),
+          ],
+          latestId: 2,
+        },
+        {
+          entries: [
+            entry(3),
+          ],
+          latestId: 3,
+        },
       ])
       const client = new MetricsClient(source)
 
@@ -197,9 +231,21 @@ describe('metricsClient', () => {
 
     it('starts over when the server restarts', async () => {
       const { source, calls } = logSource([
-        { entries: [entry(1), entry(2), entry(3)], latestId: 3 },
+        {
+          entries: [
+            entry(1),
+            entry(2),
+            entry(3),
+          ],
+          latestId: 3,
+        },
         { entries: [], latestId: 1 },
-        { entries: [entry(1)], latestId: 1 },
+        {
+          entries: [
+            entry(1),
+          ],
+          latestId: 1,
+        },
       ])
       const client = new MetricsClient(source)
 
@@ -211,7 +257,9 @@ describe('metricsClient', () => {
     })
 
     it('stops asking once the server says logs are not available', async () => {
-      const { source, calls } = logSource([new MetricsSourceError('not found', 'disabled')])
+      const { source, calls } = logSource([
+        new MetricsSourceError('not found', 'disabled'),
+      ])
       const client = new MetricsClient(source)
 
       await client.poll()
@@ -225,7 +273,12 @@ describe('metricsClient', () => {
     it('keeps trying after a transient log error', async () => {
       const { source, calls } = logSource([
         new MetricsSourceError('blip', 'unreachable'),
-        { entries: [entry(1)], latestId: 1 },
+        {
+          entries: [
+            entry(1),
+          ],
+          latestId: 1,
+        },
       ])
       const client = new MetricsClient(source)
 
@@ -238,7 +291,9 @@ describe('metricsClient', () => {
 
     it('caps the number of lines kept', async () => {
       const entries = Array.from({ length: MAX_LOG_LINES + 10 }, (_, i) => entry(i + 1))
-      const { source } = logSource([{ entries, latestId: entries.length }])
+      const { source } = logSource([
+        { entries, latestId: entries.length },
+      ])
       const client = new MetricsClient(source)
 
       await client.poll()
@@ -248,8 +303,31 @@ describe('metricsClient', () => {
     })
 
     it('follows requests the same way as logs', async () => {
-      const request = (id: number) => ({ id, timestamp: 0, method: 'GET', path: `/${id}`, status: 200, durationMs: 1, bytes: 1, address: null })
-      const pages = [{ entries: [request(1), request(2)], latestId: 2 }, { entries: [request(3)], latestId: 3 }]
+      const request = (id: number) => ({
+        id,
+        timestamp: 0,
+        method: 'GET',
+        path: `/${id}`,
+        status: 200,
+        durationMs: 1,
+        bytes: 1,
+        address: null,
+      })
+      const pages = [
+        {
+          entries: [
+            request(1),
+            request(2),
+          ],
+          latestId: 2,
+        },
+        {
+          entries: [
+            request(3),
+          ],
+          latestId: 3,
+        },
+      ]
       const calls: number[] = []
       const client = new MetricsClient({
         label: 'test',
@@ -292,11 +370,45 @@ describe('metricsClient', () => {
         fetch: async () => ({}),
         fetchPackets: async (afterId: number) => {
           packetCalls.push(afterId)
-          return { latestId: afterId + 1, records: [{ id: afterId + 1, timestamp: 1, kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', bytes: 120, tick: 4, info: { entities: 2 } }] }
+          return {
+            latestId: afterId + 1,
+            records: [
+              {
+                id: afterId + 1,
+                timestamp: 1,
+                kind: 'packet',
+                direction: 'out',
+                type: 'sv_state',
+                peer: 'p1',
+                bytes: 120,
+                tick: 4,
+                info: { entities: 2 },
+              },
+            ],
+          }
         },
         fetchSync: async () => {
           syncCalls++
-          return { tick: 4, tickRate: 30, syncDistance: 100, editors: ['e1'], players: [{ id: 'p1', displayName: 'Ada', ack: 3, tracked: ['p1', 'rock'], lastState: { tick: 4, bytes: 120, entities: 2 } }], entities: [{ id: 'p1', player: true, trackedBy: 1 }, { id: 'rock', trackedBy: 1 }, { id: 'tree', trackedBy: 0 }] }
+          return {
+            tick: 4,
+            tickRate: 30,
+            syncDistance: 100,
+            editors: ['e1'],
+            players: [
+              {
+                id: 'p1',
+                displayName: 'Ada',
+                ack: 3,
+                tracked: ['p1', 'rock'],
+                lastState: { tick: 4, bytes: 120, entities: 2 },
+              },
+            ],
+            entities: [
+              { id: 'p1', player: true, trackedBy: 1 },
+              { id: 'rock', trackedBy: 1 },
+              { id: 'tree', trackedBy: 0 },
+            ],
+          }
         },
       })
 
@@ -312,7 +424,19 @@ describe('metricsClient', () => {
       expect(syncCalls).toBe(2)
       expect(client.state.packetsAvailable).toBe(true)
       expect(client.state.packets).toEqual([
-        { id: 1, timestamp: 1, kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', bytes: 120, tick: 4, sequenceId: null, reliable: false, info: { entities: 2 } },
+        {
+          id: 1,
+          timestamp: 1,
+          kind: 'packet',
+          direction: 'out',
+          type: 'sv_state',
+          peer: 'p1',
+          bytes: 120,
+          tick: 4,
+          sequenceId: null,
+          reliable: false,
+          info: { entities: 2 },
+        },
         expect.objectContaining({ id: 2 }),
       ])
       expect(client.state.sync).toEqual({
@@ -322,7 +446,16 @@ describe('metricsClient', () => {
         entities: 3,
         untracked: 1,
         editors: 1,
-        players: [{ id: 'p1', displayName: 'Ada', tracked: 2, ack: 3, lastState: { tick: 4, bytes: 120, entities: 2 }, account: null }],
+        players: [
+          {
+            id: 'p1',
+            displayName: 'Ada',
+            tracked: 2,
+            ack: 3,
+            lastState: { tick: 4, bytes: 120, entities: 2 },
+            account: null,
+          },
+        ],
       })
     })
 
@@ -332,7 +465,12 @@ describe('metricsClient', () => {
         syncCalls++
         throw new MetricsSourceError('not found', 'disabled')
       }
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPackets: disabled, fetchSync: disabled })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchPackets: disabled,
+        fetchSync: disabled,
+      })
       client.watchNetwork = true
 
       await client.poll()
@@ -344,18 +482,43 @@ describe('metricsClient', () => {
 
     it('loads the content of a packet, and closes it again', async () => {
       const records: Record<number, unknown> = {
-        1: { id: 1, kind: 'packet', bytes: 30, payload: { tick: 4, entities: [] } },
-        2: { id: 2, kind: 'event', info: { count: 1, entities: ['rock'] } },
+        1: {
+          id: 1,
+          kind: 'packet',
+          bytes: 30,
+          payload: { tick: 4, entities: [] },
+        },
+        2: {
+          id: 2,
+          kind: 'event',
+          info: {
+            count: 1,
+            entities: ['rock'],
+          },
+        },
         3: { id: 3, kind: 'packet', bytes: 30 },
         4: { id: 4, kind: 'packet', bytes: 0 },
       }
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPacket: async id => ({ record: records[id] ?? null }) })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchPacket: async id => ({ record: records[id] ?? null }),
+      })
       const seen: (string | undefined)[] = []
       client.onChange(state => seen.push(state.packetDetail?.status))
 
       await client.inspectPacket(1)
       expect(seen).toEqual(['loading', 'loaded'])
-      expect(client.state.packetDetail).toEqual({ id: 1, status: 'loaded', lines: ['{', '  "tick": 4,', '  "entities": []', '}'] })
+      expect(client.state.packetDetail).toEqual({
+        id: 1,
+        status: 'loaded',
+        lines: [
+          '{',
+          '  "tick": 4,',
+          '  "entities": []',
+          '}',
+        ],
+      })
 
       await client.inspectPacket(2)
       expect(client.state.packetDetail!.lines.join('')).toContain('"rock"')
@@ -372,25 +535,49 @@ describe('metricsClient', () => {
 
     it('keeps the packet that was opened last when an earlier one answers late', async () => {
       const pending = new Map<number, (value: unknown) => void>()
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPacket: id => new Promise(resolve => pending.set(id, resolve)) })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchPacket: id => new Promise(resolve => pending.set(id, resolve)),
+      })
 
       const first = client.inspectPacket(1)
       const second = client.inspectPacket(2)
-      pending.get(2)!({ record: { id: 2, payload: 'second' } })
-      pending.get(1)!({ record: { id: 1, payload: 'first' } })
+      pending.get(2)!({
+        record: { id: 2, payload: 'second' },
+      })
+      pending.get(1)!({
+        record: { id: 1, payload: 'first' },
+      })
       await Promise.all([first, second])
 
-      expect(client.state.packetDetail).toEqual({ id: 2, status: 'loaded', lines: ['"second"'] })
+      expect(client.state.packetDetail).toEqual({
+        id: 2,
+        status: 'loaded',
+        lines: ['"second"'],
+      })
     })
 
     it('reports a packet that could not be loaded', async () => {
-      const failing = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPacket: async () => {
-        throw new MetricsSourceError('Can\'t reach the server', 'unreachable')
-      } })
+      const failing = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchPacket: async () => {
+          throw new MetricsSourceError('Can\'t reach the server', 'unreachable')
+        },
+      })
       await failing.inspectPacket(1)
-      expect(failing.state.packetDetail).toEqual({ id: 1, status: 'error', lines: [], error: 'Can\'t reach the server' })
+      expect(failing.state.packetDetail).toEqual({
+        id: 1,
+        status: 'error',
+        lines: [],
+        error: 'Can\'t reach the server',
+      })
 
-      const without = new MetricsClient({ label: 'test', fetch: async () => ({}) })
+      const without = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+      })
       await without.inspectPacket(1)
       expect(without.state.packetDetail).toMatchObject({ id: 1, status: 'error' })
     })
@@ -415,15 +602,36 @@ describe('metricsClient', () => {
     })
 
     it('fetches the endpoints with the first poll, then only now and then', async () => {
-      const fetchRoutes = vi.fn(async () => ({ routes: [{ method: 'GET', path: '/api/scores', source: 'game', params: {} }] }))
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes }, { routesIntervalMs: 60_000 })
+      const fetchRoutes = vi.fn(async () => ({
+        routes: [
+          {
+            method: 'GET',
+            path: '/api/scores',
+            source: 'game',
+            params: {},
+          },
+        ],
+      }))
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRoutes,
+      }, { routesIntervalMs: 60_000 })
 
       expect(client.state.routesAvailable).toBeNull()
       await client.poll()
       await client.poll()
 
       expect(fetchRoutes).toHaveBeenCalledTimes(1)
-      expect(client.state.routes).toEqual([{ method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false }])
+      expect(client.state.routes).toEqual([
+        {
+          method: 'GET',
+          path: '/api/scores',
+          source: 'game',
+          params: {},
+          devOnly: false,
+        },
+      ])
       expect(client.state.routesAvailable).toBe(true)
 
       // Asking for a refresh fetches them again
@@ -436,7 +644,11 @@ describe('metricsClient', () => {
       const fetchRoutes = vi.fn(async () => {
         throw new MetricsSourceError('not found', 'disabled')
       })
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRoutes,
+      })
 
       await client.poll()
       await client.poll()
@@ -447,16 +659,42 @@ describe('metricsClient', () => {
     })
 
     it('fetches the plugins along with the endpoints', async () => {
-      const fetchPlugins = vi.fn(async () => ({ plugins: [{ package: 'forest', version: '1.0.0', target: 'client', runningOnServer: false, usedPrefabs: ['Tree'] }] }))
+      const fetchPlugins = vi.fn(async () => ({
+        plugins: [
+          {
+            package: 'forest',
+            version: '1.0.0',
+            target: 'client',
+            runningOnServer: false,
+            usedPrefabs: ['Tree'],
+          },
+        ],
+      }))
       const fetchRoutes = vi.fn(async () => ({ routes: [] }))
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes, fetchPlugins }, { routesIntervalMs: 60_000 })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRoutes,
+        fetchPlugins,
+      }, { routesIntervalMs: 60_000 })
 
       expect(client.state.pluginsAvailable).toBeNull()
       await client.poll()
       await client.poll()
 
       expect(fetchPlugins).toHaveBeenCalledTimes(1)
-      expect(client.state.plugins).toEqual([{ package: 'forest', enabled: true, installed: true, runningOnServer: false, version: '1.0.0', target: 'client', declaredPrefabs: [], usedPrefabs: ['Tree'] }])
+      expect(client.state.plugins).toEqual([
+        {
+          package: 'forest',
+          enabled: true,
+          installed: true,
+          runningOnServer: false,
+          version: '1.0.0',
+          target: 'client',
+          declaredPrefabs: [],
+          usedPrefabs: ['Tree'],
+        },
+      ])
       expect(client.state.pluginsAvailable).toBe(true)
     })
 
@@ -465,7 +703,12 @@ describe('metricsClient', () => {
       const disabled = vi.fn(async () => {
         throw new MetricsSourceError('not found', 'disabled')
       })
-      const older = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchRoutes, fetchPlugins: disabled }, { routesIntervalMs: 60_000 })
+      const older = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchRoutes,
+        fetchPlugins: disabled,
+      }, { routesIntervalMs: 60_000 })
 
       await older.poll()
       await older.poll()
@@ -481,7 +724,11 @@ describe('metricsClient', () => {
           throw new MetricsSourceError('timeout', 'unreachable')
         return { plugins: [] }
       })
-      const client = new MetricsClient({ label: 'test', fetch: async () => ({}), fetchPlugins: flaky }, { routesIntervalMs: 60_000 })
+      const client = new MetricsClient({
+        label: 'test',
+        fetch: async () => ({}),
+        fetchPlugins: flaky,
+      }, { routesIntervalMs: 60_000 })
 
       await client.poll()
       expect(client.state.pluginsAvailable).toBeNull()

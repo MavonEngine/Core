@@ -26,7 +26,9 @@ export interface ClientOptions {
  */
 function viteRoot(root: string): string {
   const absolute = resolve(root)
-  return existsSync(absolute) ? realpathSync.native(absolute) : absolute
+  return existsSync(absolute)
+    ? realpathSync.native(absolute)
+    : absolute
 }
 
 /**
@@ -37,7 +39,10 @@ export function devClientMiddleware(root: string, server: NodeServer, logger: wi
   const vite: Promise<ViteDevServer> = import('vite').then(({ createServer }) => createServer({
     root: viteRoot(root),
     appType: 'spa',
-    server: { middlewareMode: true, hmr: { server } },
+    server: {
+      middlewareMode: true,
+      hmr: { server },
+    },
   }))
 
   vite.then(

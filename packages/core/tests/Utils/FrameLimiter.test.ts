@@ -32,7 +32,9 @@ describe('frameLimiter', () => {
     let now = 0
     let rendered = 0
     for (let frame = 0; frame < 60; frame++) {
-      now += 1000 / 60 + (frame % 2 === 0 ? -0.4 : 0.4)
+      now += 1000 / 60 + (frame % 2 === 0
+        ? -0.4
+        : 0.4)
       if (limiter.shouldRender(now))
         rendered++
     }

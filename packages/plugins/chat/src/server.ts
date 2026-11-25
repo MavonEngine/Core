@@ -90,7 +90,13 @@ function stateOf(server: object): ChatState {
   const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, ChatState>
   let state = registry.get(server)
   if (!state) {
-    state = { names: new Map(), joining: new Map(), interceptors: new Set(), listeners: new Set(), writes: Promise.resolve() }
+    state = {
+      names: new Map(),
+      joining: new Map(),
+      interceptors: new Set(),
+      listeners: new Set(),
+      writes: Promise.resolve(),
+    }
     registry.set(server, state)
   }
   return state
@@ -190,7 +196,12 @@ function muteTarget(ctx: Context, playerId: string): { key: string, kind: Mute['
   const account = channel && accountOf(ctx, channel)
   if (account)
     return { key: account, kind: 'account' }
-  return { key: playerId, kind: channel || !hasAuth(ctx) ? 'connection' : 'account' }
+  return {
+    key: playerId,
+    kind: channel || !hasAuth(ctx)
+      ? 'connection'
+      : 'account',
+  }
 }
 
 const MUTES_TABLE = 'mutes'
@@ -224,7 +235,11 @@ function saveMute(ctx: Context, mute: Mute) {
     return
   queue(ctx, () => db.transaction().execute(async (trx) => {
     await trx.deleteFrom(table(MUTES_TABLE)).where('account_id', '=', mute.playerId).execute()
-    await trx.insertInto(table(MUTES_TABLE)).values({ account_id: mute.playerId, until: mute.until, created_at: new Date().toISOString() }).execute()
+    await trx.insertInto(table(MUTES_TABLE)).values({
+      account_id: mute.playerId,
+      until: mute.until,
+      created_at: new Date().toISOString(),
+    }).execute()
   }))
 }
 
@@ -246,9 +261,18 @@ function loadMutes(ctx: Context, room: ChatRoom) {
     const now = Date.now()
     await db.deleteFrom(table(MUTES_TABLE)).where('until', 'is not', null).where('until', '<=', now).execute()
     const rows = await db.selectFrom(table(MUTES_TABLE)).select(['account_id', 'until']).execute()
-    room.restore(rows.map(row => ({ playerId: String(row.account_id), kind: 'account', until: row.until === null ? null : Number(row.until) })))
-    if (rows.length)
-      ctx.logger?.info(`Chat: ${rows.length} player${rows.length === 1 ? ' is' : 's are'} still muted`)
+    room.restore(rows.map(row => ({
+      playerId: String(row.account_id),
+      kind: 'account',
+      until: row.until === null
+        ? null
+        : Number(row.until),
+    })))
+    if (rows.length) {
+      ctx.logger?.info(`Chat: ${rows.length} player${rows.length === 1
+        ? ' is'
+        : 's are'} still muted`)
+    }
   })
 }
 
@@ -279,14 +303,18 @@ export function mutesSaved(server: object): Promise<void> {
 }
 
 function entityOf(ctx: Context, id: string | undefined) {
-  return id === undefined ? undefined : ctx.game.world.entities.items.get(id) as { id: string, position?: Position, displayName?: string, name?: unknown } | undefined
+  return id === undefined
+    ? undefined
+    : ctx.game.world.entities.items.get(id) as { id: string, position?: Position, displayName?: string, name?: unknown } | undefined
 }
 
 /** What a player is called: the display name the game gave it, else its `name`, else its id */
 function nameOf(entity: NonNullable<ReturnType<typeof entityOf>>): string {
   if (entity.displayName && entity.displayName !== entity.id)
     return entity.displayName
-  return typeof entity.name === 'string' && entity.name ? entity.name : entity.id
+  return typeof entity.name === 'string' && entity.name
+    ? entity.name
+    : entity.id
 }
 
 /**
@@ -297,7 +325,12 @@ function nameOf(entity: NonNullable<ReturnType<typeof entityOf>>): string {
 function deliver(ctx: Context, message: ChatMessage, { around, to }: { around?: Position, to?: string[] } = {}) {
   const state = stateOf(ctx.server)
   const range = state.room?.options.range ?? 0
-  const only = to && new Set([...to, ...(message.from ? [message.from.id] : [])])
+  const only = to && new Set([
+    ...to,
+    ...(message.from
+      ? [message.from.id]
+      : []),
+  ])
   const recipients: string[] = []
 
   for (const channel of connections(ctx)) {
@@ -306,7 +339,9 @@ function deliver(ctx: Context, message: ChatMessage, { around, to }: { around?: 
         continue
     }
     else {
-      const position = range > 0 && around ? entityOf(ctx, channel.id)?.position : undefined
+      const position = range > 0 && around
+        ? entityOf(ctx, channel.id)?.position
+        : undefined
       if (position && position.distanceTo(around!) > range)
         continue
     }
@@ -347,7 +382,10 @@ function receive(ctx: Context, connection: Channel, id: string, data: unknown) {
   if (!state.room || !entity)
     return
 
-  const sender: ChatSender = { id, name: nameOf(entity) }
+  const sender: ChatSender = {
+    id,
+    name: nameOf(entity),
+  }
   if (state.names.has(id))
     state.names.set(id, sender.name)
 
@@ -367,7 +405,10 @@ function receive(ctx: Context, connection: Channel, id: string, data: unknown) {
   for (const intercept of state.interceptors) {
     let result: ChatInterceptResult
     try {
-      result = intercept({ from: { ...sender }, text }, tools)
+      result = intercept({
+        from: { ...sender },
+        text,
+      }, tools)
     }
     catch (err) {
       // A broken interceptor must not take the chat down, nor let through what it may have meant to stop
@@ -378,7 +419,9 @@ function receive(ctx: Context, connection: Channel, id: string, data: unknown) {
     if (result === false)
       return
 
-    const changed = typeof result === 'string' ? result : result?.text
+    const changed = typeof result === 'string'
+      ? result
+      : result?.text
     if (changed !== undefined) {
       const clean = ChatRoom.clean(changed)
       if (!clean)
@@ -416,7 +459,9 @@ function readJson(req: Request): Promise<Record<string, unknown>> {
     })
     req.on('end', () => {
       try {
-        const parsed: unknown = body ? JSON.parse(body) : {}
+        const parsed: unknown = body
+          ? JSON.parse(body)
+          : {}
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
           throw new Error('not an object')
         resolve(parsed as Record<string, unknown>)
@@ -470,14 +515,18 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
       return
     }
 
-    res.json({ message: announce(ctx, text) })
+    res.json({
+      message: announce(ctx, text),
+    })
   }))
 
   app.get(`${path}/mutes`, describe({
     summary: 'The players that are muted',
     response: '`{ mutes }`, each with `playerId`, `kind` (`account`, which holds when the player connects again, or `connection`, which ends with it) and `until` (epoch ms, null for a mute that doesn\'t end)',
   }), admin, (_req, res) => {
-    res.json({ mutes: room.listMutes() })
+    res.json({
+      mutes: room.listMutes(),
+    })
   })
 
   app.post(`${path}/mutes`, describe({
@@ -490,8 +539,14 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
       return
     }
 
-    const mute = muteAs(ctx, parsed.playerId, typeof parsed.minutes === 'number' ? parsed.minutes : undefined)!
-    ctx.logger?.info(`Chat: muted ${mute.kind === 'account' ? 'account' : 'connection'} ${mute.playerId}${mute.until === null ? '' : ` until ${new Date(mute.until).toISOString()}`}`)
+    const mute = muteAs(ctx, parsed.playerId, typeof parsed.minutes === 'number'
+      ? parsed.minutes
+      : undefined)!
+    ctx.logger?.info(`Chat: muted ${mute.kind === 'account'
+      ? 'account'
+      : 'connection'} ${mute.playerId}${mute.until === null
+      ? ''
+      : ` until ${new Date(mute.until).toISOString()}`}`)
     res.json({ mute })
   }))
 
@@ -500,7 +555,9 @@ export function mountChatApi(app: Express, ctx: Context, room: ChatRoom) {
     params: { playerId: 'Id of a connected player, or an account id' },
     response: '`{ unmuted }`, false when the player was not muted',
   }), admin, (req, res) => {
-    res.json({ unmuted: unmuteAs(ctx, String(req.params.playerId)) })
+    res.json({
+      unmuted: unmuteAs(ctx, String(req.params.playerId)),
+    })
   })
 }
 

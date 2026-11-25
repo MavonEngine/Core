@@ -30,11 +30,17 @@ afterEach(async () => {
 
 /** The plugin set up on a server of its own: a database, its routes on a real HTTP port */
 async function started(options: Record<string, unknown> = {}, { database = true } = {}) {
-  const db = database ? memoryDb() : undefined
+  const db = database
+    ? memoryDb()
+    : undefined
   if (db)
     await runPluginMigrations(db, PKG, plugin.migrations)
 
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const ctx = {
     package: PKG,
     options,
@@ -61,25 +67,50 @@ async function started(options: Record<string, unknown> = {}, { database = true 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token)
       headers.Authorization = `Bearer ${token}`
-    const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers,
+      body: body === undefined
+        ? undefined
+        : JSON.stringify(body),
+    })
     const text = await res.text()
-    return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : undefined }
+    return {
+      status: res.status,
+      headers: res.headers,
+      json: text
+        ? JSON.parse(text)
+        : undefined,
+    }
   }
 
   const authorize = (header?: string) => plugin.authorize(header, {}, ctx)
 
   /** A game connection of `identity`, as core hands it to the plugin */
   function connect(identity: unknown) {
-    const channel = { id: Math.random().toString(36), userData: identity, close: vi.fn(async () => {}) }
+    const channel = {
+      id: Math.random().toString(36),
+      userData: identity,
+      close: vi.fn(async () => {}),
+    }
     plugin.onConnection(channel as any, {}, ctx)
     return channel
   }
 
-  return { ctx, logger, request, authorize, connect, hooks: auth(ctx.server) }
+  return {
+    ctx,
+    logger,
+    request,
+    authorize,
+    connect,
+    hooks: auth(ctx.server),
+  }
 }
 
 async function registered(server: Awaited<ReturnType<typeof started>>, username = 'Ada', password = 'correct horse') {
-  const res = await server.request('POST', '/register', { body: { username, password } })
+  const res = await server.request('POST', '/register', {
+    body: { username, password },
+  })
   expect(res.status).toBe(201)
   return res.json as { token: string, account: { id: string, name: string, email?: string | null } }
 }
@@ -87,7 +118,9 @@ async function registered(server: Awaited<ReturnType<typeof started>>, username 
 describe('auth plugin', () => {
   it('gives other plugins its hooks as its api, with the account\'s email', async () => {
     const server = await started()
-    const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+    const res = await server.request('POST', '/register', {
+      body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' },
+    })
     const id = (res.json as { account: { id: string } }).account.id
 
     const api = plugin.api(server.ctx)
@@ -107,7 +140,9 @@ describe('auth plugin', () => {
   describe('email', () => {
     it('is optional, kept with the account and shown to the player, never in the game\'s identity', async () => {
       const server = await started()
-      const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: '  Ada@Example.com ' } })
+      const res = await server.request('POST', '/register', {
+        body: { username: 'Ada', password: 'correct horse', email: '  Ada@Example.com ' },
+      })
 
       expect(res.status).toBe(201)
       expect(res.json.account.email).toBe('Ada@Example.com')
@@ -120,19 +155,34 @@ describe('auth plugin', () => {
 
     it('is unique regardless of case', async () => {
       const server = await started()
-      await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+      await server.request('POST', '/register', {
+        body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' },
+      })
 
-      const taken = await server.request('POST', '/register', { body: { username: 'Bob', password: 'correct horse', email: 'ADA@example.COM' } })
+      const taken = await server.request('POST', '/register', {
+        body: { username: 'Bob', password: 'correct horse', email: 'ADA@example.COM' },
+      })
       expect(taken.status).toBe(409)
       expect(taken.json.error).toBe('That email is in use')
       // The name wasn't taken by the failed registration
-      expect((await server.request('POST', '/register', { body: { username: 'Bob', password: 'correct horse' } })).status).toBe(201)
+      expect((await server.request('POST', '/register', {
+        body: { username: 'Bob', password: 'correct horse' },
+      })).status).toBe(201)
     })
 
     it('must look like an email address', async () => {
       const server = await started()
-      for (const email of ['ada', 'ada@', '@example.com', 'a b@example.com', `${'a'.repeat(250)}@x.io`, 42]) {
-        const res = await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email } })
+      for (const email of [
+        'ada',
+        'ada@',
+        '@example.com',
+        'a b@example.com',
+        `${'a'.repeat(250)}@x.io`,
+        42,
+      ]) {
+        const res = await server.request('POST', '/register', {
+          body: { username: 'Ada', password: 'correct horse', email },
+        })
         expect(res.status, String(email)).toBe(400)
       }
     })
@@ -141,8 +191,16 @@ describe('auth plugin', () => {
       const server = await started({ guests: true })
       const guest = (await server.request('POST', '/guest')).json
 
-      const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
-      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: 'ada@example.com', emailVerified: false })
+      const res = await server.request('POST', '/register', {
+        token: guest.token,
+        body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' },
+      })
+      expect(res.json.account).toEqual({
+        id: guest.account.id,
+        name: 'Ada',
+        email: 'ada@example.com',
+        emailVerified: false,
+      })
     })
 
     it('comes from a login plugin\'s profile, when no other account has it', async () => {
@@ -158,10 +216,16 @@ describe('auth plugin', () => {
 
     it('is shown to admins with when the account last logged in', async () => {
       const server = await started()
-      await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' } })
+      await server.request('POST', '/register', {
+        body: { username: 'Ada', password: 'correct horse', email: 'ada@example.com' },
+      })
 
       const [account] = (await server.request('GET', '/accounts', { token: 'admin-token' })).json.accounts
-      expect(account).toMatchObject({ email: 'ada@example.com', emailVerifiedAt: null, lastLoginAt: expect.any(String) })
+      expect(account).toMatchObject({
+        email: 'ada@example.com',
+        emailVerifiedAt: null,
+        lastLoginAt: expect.any(String),
+      })
       expect(account).not.toHaveProperty('email_key')
     })
   })
@@ -179,10 +243,21 @@ describe('auth plugin', () => {
     const server = await started()
     await registered(server, 'Ada')
 
-    expect((await server.request('POST', '/register', { body: { username: 'ADA', password: 'another one' } })).status).toBe(409)
-    expect((await server.request('POST', '/register', { body: { username: 'a', password: 'long enough' } })).json.error).toMatch(/3 to 32/)
-    expect((await server.request('POST', '/register', { body: { username: 'bob', password: 'short' } })).json.error).toMatch(/at least 8/)
-    expect((await server.request('POST', '/register', { body: { username: 'bob', password: 'x'.repeat(257) } })).status).toBe(400)
+    expect((await server.request('POST', '/register', {
+      body: { username: 'ADA', password: 'another one' },
+    })).status).toBe(409)
+    expect((await server.request('POST', '/register', {
+      body: { username: 'a', password: 'long enough' },
+    })).json.error).toMatch(/3 to 32/)
+    expect((await server.request('POST', '/register', {
+      body: { username: 'bob', password: 'short' },
+    })).json.error).toMatch(/at least 8/)
+    expect((await server.request('POST', '/register', {
+      body: {
+        username: 'bob',
+        password: 'x'.repeat(257),
+      },
+    })).status).toBe(400)
     expect((await server.request('POST', '/register', { body: '[]' })).status).toBe(400)
   })
 
@@ -190,12 +265,18 @@ describe('auth plugin', () => {
     const server = await started()
     const { account } = await registered(server, 'Ada', 'correct horse')
 
-    const login = await server.request('POST', '/login', { body: { username: 'ada', password: 'correct horse' } })
+    const login = await server.request('POST', '/login', {
+      body: { username: 'ada', password: 'correct horse' },
+    })
     expect(login.status).toBe(200)
     expect(login.json.account).toEqual(account)
 
-    const wrongPassword = await server.request('POST', '/login', { body: { username: 'Ada', password: 'wrong horse' } })
-    const wrongName = await server.request('POST', '/login', { body: { username: 'Nobody', password: 'correct horse' } })
+    const wrongPassword = await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'wrong horse' },
+    })
+    const wrongName = await server.request('POST', '/login', {
+      body: { username: 'Nobody', password: 'correct horse' },
+    })
     expect([wrongPassword.status, wrongName.status]).toEqual([401, 401])
     expect(wrongPassword.json).toEqual(wrongName.json)
   })
@@ -204,15 +285,22 @@ describe('auth plugin', () => {
     const server = await started({ loginAttempts: 3, loginWindowMinutes: 5 })
     await registered(server, 'Ada', 'correct horse')
 
-    for (let i = 0; i < 3; i++)
-      expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'guess' } })).status).toBe(401)
+    for (let i = 0; i < 3; i++) {
+      expect((await server.request('POST', '/login', {
+        body: { username: 'Ada', password: 'guess' },
+      })).status).toBe(401)
+    }
 
-    const blocked = await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })
+    const blocked = await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })
     expect(blocked.status).toBe(429)
     expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(0)
     // Another name from the same address isn't held up
     await registered(server, 'Bob')
-    expect((await server.request('POST', '/login', { body: { username: 'Bob', password: 'correct horse' } })).status).toBe(200)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Bob', password: 'correct horse' },
+    })).status).toBe(200)
   })
 
   it('ends the session on logout', async () => {
@@ -227,7 +315,9 @@ describe('auth plugin', () => {
   it('tells sessions apart, without the token in the identity', async () => {
     const server = await started()
     const { token } = await registered(server)
-    const other = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const other = (await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).json.token
 
     const here = await server.authorize(`Bearer ${token}`) as Record<string, unknown>
     const there = await server.authorize(`Bearer ${other}`) as Record<string, unknown>
@@ -238,7 +328,9 @@ describe('auth plugin', () => {
   it('closes the game connections of a session that logs out, and only those', async () => {
     const server = await started()
     const { token } = await registered(server)
-    const phone = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const phone = (await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).json.token
     const here = server.connect(await server.authorize(`Bearer ${token}`))
     const onPhone = server.connect(await server.authorize(`Bearer ${phone}`))
 
@@ -251,11 +343,16 @@ describe('auth plugin', () => {
   it('closes the game connections of the sessions a password change ends, not this one\'s', async () => {
     const server = await started()
     const { token } = await registered(server, 'Ada', 'correct horse')
-    const elsewhere = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const elsewhere = (await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).json.token
     const here = server.connect(await server.authorize(`Bearer ${token}`))
     const there = server.connect(await server.authorize(`Bearer ${elsewhere}`))
 
-    await server.request('POST', '/password', { token, body: { current: 'correct horse', password: 'battery staple' } })
+    await server.request('POST', '/password', {
+      token,
+      body: { current: 'correct horse', password: 'battery staple' },
+    })
 
     expect(there.close).toHaveBeenCalled()
     expect(here.close).not.toHaveBeenCalled()
@@ -264,15 +361,27 @@ describe('auth plugin', () => {
   it('changes the password and logs out everywhere else', async () => {
     const server = await started()
     const { token } = await registered(server, 'Ada', 'correct horse')
-    const elsewhere = (await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).json.token
+    const elsewhere = (await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).json.token
 
-    expect((await server.request('POST', '/password', { token, body: { current: 'wrong', password: 'battery staple' } })).status).toBe(401)
-    expect((await server.request('POST', '/password', { token, body: { current: 'correct horse', password: 'battery staple' } })).status).toBe(204)
+    expect((await server.request('POST', '/password', {
+      token,
+      body: { current: 'wrong', password: 'battery staple' },
+    })).status).toBe(401)
+    expect((await server.request('POST', '/password', {
+      token,
+      body: { current: 'correct horse', password: 'battery staple' },
+    })).status).toBe(204)
 
     expect(await server.authorize(`Bearer ${elsewhere}`)).toBe(401)
     expect(await server.authorize(`Bearer ${token}`)).toMatchObject({ name: 'Ada' })
-    expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(401)
-    expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'battery staple' } })).status).toBe(200)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(401)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'battery staple' },
+    })).status).toBe(200)
   })
 
   it('lets an admin disable an account, which closes its game connections and ends its sessions', async () => {
@@ -288,10 +397,14 @@ describe('auth plugin', () => {
     expect(adas.close).toHaveBeenCalled()
     expect(bobs.close).not.toHaveBeenCalled()
     expect(await server.authorize(`Bearer ${token}`)).toBe(401)
-    expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(403)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(403)
 
     expect((await server.request('POST', `/accounts/${account.id}/enable`, { token: 'admin-token' })).json).toEqual({ disabled: false })
-    expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(200)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(200)
     expect((await server.request('POST', '/accounts/nobody/disable', { token: 'admin-token' })).status).toBe(404)
   })
 
@@ -302,7 +415,12 @@ describe('auth plugin', () => {
 
     const list = await server.request('GET', '/accounts?limit=10', { token: 'admin-token' })
     expect(list.json.total).toBe(1)
-    expect(list.json.accounts[0]).toMatchObject({ id: account.id, name: 'Ada', providers: ['password'], sessions: 1 })
+    expect(list.json.accounts[0]).toMatchObject({
+      id: account.id,
+      name: 'Ada',
+      providers: ['password'],
+      sessions: 1,
+    })
     expect(JSON.stringify(list.json)).not.toContain('scrypt')
 
     expect((await server.request('DELETE', `/accounts/${account.id}/sessions`, { token: 'admin-token' })).json).toEqual({ ended: 1 })
@@ -334,7 +452,9 @@ describe('auth plugin', () => {
 
   it('can turn registration off', async () => {
     const server = await started({ registration: false })
-    expect((await server.request('POST', '/register', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(403)
+    expect((await server.request('POST', '/register', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(403)
   })
 
   it('turns every client away without a database, and says why', async () => {
@@ -342,7 +462,9 @@ describe('auth plugin', () => {
 
     expect(server.logger.error).toHaveBeenCalledWith(expect.stringContaining('no database'))
     expect(await server.authorize('Bearer anything')).toBe(503)
-    expect((await server.request('POST', '/login', { body: { username: 'Ada', password: 'correct horse' } })).status).toBe(503)
+    expect((await server.request('POST', '/login', {
+      body: { username: 'Ada', password: 'correct horse' },
+    })).status).toBe(503)
     await expect(server.hooks.signIn('discord', '1')).rejects.toMatchObject({ status: 503 })
   })
 
@@ -364,7 +486,12 @@ describe('auth plugin', () => {
 
       expect(guest.account.name).toMatch(/^Guest-\d{4}$/)
       expect(guest.account.guest).toBe(true)
-      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: guest.account.name, guest: true, session: SESSION })
+      expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({
+        id: guest.account.id,
+        name: guest.account.name,
+        guest: true,
+        session: SESSION,
+      })
       expect((await server.request('GET', '/me', { token: guest.token })).json.account.guest).toBe(true)
       // A registered player has no guest flag at all
       const { token } = await registered(server)
@@ -375,13 +502,23 @@ describe('auth plugin', () => {
       const server = await started({ guests: true })
       const guest = await asGuest(server)
 
-      const res = await server.request('POST', '/register', { token: guest.token, body: { username: 'Ada', password: 'correct horse' } })
+      const res = await server.request('POST', '/register', {
+        token: guest.token,
+        body: { username: 'Ada', password: 'correct horse' },
+      })
       expect(res.status).toBe(201)
-      expect(res.json.account).toEqual({ id: guest.account.id, name: 'Ada', email: null, emailVerified: false })
+      expect(res.json.account).toEqual({
+        id: guest.account.id,
+        name: 'Ada',
+        email: null,
+        emailVerified: false,
+      })
       // Both the new session and the guest's own now connect as the full account
       expect(await server.authorize(`Bearer ${res.json.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
       expect(await server.authorize(`Bearer ${guest.token}`)).toEqual({ id: guest.account.id, name: 'Ada', session: SESSION })
-      expect((await server.request('POST', '/login', { body: { username: 'ada', password: 'correct horse' } })).json.account.id).toBe(guest.account.id)
+      expect((await server.request('POST', '/login', {
+        body: { username: 'ada', password: 'correct horse' },
+      })).json.account.id).toBe(guest.account.id)
     })
 
     it('stay guests when the name they register is taken', async () => {
@@ -389,7 +526,10 @@ describe('auth plugin', () => {
       await registered(server, 'Ada')
       const guest = await asGuest(server)
 
-      expect((await server.request('POST', '/register', { token: guest.token, body: { username: 'ADA', password: 'correct horse' } })).status).toBe(409)
+      expect((await server.request('POST', '/register', {
+        token: guest.token,
+        body: { username: 'ADA', password: 'correct horse' },
+      })).status).toBe(409)
       expect(await server.authorize(`Bearer ${guest.token}`)).toMatchObject({ guest: true })
     })
 
@@ -397,7 +537,10 @@ describe('auth plugin', () => {
       const server = await started({ guests: true })
       const ada = await registered(server, 'Ada')
 
-      const bob = await server.request('POST', '/register', { token: ada.token, body: { username: 'Bob', password: 'correct horse' } })
+      const bob = await server.request('POST', '/register', {
+        token: ada.token,
+        body: { username: 'Bob', password: 'correct horse' },
+      })
       expect(bob.json.account.id).not.toBe(ada.account.id)
     })
 
@@ -406,7 +549,12 @@ describe('auth plugin', () => {
       const guest = await asGuest(server)
 
       const linked = await server.hooks.signIn('discord', '123', { name: 'ada_discord' }, { linkTo: guest.account.id })
-      expect(linked.account).toEqual({ id: guest.account.id, name: 'ada_discord', email: null, emailVerified: false })
+      expect(linked.account).toEqual({
+        id: guest.account.id,
+        name: 'ada_discord',
+        email: null,
+        emailVerified: false,
+      })
       expect((await server.hooks.signIn('discord', '123')).account.id).toBe(guest.account.id)
     })
 
@@ -480,7 +628,15 @@ describe('auth plugin', () => {
   })
 
   it('reads its options, falling back on what it can\'t use', () => {
-    expect(parseOptions({ path: '/auth/', sessionDays: 7, registration: false, devGuests: 'yes', loginAttempts: -1, guests: true, guestDays: 3 })).toMatchObject({
+    expect(parseOptions({
+      path: '/auth/',
+      sessionDays: 7,
+      registration: false,
+      devGuests: 'yes',
+      loginAttempts: -1,
+      guests: true,
+      guestDays: 3,
+    })).toMatchObject({
       path: '/auth',
       sessionDays: 7,
       registration: false,

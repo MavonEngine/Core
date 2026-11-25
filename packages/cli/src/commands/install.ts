@@ -78,7 +78,12 @@ export function parseInstallArgs(args: string[], cwd = process.cwd()): InstallOp
   if (positionals.length === 0)
     throw new UsageError(`which package? e.g. mavonengine install my-plugin\n\n${INSTALL_HELP}`)
 
-  return { cwd: resolve(cwd, values.cwd ?? '.'), packages: positionals, yes: values.yes, register: values.register }
+  return {
+    cwd: resolve(cwd, values.cwd ?? '.'),
+    packages: positionals,
+    yes: values.yes,
+    register: values.register,
+  }
 }
 
 /**
@@ -86,11 +91,17 @@ export function parseInstallArgs(args: string[], cwd = process.cwd()): InstallOp
  * resolved from `root` like the package manager does. Undefined for specs without one (git URLs, tarballs).
  */
 export function packageNameFromSpec(spec: string, root: string): string | undefined {
-  const localPath = spec.startsWith('file:') ? spec.slice('file:'.length) : LOCAL_PATH_RE.test(spec) ? spec : undefined
+  const localPath = spec.startsWith('file:')
+    ? spec.slice('file:'.length)
+    : LOCAL_PATH_RE.test(spec)
+      ? spec
+      : undefined
   if (localPath !== undefined) {
     const packageJson = join(resolve(root, localPath), 'package.json')
     try {
-      return existsSync(packageJson) ? JSON.parse(readFileSync(packageJson, 'utf8')).name : undefined
+      return existsSync(packageJson)
+        ? JSON.parse(readFileSync(packageJson, 'utf8')).name
+        : undefined
     }
     catch {
       return undefined
@@ -104,7 +115,12 @@ export function packageNameFromSpec(spec: string, root: string): string | undefi
 }
 
 export function installArgs(pm: PackageManager, packages: string[]): string[] {
-  return [pm === 'npm' ? 'install' : 'add', ...packages]
+  return [
+    pm === 'npm'
+      ? 'install'
+      : 'add',
+    ...packages,
+  ]
 }
 
 function dependencyNames(root: string): Map<string, string> {
@@ -113,7 +129,10 @@ function dependencyNames(root: string): Map<string, string> {
     return new Map()
 
   const pkg = JSON.parse(readFileSync(path, 'utf8'))
-  return new Map(Object.entries({ ...pkg.devDependencies, ...pkg.dependencies }) as [string, string][])
+  return new Map(Object.entries({
+    ...pkg.devDependencies,
+    ...pkg.dependencies,
+  }) as [string, string][])
 }
 
 /**
@@ -126,19 +145,26 @@ export function installedNames(specs: string[], root: string, before: Map<string
     if (before.get(name) !== version)
       names.push(name)
   }
-  return [...new Set(names)]
+  return [
+    ...new Set(names),
+  ]
 }
 
 export function describePlugin(plugin: InstalledPlugin, engineVersion: string | undefined): string {
   const { manifest } = plugin
-  const lines = [`${plugin.package}${plugin.version ? `@${plugin.version}` : ''} is a MavonEngine plugin (${TARGET_LABELS[manifest.target]})`]
+  const lines = [`${plugin.package}${plugin.version
+    ? `@${plugin.version}`
+    : ''} is a MavonEngine plugin (${TARGET_LABELS[manifest.target]})`]
 
   const prefabs = Object.keys(manifest.assets?.prefabs ?? {})
   if (prefabs.length)
     lines.push(`  Prefabs: ${prefabs.join(', ')}. Their assets ship in the release once you place them in the editor`)
 
-  if (manifest.engine)
-    lines.push(`  Made for @mavonengine/core ${manifest.engine}${engineVersion ? `, you have ${engineVersion}` : ''}`)
+  if (manifest.engine) {
+    lines.push(`  Made for @mavonengine/core ${manifest.engine}${engineVersion
+      ? `, you have ${engineVersion}`
+      : ''}`)
+  }
 
   return `${lines.join('\n')}\n`
 }
@@ -152,7 +178,10 @@ function confirmOnTerminal(question: string): Promise<boolean> {
 
 const terminalIO: InstallIO = {
   run: (command, args, cwd) => runCommand(command, args, cwd, {
-    report: { step: () => {}, output: chunk => process.stdout.write(chunk) },
+    report: {
+      step: () => {},
+      output: chunk => process.stdout.write(chunk),
+    },
   }),
   confirm: confirmOnTerminal,
   get interactive() {

@@ -75,7 +75,7 @@ export default abstract class Emitter extends GameObject {
     this.geometry.attributes.aScale.needsUpdate = true
     this.geometry.attributes.position.needsUpdate = true
 
-    if (!this.continoues && this.particles.filter(particle => particle.age < particle.decay).length === 0) {
+    if (!this.continoues && !this.particles.some(particle => particle.age < particle.decay)) {
       this.destroy()
     }
   }

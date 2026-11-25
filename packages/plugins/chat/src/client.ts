@@ -59,7 +59,11 @@ function stateOf(game: object): ChatClientState {
   const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, ChatClientState>
   let state = registry.get(game)
   if (!state) {
-    state = { messages: new Set(), notices: new Set(), histories: new Set() }
+    state = {
+      messages: new Set(),
+      notices: new Set(),
+      histories: new Set(),
+    }
     registry.set(game, state)
   }
   return state
@@ -122,11 +126,15 @@ export function sendChat(ctx: Pick<ClientPluginContext, 'game'>, message: string
 }
 
 function number(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined
 }
 
 function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined
+  return typeof value === 'string' && value
+    ? value
+    : undefined
 }
 
 /** A listener of the game that throws must not stop the others, nor the chat */

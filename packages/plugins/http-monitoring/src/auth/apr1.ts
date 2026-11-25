@@ -36,19 +36,28 @@ export function apr1(password: string, salt: string): string {
     parts.push(final.subarray(0, Math.min(left, 16)))
 
   // Odd quirk of the original algorithm: a NUL byte for set bits, the first password byte for unset ones
-  for (let i = pw.length; i > 0; i >>= 1)
-    parts.push(i & 1 ? Buffer.from([0]) : pw.subarray(0, 1))
+  for (let i = pw.length; i > 0; i >>= 1) {
+    parts.push(i & 1
+      ? Buffer.from([0])
+      : pw.subarray(0, 1))
+  }
 
   final = md5(...parts)
 
   // Deliberately slow
   for (let i = 0; i < 1000; i++) {
-    const round: Buffer[] = [i & 1 ? pw : final]
+    const round: Buffer[] = [
+      i & 1
+        ? pw
+        : final,
+    ]
     if (i % 3)
       round.push(s)
     if (i % 7)
       round.push(pw)
-    round.push(i & 1 ? final : pw)
+    round.push(i & 1
+      ? final
+      : pw)
     final = md5(...round)
   }
 

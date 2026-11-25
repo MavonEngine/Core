@@ -42,7 +42,10 @@ const NET_UNAVAILABLE = 'The network debug endpoints are not available: the game
 
 /** A packet query as query string params, without the unset fields */
 export function packetParams(query: PacketQuery): Record<string, string> {
-  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]))
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [
+    key,
+    String(value),
+  ]))
 }
 
 const DATABASE_UNAVAILABLE = 'The game server doesn\'t show its database: it runs a @mavonengine/core release without GET /api/game/database'
@@ -67,9 +70,15 @@ export default class GameServerClient {
 
   constructor({ url, clientUrl, token, timeoutMs = 3000, fetch = globalThis.fetch }: GameServerClientOptions) {
     // Paths resolve relative to the base, so a server behind a path prefix works too
-    this.base = new URL(url.endsWith('/') ? url : `${url}/`)
+    this.base = new URL(url.endsWith('/')
+      ? url
+      : `${url}/`)
     this.url = this.base.href
-    this.clientBase = clientUrl ? new URL(clientUrl.endsWith('/') ? clientUrl : `${clientUrl}/`) : this.base
+    this.clientBase = clientUrl
+      ? new URL(clientUrl.endsWith('/')
+          ? clientUrl
+          : `${clientUrl}/`)
+      : this.base
     this.clientUrl = this.clientBase.href
     this.token = token
     this.timeoutMs = timeoutMs
@@ -85,11 +94,15 @@ export default class GameServerClient {
   }
 
   logs(afterId = 0) {
-    return this.get('api/game/logs', { after: String(afterId) }, 'The server does not keep logs (metrics.logBufferSize is 0)')
+    return this.get('api/game/logs', {
+      after: String(afterId),
+    }, 'The server does not keep logs (metrics.logBufferSize is 0)')
   }
 
   requests(afterId = 0) {
-    return this.get('api/game/requests', { after: String(afterId) }, 'The server does not record requests (metrics.requestLogSize is 0)')
+    return this.get('api/game/requests', {
+      after: String(afterId),
+    }, 'The server does not record requests (metrics.requestLogSize is 0)')
   }
 
   scene() {
@@ -131,7 +144,10 @@ export default class GameServerClient {
 
   /** A page of a table's rows */
   tableRows(table: string, offset = 0, limit = 50) {
-    return this.get(`api/game/database/tables/${encodeURIComponent(table)}`, { offset: String(offset), limit: String(limit) }, `There is no table "${table}". database_overview lists them`, DATABASE_DENIED)
+    return this.get(`api/game/database/tables/${encodeURIComponent(table)}`, {
+      offset: String(offset),
+      limit: String(limit),
+    }, `There is no table "${table}". database_overview lists them`, DATABASE_DENIED)
   }
 
   /** Packets and network events the server recorded, oldest first */
@@ -155,11 +171,15 @@ export default class GameServerClient {
    */
   async pluginTools(timeoutMs = 1500): Promise<PluginToolInfo[] | null> {
     try {
-      const res = await this.fetchImpl(new URL(DEV_TOOLS_PATH.slice(1), this.clientBase), { signal: AbortSignal.timeout(timeoutMs) })
+      const res = await this.fetchImpl(new URL(DEV_TOOLS_PATH.slice(1), this.clientBase), {
+        signal: AbortSignal.timeout(timeoutMs),
+      })
       if (!res.ok || !res.headers.get('content-type')?.includes('application/json'))
         return null
       const { tools } = await res.json() as { tools?: PluginToolInfo[] }
-      return Array.isArray(tools) ? tools : null
+      return Array.isArray(tools)
+        ? tools
+        : null
     }
     catch {
       return null
@@ -197,11 +217,18 @@ export default class GameServerClient {
    * Ask one tab. `clientId` defaults to the only open tab (or the only one not running the editor)
    */
   client(query: ClientQuery, params: Record<string, string | number | undefined> = {}, clientId = 'auto') {
-    const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+    const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [
+      k,
+      String(v),
+    ]))
     // Longer than the dev server waits for the tab: a screenshot is encoded there, status waits for frames, a trace records
     const timeoutMs = query === 'trace'
       ? Number(params.durationMs ?? 3000) + 15000
-      : query === 'screenshot' ? 15000 : query === 'status' ? 10000 : 8000
+      : query === 'screenshot'
+        ? 15000
+        : query === 'status'
+          ? 10000
+          : 8000
     return this.bridge(`__mavonengine/clients/${encodeURIComponent(clientId)}/${query}`, defined, timeoutMs)
   }
 
@@ -213,7 +240,9 @@ export default class GameServerClient {
     let res: Response
     try {
       res = await this.fetchImpl(target, {
-        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+        headers: this.token
+          ? { Authorization: `Bearer ${this.token}` }
+          : {},
         signal: AbortSignal.timeout(timeoutMs),
       })
     }
@@ -223,7 +252,9 @@ export default class GameServerClient {
 
     // The bridge always answers JSON; anything else is a page, e.g. Vite's SPA fallback without the bridge
     const isJson = res.headers.get('content-type')?.includes('application/json')
-    const body = isJson ? await res.json().catch(() => null) as any : null
+    const body = isJson
+      ? await res.json().catch(() => null) as any
+      : null
 
     if (!isJson || (res.status === 404 && !body?.error)) {
       throw new GameServerError(`No dev bridge at ${this.clientUrl}. The game client must be served by Vite in dev with the mavonengine Vite plugin `
@@ -245,7 +276,9 @@ export default class GameServerClient {
     let res: Response
     try {
       res = await this.fetchImpl(target, {
-        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+        headers: this.token
+          ? { Authorization: `Bearer ${this.token}` }
+          : {},
         signal: AbortSignal.timeout(this.timeoutMs),
       })
     }

@@ -73,8 +73,11 @@ export function projectPlugins(cwd: string): Map<string, ProjectState> {
     return states
 
   try {
-    for (const [pkg, entry] of Object.entries(readConfig(root).plugins))
-      states.set(pkg, entry?.enabled === false ? 'disabled' : 'enabled')
+    for (const [pkg, entry] of Object.entries(readConfig(root).plugins)) {
+      states.set(pkg, entry?.enabled === false
+        ? 'disabled'
+        : 'enabled')
+    }
   }
   catch {
     // An unreadable mavonengine.json is the project's problem, not the list's
@@ -87,7 +90,9 @@ const TARGETS = { client: 'client', server: 'server', both: 'client + server' }
 
 export function formatPlugins(registry: PluginRegistry, inProject: Map<string, ProjectState>): string {
   const { plugins } = registry
-  const lines = [`${plugins.length} plugin${plugins.length === 1 ? '' : 's'} available, from ${registry.url}`, '']
+  const lines = [`${plugins.length} plugin${plugins.length === 1
+    ? ''
+    : 's'} available, from ${registry.url}`, '']
 
   if (registry.version > SUPPORTED_REGISTRY_VERSION)
     lines.push('The list is in a newer format than this CLI knows, update @mavonengine/cli to see everything in it.', '')
@@ -97,12 +102,22 @@ export function formatPlugins(registry: PluginRegistry, inProject: Map<string, P
   for (const plugin of plugins) {
     const state = inProject.get(plugin.package)
     const facts = [
-      plugin.target ? `runs on ${TARGETS[plugin.target]}` : undefined,
-      plugin.engine ? `@mavonengine/core ${plugin.engine}` : undefined,
-      state === 'enabled' ? 'in this project' : state === 'disabled' ? 'in this project, disabled' : undefined,
+      plugin.target
+        ? `runs on ${TARGETS[plugin.target]}`
+        : undefined,
+      plugin.engine
+        ? `@mavonengine/core ${plugin.engine}`
+        : undefined,
+      state === 'enabled'
+        ? 'in this project'
+        : state === 'disabled'
+          ? 'in this project, disabled'
+          : undefined,
     ].filter(Boolean)
 
-    lines.push(`  ${plugin.package.padEnd(width)}  ${plugin.name === plugin.package ? '' : plugin.name}`.trimEnd())
+    lines.push(`  ${plugin.package.padEnd(width)}  ${plugin.name === plugin.package
+      ? ''
+      : plugin.name}`.trimEnd())
     if (plugin.description)
       lines.push(`    ${plugin.description}`)
     if (facts.length)
@@ -116,7 +131,9 @@ export function formatPlugins(registry: PluginRegistry, inProject: Map<string, P
   return `${lines.join('\n')}\n`
 }
 
-export async function runPluginsCommand(options: PluginsOptions, io: PluginsIO = { write: text => process.stdout.write(text) }): Promise<number> {
+export async function runPluginsCommand(options: PluginsOptions, io: PluginsIO = {
+  write: text => process.stdout.write(text),
+}): Promise<number> {
   const registry = await fetchPluginRegistry({ url: options.url, fetch: io.fetch })
 
   if (options.json) {

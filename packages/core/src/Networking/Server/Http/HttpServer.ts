@@ -285,7 +285,9 @@ export default class HttpServer {
       }
 
       const after = Number(req.query.after ?? 0)
-      res.json(this.logs.since(Number.isFinite(after) ? after : 0))
+      res.json(this.logs.since(Number.isFinite(after)
+        ? after
+        : 0))
     })
   }
 
@@ -305,7 +307,9 @@ export default class HttpServer {
       }
 
       const after = Number(req.query.after ?? 0)
-      res.json(this.requests.since(Number.isFinite(after) ? after : 0))
+      res.json(this.requests.since(Number.isFinite(after)
+        ? after
+        : 0))
     })
   }
 
@@ -320,7 +324,9 @@ export default class HttpServer {
       response: '`{ routes }`, each with its method, path, source and whatever it was described with',
       auth: METRICS_AUTH,
     }), (req, res, next) => this.authorizeMetrics(req, res, next), (_req, res) => {
-      res.json({ routes: this.routes.list() })
+      res.json({
+        routes: this.routes.list(),
+      })
     })
   }
 
@@ -376,7 +382,9 @@ export default class HttpServer {
         return
       }
 
-      res.json({ plugins: this.plugins() })
+      res.json({
+        plugins: this.plugins(),
+      })
     })
   }
 
@@ -399,7 +407,9 @@ export default class HttpServer {
       auth,
       devOnly: true,
     }), authorize, (_req, res) => {
-      res.json({ scene: inspector.scene() })
+      res.json({
+        scene: inspector.scene(),
+      })
     })
 
     this.app.get('/api/game/dev/entities', describeRoute({
@@ -431,7 +441,9 @@ export default class HttpServer {
       auth,
       devOnly: true,
     }), authorize, (req, res) => {
-      res.json({ entity: inspector.entity(req.params.id as string) })
+      res.json({
+        entity: inspector.entity(req.params.id as string),
+      })
     })
   }
 
@@ -501,7 +513,9 @@ export default class HttpServer {
 
     if (tokens.length) {
       const header = req.headers.authorization
-      const provided = header?.startsWith('Bearer ') ? header.slice(7) : req.query.token
+      const provided = header?.startsWith('Bearer ')
+        ? header.slice(7)
+        : req.query.token
 
       if (typeof provided !== 'string' || !tokens.some(token => safeEqual(provided, token))) {
         res.status(401).json({ error: 'Invalid metrics token' })

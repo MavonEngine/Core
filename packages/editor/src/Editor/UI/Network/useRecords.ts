@@ -44,8 +44,12 @@ export function useRecords(source: RecordSource, paused: boolean) {
         if (cancelled)
           return
         after.current = result.latestId
-        if (result.records.length)
-          setRecords(previous => [...previous, ...result.records].slice(-MAX_ROWS))
+        if (result.records.length) {
+          setRecords(previous => [
+            ...previous,
+            ...result.records,
+          ].slice(-MAX_ROWS))
+        }
         setError(result.enabled ? undefined : 'Nothing is being recorded on this side')
       }
       catch (err) {
@@ -62,7 +66,11 @@ export function useRecords(source: RecordSource, paused: boolean) {
     }
   }, [source, paused])
 
-  return { records, error, clear: () => setRecords([]) }
+  return {
+    records,
+    error,
+    clear: () => setRecords([]),
+  }
 }
 
 /** One record with its payload, undefined while it loads or when nothing is selected */

@@ -37,7 +37,9 @@ export interface PluginRegistry {
 export class PluginRegistryError extends Error {}
 
 function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+  return typeof value === 'string' && value.trim()
+    ? value.trim()
+    : undefined
 }
 
 /**
@@ -52,23 +54,31 @@ export function normalizeRegistry(raw: unknown, url: string): PluginRegistry {
 
   return {
     url,
-    version: typeof version === 'number' ? version : 1,
+    version: typeof version === 'number'
+      ? version
+      : 1,
     plugins: plugins.flatMap((entry) => {
-      const plugin = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
+      const plugin = (entry && typeof entry === 'object'
+        ? entry
+        : {}) as Record<string, unknown>
       const pkg = text(plugin.package)
       if (!pkg)
         return []
 
-      const target = plugin.target === 'client' || plugin.target === 'server' || plugin.target === 'both' ? plugin.target : undefined
-      return [{
-        package: pkg,
-        name: text(plugin.name) ?? pkg,
-        description: text(plugin.description),
-        target,
-        engine: text(plugin.engine),
-        homepage: text(plugin.homepage),
-        readme: text(plugin.readme),
-      }]
+      const target = plugin.target === 'client' || plugin.target === 'server' || plugin.target === 'both'
+        ? plugin.target
+        : undefined
+      return [
+        {
+          package: pkg,
+          name: text(plugin.name) ?? pkg,
+          description: text(plugin.description),
+          target,
+          engine: text(plugin.engine),
+          homepage: text(plugin.homepage),
+          readme: text(plugin.readme),
+        },
+      ]
     }),
   }
 }
@@ -97,17 +107,25 @@ export async function fetchPluginReadme(plugin: Pick<AvailablePlugin, 'package' 
 
   let res: Response
   try {
-    res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+    res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
   }
   catch (err) {
     throw new PluginRegistryError(`Can't reach ${url}: ${(err as Error).message}`)
   }
 
-  if (!res.ok)
-    throw new PluginRegistryError(res.status === 404 ? `${url} was not found` : `${url} answered ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    throw new PluginRegistryError(res.status === 404
+      ? `${url} was not found`
+      : `${url} answered ${res.status} ${res.statusText}`)
+  }
 
   const markdown = await res.text()
-  return markdown.length > MAX_REMOTE_README_CHARS ? `${markdown.slice(0, MAX_REMOTE_README_CHARS)}\n\n… (cut off)` : markdown
+  return markdown.length > MAX_REMOTE_README_CHARS
+    ? `${markdown.slice(0, MAX_REMOTE_README_CHARS)}\n\n… (cut off)`
+    : markdown
 }
 
 export interface FetchRegistryOptions {
@@ -122,7 +140,10 @@ export interface FetchRegistryOptions {
 export async function fetchPluginRegistry({ url = PLUGIN_REGISTRY_URL, timeoutMs = 10_000, fetch = globalThis.fetch }: FetchRegistryOptions = {}): Promise<PluginRegistry> {
   let res: Response
   try {
-    res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+    res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
   }
   catch (err) {
     throw new PluginRegistryError(`Can't reach ${url}: ${(err as Error).message}`)

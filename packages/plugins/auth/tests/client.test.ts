@@ -9,7 +9,9 @@ const session = { token: 'tok-1', account: ada, expiresAt: '2026-12-15T00:00:00.
 let fetchMock: ReturnType<typeof vi.fn>
 
 function answer(status: number, body?: unknown) {
-  fetchMock.mockResolvedValueOnce(body === undefined ? new Response(null, { status }) : Response.json(body, { status }))
+  fetchMock.mockResolvedValueOnce(body === undefined
+    ? new Response(null, { status })
+    : Response.json(body, { status }))
 }
 
 beforeEach(() => {
@@ -30,7 +32,10 @@ describe('auth client', () => {
 
     expect(await login('Ada', 'correct horse')).toEqual(ada)
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ method: 'POST', body: JSON.stringify({ username: 'Ada', password: 'correct horse' }) }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ username: 'Ada', password: 'correct horse' }),
+    }))
     expect(plugin.authorization()).toBe('Bearer tok-1')
     expect(currentAccount()).toEqual(ada)
   })
@@ -38,7 +43,11 @@ describe('auth client', () => {
   it('plays as a guest, and registers that guest with its session so it keeps its account', async () => {
     const guest = { id: 'acc-9', name: 'Guest-4821', guest: true }
     answer(201, { token: 'guest-tok', account: guest, expiresAt: '2026-12-15T00:00:00.000Z' })
-    answer(201, { token: 'tok-2', account: { id: 'acc-9', name: 'Ada' }, expiresAt: '2026-12-15T00:00:00.000Z' })
+    answer(201, {
+      token: 'tok-2',
+      account: { id: 'acc-9', name: 'Ada' },
+      expiresAt: '2026-12-15T00:00:00.000Z',
+    })
 
     expect(await playAsGuest()).toEqual(guest)
     expect(currentAccount()?.guest).toBe(true)
@@ -50,7 +59,10 @@ describe('auth client', () => {
   })
 
   it('registers with an email when given one', async () => {
-    answer(201, { ...session, account: { ...ada, email: 'ada@example.com' } })
+    answer(201, {
+      ...session,
+      account: { ...ada, email: 'ada@example.com' },
+    })
 
     expect((await register('Ada', 'correct horse', 'ada@example.com')).email).toBe('ada@example.com')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ username: 'Ada', password: 'correct horse', email: 'ada@example.com' })
@@ -105,7 +117,9 @@ describe('auth client', () => {
   })
 
   it('uses the path from the options, and survives storage it can\'t read', async () => {
-    plugin.setup({ options: { path: '/accounts/' } } as any)
+    plugin.setup({
+      options: { path: '/accounts/' },
+    } as any)
     answer(200, session)
     await login('Ada', 'correct horse')
     expect(fetchMock.mock.calls[0][0]).toBe('/accounts/login')
@@ -119,7 +133,9 @@ describe('auth client email', () => {
   it('changes the email and keeps the account the server answers with', async () => {
     answer(200, session)
     await login('Ada', 'correct horse')
-    answer(200, { account: { ...ada, email: 'ada@new.example.com', emailVerified: false } })
+    answer(200, {
+      account: { ...ada, email: 'ada@new.example.com', emailVerified: false },
+    })
 
     expect((await changeEmail('ada@new.example.com')).email).toBe('ada@new.example.com')
     expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/email')
@@ -136,7 +152,9 @@ describe('auth client email', () => {
     await resendVerification()
     expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/verify-email/send')
 
-    answer(200, { account: { ...ada, email: 'ada@example.com', emailVerified: true } })
+    answer(200, {
+      account: { ...ada, email: 'ada@example.com', emailVerified: true },
+    })
     expect((await verifyEmail('link-token')).emailVerified).toBe(true)
     const [url, init] = fetchMock.mock.calls[2]
     expect(url).toBe('/api/auth/verify-email')
@@ -149,7 +167,12 @@ describe('auth client email', () => {
   it('asks for a reset link, and resetting logs this browser in', async () => {
     answer(202, { sent: true })
     await requestPasswordReset('ada@example.com')
-    expect(fetchMock.mock.calls[0]).toEqual(['/api/auth/forgot-password', expect.objectContaining({ body: JSON.stringify({ email: 'ada@example.com' }) })])
+    expect(fetchMock.mock.calls[0]).toEqual([
+      '/api/auth/forgot-password',
+      expect.objectContaining({
+        body: JSON.stringify({ email: 'ada@example.com' }),
+      }),
+    ])
 
     answer(200, { ...session, token: 'tok-new' })
     expect(await resetPassword('link-token', 'brand new horse')).toEqual(ada)

@@ -74,13 +74,24 @@ export function resolveOptions(options: HttpMonitoringOptions, projectRoot: stri
   let credentials: CredentialSource | undefined
   const htpasswd = options.htpasswd ?? env.MAVONENGINE_MONITORING_HTPASSWD
   if (htpasswd) {
-    credentials = { kind: 'htpasswd', path: isAbsolute(htpasswd) ? htpasswd : resolve(projectRoot, htpasswd) }
+    credentials = {
+      kind: 'htpasswd',
+      path: isAbsolute(htpasswd)
+        ? htpasswd
+        : resolve(projectRoot, htpasswd),
+    }
   }
   else if (env.MAVONENGINE_MONITORING_USER && env.MAVONENGINE_MONITORING_PASSWORD) {
     credentials = { kind: 'user', user: env.MAVONENGINE_MONITORING_USER, password: env.MAVONENGINE_MONITORING_PASSWORD }
   }
 
-  return { path, realm, pollIntervalMs, standalone: options.standalone === true, credentials }
+  return {
+    path,
+    realm,
+    pollIntervalMs,
+    standalone: options.standalone === true,
+    credentials,
+  }
 }
 
 function readUi(file: string): string {
@@ -107,14 +118,19 @@ ${TABS.map((tab, i) => `    <a href="${tab.href}" data-tab="${tab.href.slice(1)}
 
 function afterId(req: Request): number {
   const after = Number(req.query.after ?? 0)
-  return Number.isFinite(after) ? after : 0
+  return Number.isFinite(after)
+    ? after
+    : 0
 }
 
 type MonitoringServer = ServerPluginContext['server']
 
 /** The page's script and stylesheet at `base` */
 function serveFiles(app: Express, base: string) {
-  const files = Object.fromEntries(Object.keys(UI_FILES).map(file => [file, readUi(file)]))
+  const files = Object.fromEntries(Object.keys(UI_FILES).map(file => [
+    file,
+    readUi(file),
+  ]))
   for (const [file, type] of Object.entries(UI_FILES))
     app.get(`${base}/${file}`, (_req: Request, res: Response) => void res.type(type).send(files[file]))
 }
@@ -169,7 +185,9 @@ function mountInAdmin(app: Express, admin: AdminApi, server: MonitoringServer, o
       html,
       styles: [`${base}/style.css`],
       scripts: [`${base}/app.js`],
-      data: { 'poll-interval': String(options.pollIntervalMs) },
+      data: {
+        'poll-interval': String(options.pollIntervalMs),
+      },
     }),
   })
 
@@ -205,7 +223,12 @@ export function mountMonitoring(app: Express, ctx: Pick<ServerPluginContext, 'se
   if (options.credentials?.kind === 'user')
     logger?.warn('Monitoring: MAVONENGINE_MONITORING_USER and MAVONENGINE_MONITORING_PASSWORD are deprecated. Log in with the game server\'s admin token (MAVONENGINE_ADMIN_TOKEN) as the password instead')
 
-  const auth = new BasicAuth({ realm: options.realm, credentials: options.credentials, adminToken, logger })
+  const auth = new BasicAuth({
+    realm: options.realm,
+    credentials: options.credentials,
+    adminToken,
+    logger,
+  })
   if (options.credentials?.kind === 'htpasswd' && auth.userCount === 0)
     logger?.warn(`Monitoring: ${options.credentials.path} has no usable users, nobody can log in`)
 
@@ -249,8 +272,16 @@ export function mountMonitoring(app: Express, ctx: Pick<ServerPluginContext, 'se
   serveData(app, base, server)
 
   const logins = [
-    ...(adminToken ? ['the game server\'s admin token as the password'] : []),
-    ...(options.credentials ? [options.credentials.kind === 'htpasswd' ? `a user from ${options.credentials.path}` : `user "${options.credentials.user}"`] : []),
+    ...(adminToken
+      ? ['the game server\'s admin token as the password']
+      : []),
+    ...(options.credentials
+      ? [
+          options.credentials.kind === 'htpasswd'
+            ? `a user from ${options.credentials.path}`
+            : `user "${options.credentials.user}"`,
+        ]
+      : []),
   ]
   if (logins.length)
     logger?.info(`Monitoring dashboard at ${base}/, login with ${logins.join(' or ')}`)
@@ -268,7 +299,13 @@ export function createHttpMonitoring(defaults: HttpMonitoringOptions = {}): Serv
   return {
     name: 'HTTP monitoring',
     http(app, ctx) {
-      mountMonitoring(app, { ...ctx, options: { ...defaults, ...ctx.options } })
+      mountMonitoring(app, {
+        ...ctx,
+        options: {
+          ...defaults,
+          ...ctx.options,
+        },
+      })
     },
   }
 }

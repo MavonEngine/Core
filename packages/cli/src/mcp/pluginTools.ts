@@ -96,7 +96,9 @@ export function registerPluginTools(server: McpServer, client: GameServerClient,
         engine: plugin.engine,
         homepage: plugin.homepage,
         hasReadme: !!plugin.readme,
-        inProject: installed ? installed.has(plugin.package) : null,
+        inProject: installed
+          ? installed.has(plugin.package)
+          : null,
         install: installCommand(plugin.package),
       })),
     }
@@ -106,7 +108,9 @@ export function registerPluginTools(server: McpServer, client: GameServerClient,
     title: 'Read a plugin\'s readme',
     description: 'The README of an official MavonEngine plugin as Markdown, by its package name from available_plugins: '
       + 'what it does, its options for mavonengine.json, how a game hooks into it and its limits.',
-    inputSchema: { package: z.string().describe('npm package of the plugin, e.g. @mavonengine/chat') },
+    inputSchema: {
+      package: z.string().describe('npm package of the plugin, e.g. @mavonengine/chat'),
+    },
     annotations: { ...READ_ONLY, openWorldHint: true },
   }, async ({ package: pkg }) => {
     try {
@@ -115,10 +119,19 @@ export function registerPluginTools(server: McpServer, client: GameServerClient,
       if (!plugin)
         throw new Error(`${pkg} is not on the list of plugins. It has: ${plugins.map(candidate => candidate.package).join(', ') || 'nothing'}`)
 
-      return { content: [{ type: 'text', text: await fetchPluginReadme(plugin, { fetch: list.fetch }) }] }
+      return {
+        content: [
+          { type: 'text', text: await fetchPluginReadme(plugin, { fetch: list.fetch }) },
+        ],
+      }
     }
     catch (err) {
-      return { isError: true, content: [{ type: 'text', text: (err as Error).message }] }
+      return {
+        isError: true,
+        content: [
+          { type: 'text', text: (err as Error).message },
+        ],
+      }
     }
   })
 }

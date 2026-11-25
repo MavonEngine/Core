@@ -18,8 +18,15 @@ const WHITESPACE_RE = /\s+/
 const TARGETS = { client: 'Client', server: 'Server', both: 'Client + server' }
 
 function Endpoints({ routes, error }: { routes: HttpRouteInfo[] | null, error: string | null }) {
-  if (!routes)
-    return <p className={styles.muted}>{error ? `Unknown: ${error}` : 'Asking the game server…'}</p>
+  if (!routes) {
+    return (
+      <p className={styles.muted}>
+        {error
+          ? `Unknown: ${error}`
+          : 'Asking the game server…'}
+      </p>
+    )
+  }
   if (routes.length === 0)
     return <p className={styles.muted}>It registered no HTTP endpoints on the game server.</p>
 
@@ -28,7 +35,12 @@ function Endpoints({ routes, error }: { routes: HttpRouteInfo[] | null, error: s
       <table className={tableStyles.table}>
         <thead>
           <tr>
-            {['Method', 'Path', 'Served in', 'What it does'].map(column => <th key={column} scope="col">{column}</th>)}
+            {[
+              'Method',
+              'Path',
+              'Served in',
+              'What it does',
+            ].map(column => <th key={column} scope="col">{column}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -67,7 +79,9 @@ function Prefabs({ plugin }: { plugin: PluginInfo }) {
           {prefabs.map(prefab => (
             <tr key={prefab.name}>
               <td className={tableStyles.path}>
-                {prefab.label && prefab.label !== prefab.name ? `${prefab.label} (${prefab.name})` : prefab.name}
+                {prefab.label && prefab.label !== prefab.name
+                  ? `${prefab.label} (${prefab.name})`
+                  : prefab.name}
               </td>
               <td className={`${styles.nowrap} ${prefab.registered ? '' : styles.muted}`}>
                 {prefab.registered ? 'Can be placed from Assets' : 'Not registered in this session'}
@@ -134,7 +148,9 @@ function Details({ plugin, routes, routesError }: { plugin: PluginInfo, routes: 
 
       <section>
         <h3 className={styles.sectionTitle}>Readme</h3>
-        {plugin.readme ? <Markdown source={plugin.readme} /> : <p className={styles.muted}>The package has no readme.</p>}
+        {plugin.readme
+          ? <Markdown source={plugin.readme} />
+          : <p className={styles.muted}>The package has no readme.</p>}
       </section>
     </article>
   )
@@ -159,7 +175,9 @@ function AvailableDetails({ plugin, install, onInstall, fetchFn }: { plugin: Ava
     }
   }, [plugin, fetchFn])
 
-  const loaded = readme?.of === plugin.package ? readme : null
+  const loaded = readme?.of === plugin.package
+    ? readme
+    : null
 
   return (
     <article className={styles.details}>
@@ -195,7 +213,13 @@ function AvailableDetails({ plugin, install, onInstall, fetchFn }: { plugin: Ava
         {install?.available
           ? (
               <>
-                <button className={styles.install} onClick={() => onInstall({ packages: [plugin.package], homepage: plugin.homepage })}>
+                <button
+                  className={styles.install}
+                  onClick={() => onInstall({
+                    packages: [plugin.package],
+                    homepage: plugin.homepage,
+                  })}
+                >
                   {`Install ${plugin.package}…`}
                 </button>
                 <p className={styles.muted}>Installs it into the project and restarts the dev servers. Or run this yourself:</p>
@@ -203,7 +227,9 @@ function AvailableDetails({ plugin, install, onInstall, fetchFn }: { plugin: Ava
             )
           : (
               <p className={styles.muted}>
-                {install?.reason ? `${install.reason}. ` : ''}
+                {install?.reason
+                  ? `${install.reason}. `
+                  : ''}
                 Run this in the project, then reload the editor. A server plugin needs the game server restarted.
               </p>
             )}
@@ -298,7 +324,9 @@ export default function PluginsPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
   }, [load])
 
   const current = plugins?.find(plugin => plugin.package === selected)
-  const currentAvailable = current ? undefined : available?.find(plugin => plugin.package === selected)
+  const currentAvailable = current
+    ? undefined
+    : available?.find(plugin => plugin.package === selected)
   // Nothing picked yet: the project's first plugin, or the first one to install when it has none
   const shown = current ?? currentAvailable ?? plugins?.[0] ?? available?.[0]
 
@@ -307,7 +335,9 @@ export default function PluginsPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
       <div className={styles.toolbar}>
         <span className={styles.title}>
           Plugins
-          {plugins ? ` (${plugins.length})` : ''}
+          {plugins
+            ? ` (${plugins.length})`
+            : ''}
         </span>
         <button className={styles.refresh} onClick={() => void load()}>Refresh</button>
       </div>
@@ -333,13 +363,19 @@ export default function PluginsPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
                     {plugins.map(plugin => (
                       <li key={plugin.package}>
                         <button
-                          className={`${styles.item} ${plugin === shown ? styles.selected : ''}`}
+                          className={`${styles.item} ${plugin === shown
+                            ? styles.selected
+                            : ''}`}
                           aria-current={plugin === shown}
                           onClick={() => setSelected(plugin.package)}
                         >
                           <span className={styles.itemName}>{plugin.package}</span>
                           <span className={styles.itemMeta}>
-                            {plugin.problem ? 'Problem' : plugin.enabled ? `v${plugin.version ?? '?'}` : 'Disabled'}
+                            {plugin.problem
+                              ? 'Problem'
+                              : plugin.enabled
+                                ? `v${plugin.version ?? '?'}`
+                                : 'Disabled'}
                           </span>
                         </button>
                       </li>
@@ -349,7 +385,9 @@ export default function PluginsPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
 
             <h3 className={styles.sectionTitle}>
               Available to install
-              {available ? ` (${available.length})` : ''}
+              {available
+                ? ` (${available.length})`
+                : ''}
             </h3>
             {availableError && <div className={styles.note} role="status">{`Could not read the list of plugins: ${availableError}`}</div>}
             {!available && !availableError && <div className={styles.note}>Reading the list from GitHub…</div>}
@@ -360,7 +398,9 @@ export default function PluginsPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
                 {available.map(plugin => (
                   <li key={plugin.package}>
                     <button
-                      className={`${styles.item} ${plugin === shown ? styles.selected : ''}`}
+                      className={`${styles.item} ${plugin === shown
+                        ? styles.selected
+                        : ''}`}
                       aria-current={plugin === shown}
                       onClick={() => setSelected(plugin.package)}
                     >

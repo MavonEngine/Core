@@ -49,7 +49,9 @@ export default class LogBuffer {
       timestamp: now,
       // Formats like colorize() add ANSI codes, which the dashboard draws itself
       level: stripVTControlCharacters(String(level)),
-      message: stripVTControlCharacters(typeof message === 'string' ? message : JSON.stringify(message) ?? String(message)),
+      message: stripVTControlCharacters(typeof message === 'string'
+        ? message
+        : JSON.stringify(message) ?? String(message)),
     })
 
     if (this.entries.length > this.capacity)

@@ -7,7 +7,13 @@ import HttpServer, { METRICS_CLIENT_TIMEOUT_MS, parseEntityQuery } from '../../.
 import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 import RequestLog from '../../../../src/Networking/Server/Stats/RequestLog'
 
-const health = { serverTime: 'now', uptime: 1, players: 0, world: { entities: 0 }, physics: {} }
+const health = {
+  serverTime: 'now',
+  uptime: 1,
+  players: 0,
+  world: { entities: 0 },
+  physics: {},
+}
 const snapshot = { schemaVersion: 1, players: [] }
 
 let listener: NodeServer | undefined
@@ -15,8 +21,13 @@ let listener: NodeServer | undefined
 let http: HttpServer
 
 async function serve(options: HttpServerOptions = {}) {
-  const logger = { info: vi.fn() } as any
-  const metrics = { health: () => health, snapshot: () => snapshot } as any
+  const logger = {
+    info: vi.fn(),
+  } as any
+  const metrics = {
+    health: () => health,
+    snapshot: () => snapshot,
+  } as any
 
   http = new HttpServer(logger, metrics, options)
 
@@ -73,11 +84,21 @@ describe('httpServer', () => {
 
       const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
 
-      expect(routes.at(-1)).toEqual({ method: 'POST', path: '/api/scores/:id', source: 'game', params: { id: '' }, devOnly: false })
+      expect(routes.at(-1)).toEqual({
+        method: 'POST',
+        path: '/api/scores/:id',
+        source: 'game',
+        params: { id: '' },
+        devOnly: false,
+      })
     })
 
     it('lists the dev endpoints only when they are served', async () => {
-      const inspector = { scene: () => null, entities: () => ({}), entity: () => null } as any
+      const inspector = {
+        scene: () => null,
+        entities: () => ({}),
+        entity: () => null,
+      } as any
       const request = await serve({ inspector })
 
       const { routes } = await (await request('/api/game/routes')).json() as { routes: any[] }
@@ -90,7 +111,9 @@ describe('httpServer', () => {
     })
 
     it('is protected like the metrics', async () => {
-      const request = await serve({ metrics: { token: 'secret' } })
+      const request = await serve({
+        metrics: { token: 'secret' },
+      })
 
       expect((await request('/api/game/routes')).status).toBe(401)
       expect((await request('/api/game/routes?token=secret')).status).toBe(200)
@@ -98,7 +121,17 @@ describe('httpServer', () => {
   })
 
   describe('plugins', () => {
-    const plugins = [{ package: 'forest', enabled: true, installed: true, version: '1.0.0', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true }]
+    const plugins = [
+      {
+        package: 'forest',
+        enabled: true,
+        installed: true,
+        version: '1.0.0',
+        declaredPrefabs: [],
+        usedPrefabs: [],
+        runningOnServer: true,
+      },
+    ]
 
     it('lists the plugins it is given, asked anew every time', async () => {
       const list = vi.fn(() => plugins)
@@ -116,7 +149,10 @@ describe('httpServer', () => {
     })
 
     it('is protected like the metrics', async () => {
-      const request = await serve({ plugins: () => plugins, metrics: { token: 'secret' } })
+      const request = await serve({
+        plugins: () => plugins,
+        metrics: { token: 'secret' },
+      })
 
       expect((await request('/api/game/plugins')).status).toBe(401)
       expect((await request('/api/game/plugins?token=secret')).status).toBe(200)
@@ -135,11 +171,19 @@ describe('httpServer', () => {
       expect((await request('/api/admin/reset', { method: 'POST' })).status).toBe(200)
 
       // What Express would hand the guard for a request from another machine
-      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() }
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      }
       const next = vi.fn()
-      http.requireAdmin({ headers: {}, socket: { remoteAddress: '203.0.113.9' } } as any, res as any, next)
+      http.requireAdmin({
+        headers: {},
+        socket: { remoteAddress: '203.0.113.9' },
+      } as any, res as any, next)
       expect(res.status).toHaveBeenCalledWith(403)
-      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('MAVONENGINE_ADMIN_TOKEN') })
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('MAVONENGINE_ADMIN_TOKEN'),
+      })
       expect(next).not.toHaveBeenCalled()
     })
 
@@ -174,16 +218,26 @@ describe('httpServer', () => {
     })
 
     it('also opens the metrics, next to their own token', async () => {
-      const request = await serve({ adminToken: 'admin', metrics: { token: 'metrics' } })
+      const request = await serve({
+        adminToken: 'admin',
+        metrics: { token: 'metrics' },
+      })
       adminRoute()
 
       expect((await request('/api/game/metrics')).status).toBe(401)
-      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer metrics' } })).status).toBe(200)
-      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+      expect((await request('/api/game/metrics', {
+        headers: { Authorization: 'Bearer metrics' },
+      })).status).toBe(200)
+      expect((await request('/api/game/metrics', {
+        headers: { Authorization: 'Bearer admin' },
+      })).status).toBe(200)
       expect((await request('/api/game/metrics?token=admin')).status).toBe(200)
 
       // The metrics token reads, it doesn't administer
-      expect((await request('/api/admin/reset', { method: 'POST', headers: { Authorization: 'Bearer metrics' } })).status).toBe(401)
+      expect((await request('/api/admin/reset', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer metrics' },
+      })).status).toBe(401)
     })
 
     it('turns the metrics on in production by itself', async () => {
@@ -191,14 +245,18 @@ describe('httpServer', () => {
       const request = await serve({ adminToken: 'admin' })
 
       expect((await request('/api/game/metrics')).status).toBe(401)
-      expect((await request('/api/game/metrics', { headers: { Authorization: 'Bearer admin' } })).status).toBe(200)
+      expect((await request('/api/game/metrics', {
+        headers: { Authorization: 'Bearer admin' },
+      })).status).toBe(200)
     })
 
     it('says on the routes it guards who may call them, unless they say so themselves', async () => {
       const request = await serve({ adminToken: 'secret' })
       adminRoute()
 
-      const { routes } = await (await request('/api/game/routes', { headers: { Authorization: 'Bearer secret' } })).json() as { routes: any[] }
+      const { routes } = await (await request('/api/game/routes', {
+        headers: { Authorization: 'Bearer secret' },
+      })).json() as { routes: any[] }
       const reset = routes.find(route => route.path === '/api/admin/reset')
 
       expect(reset).toMatchObject({ method: 'POST', source: 'game', auth: 'The server\'s admin token as `Authorization: Bearer <token>`' })
@@ -223,18 +281,24 @@ describe('httpServer', () => {
   })
 
   it('requires the token when one is configured', async () => {
-    const request = await serve({ metrics: { token: 'secret' } })
+    const request = await serve({
+      metrics: { token: 'secret' },
+    })
 
     expect((await request('/api/game/metrics')).status).toBe(401)
     expect((await request('/api/game/metrics?token=wrong')).status).toBe(401)
     expect((await request('/api/game/metrics?token=secret')).status).toBe(200)
 
-    const res = await request('/api/game/metrics', { headers: { Authorization: 'Bearer secret' } })
+    const res = await request('/api/game/metrics', {
+      headers: { Authorization: 'Bearer secret' },
+    })
     expect(res.status).toBe(200)
   })
 
   it('can be disabled', async () => {
-    const request = await serve({ metrics: { enabled: false } })
+    const request = await serve({
+      metrics: { enabled: false },
+    })
 
     expect((await request('/api/game/metrics')).status).toBe(404)
     expect((await request('/api/game/health')).status).toBe(200)
@@ -248,7 +312,9 @@ describe('httpServer', () => {
 
     listener?.close()
 
-    const withToken = await serve({ metrics: { token: 'secret' } })
+    const withToken = await serve({
+      metrics: { token: 'secret' },
+    })
     expect((await withToken('/api/game/metrics?token=secret')).status).toBe(200)
   })
 
@@ -270,7 +336,10 @@ describe('httpServer', () => {
   })
 
   it('protects logs like metrics', async () => {
-    const request = await serve({ logs: new LogBuffer(), metrics: { token: 'secret' } })
+    const request = await serve({
+      logs: new LogBuffer(),
+      metrics: { token: 'secret' },
+    })
 
     expect((await request('/api/game/logs')).status).toBe(401)
     expect((await request('/api/game/logs?token=secret')).status).toBe(200)
@@ -284,10 +353,29 @@ describe('httpServer', () => {
 
   it('serves recorded requests after an id, protected like metrics', async () => {
     const requests = new RequestLog()
-    requests.push({ timestamp: 0, method: 'GET', path: '/one', status: 200, durationMs: 1, bytes: 10, address: null })
-    requests.push({ timestamp: 0, method: 'GET', path: '/two', status: 404, durationMs: 1, bytes: 10, address: null })
+    requests.push({
+      timestamp: 0,
+      method: 'GET',
+      path: '/one',
+      status: 200,
+      durationMs: 1,
+      bytes: 10,
+      address: null,
+    })
+    requests.push({
+      timestamp: 0,
+      method: 'GET',
+      path: '/two',
+      status: 404,
+      durationMs: 1,
+      bytes: 10,
+      address: null,
+    })
 
-    const request = await serve({ requests, metrics: { token: 'secret' } })
+    const request = await serve({
+      requests,
+      metrics: { token: 'secret' },
+    })
 
     expect((await request('/api/game/requests')).status).toBe(401)
 
@@ -314,7 +402,9 @@ describe('httpServer', () => {
   })
 
   it('does not count rejected metrics requests', async () => {
-    const request = await serve({ metrics: { token: 'secret' } })
+    const request = await serve({
+      metrics: { token: 'secret' },
+    })
 
     await request('/api/game/metrics')
 
@@ -326,7 +416,9 @@ describe('httpServer', () => {
       return {
         scene: vi.fn(() => ({ name: 'Forest' })),
         entities: vi.fn(() => ({ total: 0, entities: [] })),
-        entity: vi.fn((id: string) => id === 'rock' ? { id: 'rock' } : null),
+        entity: vi.fn((id: string) => id === 'rock'
+          ? { id: 'rock' }
+          : null),
       } as any
     }
 
@@ -335,12 +427,21 @@ describe('httpServer', () => {
       const request = await serve({ inspector })
 
       expect(http.devEndpointsEnabled).toBe(true)
-      expect(await (await request('/api/game/dev/scene')).json()).toEqual({ scene: { name: 'Forest' } })
-      expect(await (await request('/api/game/dev/entities/rock')).json()).toEqual({ entity: { id: 'rock' } })
+      expect(await (await request('/api/game/dev/scene')).json()).toEqual({
+        scene: { name: 'Forest' },
+      })
+      expect(await (await request('/api/game/dev/entities/rock')).json()).toEqual({
+        entity: { id: 'rock' },
+      })
       expect(await (await request('/api/game/dev/entities/nope')).json()).toEqual({ entity: null })
 
       expect((await request('/api/game/dev/entities?type=Rock&near=1,2,3&radius=5&limit=2')).status).toBe(200)
-      expect(inspector.entities).toHaveBeenCalledWith({ type: 'Rock', near: { x: 1, y: 2, z: 3 }, radius: 5, limit: 2 })
+      expect(inspector.entities).toHaveBeenCalledWith({
+        type: 'Rock',
+        near: { x: 1, y: 2, z: 3 },
+        radius: 5,
+        limit: 2,
+      })
 
       const bad = await request('/api/game/dev/entities?near=1,2')
       expect(bad.status).toBe(400)
@@ -351,15 +452,35 @@ describe('httpServer', () => {
       const net = new NetRecorder({ enabled: true })
       net.packet('out', 'sv_state', { tick: 1, entities: [] }, { peer: 'p1' })
       net.packet('in', 'command', { type: 'cl_move', sequenceId: 2 }, { peer: 'p1' })
-      const request = await serve({ net: { net, syncSnapshot: () => ({ tick: 9 }) as any } })
+      const request = await serve({
+        net: {
+          net,
+          syncSnapshot: () => ({ tick: 9 }) as any,
+        },
+      })
 
       const all = await (await request('/api/game/dev/net/packets')).json()
-      expect(all).toMatchObject({ enabled: true, latestId: 2, matched: 2, records: [{ type: 'sv_state' }, { type: 'command' }] })
+      expect(all).toMatchObject({
+        enabled: true,
+        latestId: 2,
+        matched: 2,
+        records: [
+          { type: 'sv_state' },
+          { type: 'command' },
+        ],
+      })
 
       const filtered = await (await request('/api/game/dev/net/packets?after=1&direction=in&peer=p1&limit=5')).json()
-      expect(filtered.records).toMatchObject([{ id: 2, type: 'command', sequenceId: 2 }])
+      expect(filtered.records).toMatchObject([
+        { id: 2, type: 'command', sequenceId: 2 },
+      ])
 
-      expect(await (await request('/api/game/dev/net/packets/1')).json()).toMatchObject({ record: { id: 1, payload: { tick: 1, entities: [] } } })
+      expect(await (await request('/api/game/dev/net/packets/1')).json()).toMatchObject({
+        record: {
+          id: 1,
+          payload: { tick: 1, entities: [] },
+        },
+      })
       expect(await (await request('/api/game/dev/net/packets/99')).json()).toEqual({ record: null })
       expect(await (await request('/api/game/dev/net/sync')).json()).toEqual({ tick: 9 })
 
@@ -369,11 +490,19 @@ describe('httpServer', () => {
     })
 
     it('does not serve the network debug endpoints in production or without a source', async () => {
-      expect((await (await serve({ inspector: fakeInspector() }))('/api/game/dev/net/sync')).status).toBe(404)
+      expect((await (await serve({
+        inspector: fakeInspector(),
+      }))('/api/game/dev/net/sync')).status).toBe(404)
       listener?.close()
 
       vi.stubEnv('NODE_ENV', 'production')
-      const request = await serve({ net: { net: new NetRecorder({ enabled: true }), syncSnapshot: () => ({}) as any }, metrics: { token: 'secret' } })
+      const request = await serve({
+        net: {
+          net: new NetRecorder({ enabled: true }),
+          syncSnapshot: () => ({}) as any,
+        },
+        metrics: { token: 'secret' },
+      })
       expect((await request('/api/game/dev/net/sync?token=secret')).status).toBe(404)
       expect((await request('/api/game/dev/net/packets?token=secret')).status).toBe(404)
     })
@@ -386,7 +515,10 @@ describe('httpServer', () => {
     })
 
     it('are protected like metrics', async () => {
-      const request = await serve({ inspector: fakeInspector(), metrics: { token: 'secret' } })
+      const request = await serve({
+        inspector: fakeInspector(),
+        metrics: { token: 'secret' },
+      })
 
       expect((await request('/api/game/dev/scene')).status).toBe(401)
       expect((await request('/api/game/dev/entities')).status).toBe(401)
@@ -394,7 +526,10 @@ describe('httpServer', () => {
     })
 
     it('follow metrics being turned off', async () => {
-      const request = await serve({ inspector: fakeInspector(), metrics: { enabled: false } })
+      const request = await serve({
+        inspector: fakeInspector(),
+        metrics: { enabled: false },
+      })
 
       expect((await request('/api/game/dev/scene')).status).toBe(404)
     })
@@ -403,7 +538,10 @@ describe('httpServer', () => {
       vi.stubEnv('NODE_ENV', 'production')
       const inspector = fakeInspector()
 
-      const request = await serve({ inspector, metrics: { token: 'secret' } })
+      const request = await serve({
+        inspector,
+        metrics: { token: 'secret' },
+      })
 
       expect(http.devEndpointsEnabled).toBe(false)
       // Metrics still work with the token, the dev routes don't

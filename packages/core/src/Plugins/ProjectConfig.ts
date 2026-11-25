@@ -196,7 +196,9 @@ export function addPluginToConfig(root: string, pkg: string): boolean {
     if (existing && existing.enabled !== false)
       return false
 
-    config.plugins[pkg] = existing ? { ...existing, enabled: true } : { enabled: true }
+    config.plugins[pkg] = existing
+      ? { ...existing, enabled: true }
+      : { enabled: true }
     return true
   })
 }
@@ -210,7 +212,9 @@ export function recordPrefabUsage(root: string, pkg: string, prefab: string): bo
     if (!entry)
       return false
 
-    const prefabs = Array.isArray(entry.prefabs) ? entry.prefabs : []
+    const prefabs = Array.isArray(entry.prefabs)
+      ? entry.prefabs
+      : []
     if (prefabs.includes(prefab))
       return false
 
@@ -242,7 +246,9 @@ export function installedPackageVersion(root: string, pkg: string): string | und
 
   try {
     const version = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version
-    return typeof version === 'string' ? version : undefined
+    return typeof version === 'string'
+      ? version
+      : undefined
   }
   catch {
     return undefined
@@ -287,7 +293,12 @@ export function readPluginManifest(root: string, pkg: string): InstalledPlugin |
   if (packageJson.mavonengine === undefined)
     return undefined
 
-  return { package: pkg, version: packageJson.version, dir, manifest: validateManifest(pkg, packageJson.mavonengine) }
+  return {
+    package: pkg,
+    version: packageJson.version,
+    dir,
+    manifest: validateManifest(pkg, packageJson.mavonengine),
+  }
 }
 
 export function runsOn(target: PluginTarget, side: 'client' | 'server'): boolean {
@@ -298,7 +309,9 @@ export function runsOn(target: PluginTarget, side: 'client' | 'server'): boolean
 export function entryFor(manifest: PluginManifest, side: PluginSide): string | undefined {
   if (side === 'dev')
     return manifest.dev
-  return runsOn(manifest.target, side) ? manifest[side] : undefined
+  return runsOn(manifest.target, side)
+    ? manifest[side]
+    : undefined
 }
 
 /**
@@ -307,7 +320,9 @@ export function entryFor(manifest: PluginManifest, side: PluginSide): string | u
 export function resolveInside(base: string, path: string): string | undefined {
   const full = resolve(base, path)
   const inside = relative(base, full)
-  return inside && !inside.startsWith('..') && !isAbsolute(inside) ? full : undefined
+  return inside && !inside.startsWith('..') && !isAbsolute(inside)
+    ? full
+    : undefined
 }
 
 export function assetsDir(plugin: InstalledPlugin): string {
@@ -348,8 +363,11 @@ export function enabledPlugins(root: string, side: PluginSide): { plugins: Enabl
       continue
 
     // Loaded anyway: the range may be too strict, and `mavonengine doctor` says what to do about it
-    if (engineCompat(installed.manifest.engine, coreVersion) === 'incompatible')
-      incompatible.push(`${pkg}${installed.version ? ` ${installed.version}` : ''} is made for @mavonengine/core ${installed.manifest.engine}, the project has ${coreVersion}, run 'mavonengine doctor'`)
+    if (engineCompat(installed.manifest.engine, coreVersion) === 'incompatible') {
+      incompatible.push(`${pkg}${installed.version
+        ? ` ${installed.version}`
+        : ''} is made for @mavonengine/core ${installed.manifest.engine}, the project has ${coreVersion}, run 'mavonengine doctor'`)
+    }
 
     const entryPath = resolveInside(installed.dir, entryFile)
     if (!entryPath || !existsSync(entryPath)) {
@@ -360,7 +378,9 @@ export function enabledPlugins(root: string, side: PluginSide): { plugins: Enabl
     plugins.push({
       ...installed,
       options: entry?.options ?? {},
-      prefabs: Array.isArray(entry?.prefabs) ? entry.prefabs : [],
+      prefabs: Array.isArray(entry?.prefabs)
+        ? entry.prefabs
+        : [],
       entry: entryPath,
     })
   }
@@ -373,11 +393,15 @@ export function enabledPlugins(root: string, side: PluginSide): { plugins: Enabl
  */
 export function shippedAssetPaths(manifest: PluginManifest, usedPrefabs: string[]): string[] {
   const assets = manifest.assets
-  const paths = [...(assets?.shared ?? [])]
+  const paths = [
+    ...(assets?.shared ?? []),
+  ]
   for (const prefab of usedPrefabs)
     paths.push(...(assets?.prefabs?.[prefab] ?? []))
 
-  return [...new Set(paths)]
+  return [
+    ...new Set(paths),
+  ]
 }
 
 /**
@@ -400,7 +424,12 @@ export function releaseAssets(root: string): { assets: ReleaseAsset[], warnings:
         warnings.push(`${plugin.package}: asset ${path} not found`)
         continue
       }
-      assets.push({ package: plugin.package, from, to: `plugins/${plugin.package}/${path}`, path })
+      assets.push({
+        package: plugin.package,
+        from,
+        to: `plugins/${plugin.package}/${path}`,
+        path,
+      })
     }
   }
 
@@ -419,7 +448,9 @@ function readReadme(dir: string): string | undefined {
       return undefined
 
     const text = readFileSync(join(dir, file), 'utf8')
-    return text.length > MAX_README_CHARS ? `${text.slice(0, MAX_README_CHARS)}\n\n… (cut off)` : text
+    return text.length > MAX_README_CHARS
+      ? `${text.slice(0, MAX_README_CHARS)}\n\n… (cut off)`
+      : text
   }
   catch {
     return undefined
@@ -427,7 +458,9 @@ function readReadme(dir: string): string | undefined {
 }
 
 function text(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined
+  return typeof value === 'string' && value
+    ? value
+    : undefined
 }
 
 /**
@@ -442,7 +475,9 @@ export function pluginInfos(root: string, { readme = true }: { readme?: boolean 
       enabled: entry?.enabled !== false,
       installed: false,
       declaredPrefabs: [],
-      usedPrefabs: Array.isArray(entry?.prefabs) ? entry.prefabs.filter(prefab => typeof prefab === 'string') : [],
+      usedPrefabs: Array.isArray(entry?.prefabs)
+        ? entry.prefabs.filter(prefab => typeof prefab === 'string')
+        : [],
     }
 
     const dir = findPackageDir(root, pkg)
@@ -462,8 +497,12 @@ export function pluginInfos(root: string, { readme = true }: { readme?: boolean 
       version: text(packageJson.version),
       description: text(packageJson.description),
       license: text(packageJson.license),
-      homepage: text(packageJson.homepage) ?? text(typeof repository === 'string' ? repository : repository?.url),
-      readme: readme ? readReadme(dir) : undefined,
+      homepage: text(packageJson.homepage) ?? text(typeof repository === 'string'
+        ? repository
+        : repository?.url),
+      readme: readme
+        ? readReadme(dir)
+        : undefined,
     })
 
     if (packageJson.mavonengine === undefined)

@@ -53,7 +53,9 @@ describe('runPluginMigrations', () => {
     expect(await runPluginMigrations(db, '@mavonengine/chat', migrations)).toEqual([])
 
     await db.insertInto('chat_mutes').values({ player: 'p1', reason: 'spam' }).execute()
-    expect(await db.selectFrom('chat_mutes').selectAll().execute()).toEqual([{ player: 'p1', reason: 'spam' }])
+    expect(await db.selectFrom('chat_mutes').selectAll().execute()).toEqual([
+      { player: 'p1', reason: 'spam' },
+    ])
 
     const recorded = await db.selectFrom('chat__migrations').select('name').orderBy('name').execute()
     expect(recorded.map(row => row.name)).toEqual(['001_init', '002_add_reason'])
@@ -87,7 +89,12 @@ describe('runPluginMigrations', () => {
     expect(tables).not.toContain('chat_half')
 
     // Tried again next time
-    const fixed = { ...migrations, '003_broken': { up: async () => {} } }
+    const fixed = {
+      ...migrations,
+      '003_broken': {
+        up: async () => {},
+      },
+    }
     expect(await runPluginMigrations(db, 'chat', fixed)).toEqual(['003_broken'])
   })
 

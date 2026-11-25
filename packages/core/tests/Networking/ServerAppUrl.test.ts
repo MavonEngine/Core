@@ -9,7 +9,14 @@ import { APP_URL_ENV, parseAppUrl } from '../../src/Plugins/ProjectConfig'
 import { tempProject, writeConfig } from '../Plugins/fixtures'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestServer extends Server<GameObject> {
@@ -40,7 +47,16 @@ describe('the game\'s address and name', () => {
     writeConfig(root, { plugins: {}, appUrl: 'https://config.example.com/', appName: ' Space Game ' })
 
     let ctx: ServerPluginContext | undefined
-    const server = new TestServer(logger, undefined, { stopOnSignals: false, root, plugins: [{ name: 'p', setup: c => void (ctx = c) }] })
+    const server = new TestServer(logger, undefined, {
+      stopOnSignals: false,
+      root,
+      plugins: [
+        {
+          name: 'p',
+          setup: c => void (ctx = c),
+        },
+      ],
+    })
     vi.spyOn(server.http, 'start').mockImplementation(() => {})
     await server.start()
 
@@ -67,7 +83,13 @@ describe('the game\'s address and name', () => {
 
     expect(parseAppUrl(' https://a.example.com/game// ')).toBe('https://a.example.com/game')
     expect(parseAppUrl('http://localhost:8050')).toBe('http://localhost:8050')
-    for (const bad of ['', 'mygame.com', 'ftp://a.example.com', 42, undefined])
+    for (const bad of [
+      '',
+      'mygame.com',
+      'ftp://a.example.com',
+      42,
+      undefined,
+    ])
       expect(parseAppUrl(bad)).toBeUndefined()
   })
 })

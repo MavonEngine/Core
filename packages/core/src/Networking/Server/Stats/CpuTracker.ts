@@ -72,7 +72,9 @@ export default class CpuTracker {
     const maxPossibleCpuTime = totalSystemDelta / cpuCount
 
     // os.cpus() times only tick every few ms, so two samples close together can have no delta
-    const cpuPercentage = maxPossibleCpuTime > 0 ? (totalUsedCPU / maxPossibleCpuTime) * 100 : 0
+    const cpuPercentage = maxPossibleCpuTime > 0
+      ? (totalUsedCPU / maxPossibleCpuTime) * 100
+      : 0
     const roundedCpuPercentage = Number.parseFloat(cpuPercentage.toFixed(2))
 
     // Update history and clean up old entries
@@ -110,7 +112,14 @@ export default class CpuTracker {
       irq += cpu.times.irq
     }
 
-    return { user, nice, sys, idle, irq, total: user + nice + sys + idle + irq }
+    return {
+      user,
+      nice,
+      sys,
+      idle,
+      irq,
+      total: user + nice + sys + idle + irq,
+    }
   }
 
   private cleanupHistory(now: number) {

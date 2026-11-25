@@ -13,7 +13,11 @@ class TestPlayer extends Player {
 }
 
 function makeMetrics(latencySimulation?: any) {
-  const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn() } as any
+  const logger = {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  } as any
   const game = new BaseGame(null)
   game.world = new ServerWorld()
 
@@ -43,16 +47,18 @@ describe('serverMetrics', () => {
     expect(snapshot.schemaVersion).toBe(METRICS_SCHEMA_VERSION)
     expect(snapshot.sampleIntervalMs).toBe(500)
     expect(snapshot.tickRate).toBe(game.tickRate)
-    expect(snapshot.players).toEqual([{
-      id: 'p1',
-      displayName: 'Alice',
-      position: { x: 1, y: 2, z: 3 },
-      lastProcessedSequenceId: 7,
-      trackedEntities: 1,
-      connectedFor: 0,
-      connection: null,
-      account: null,
-    }])
+    expect(snapshot.players).toEqual([
+      {
+        id: 'p1',
+        displayName: 'Alice',
+        position: { x: 1, y: 2, z: 3 },
+        lastProcessedSequenceId: 7,
+        trackedEntities: 1,
+        connectedFor: 0,
+        connection: null,
+        account: null,
+      },
+    ])
     expect(snapshot.world.entities).toBe(1)
     expect(snapshot.physics).toBeNull()
     expect(snapshot.latencySimulation).toEqual({ fixedLatency: 50, jitter: 10, packetLoss: 0 })
@@ -64,25 +70,40 @@ describe('serverMetrics', () => {
 
     const p1 = addPlayer(game, 'p1')
     p1.connectedAt = Date.now() - 90_000
-    p1.channel = { webrtcConnection: { peerConnection: {
-      rtt: () => 42,
-      bytesSent: () => 1000,
-      bytesReceived: () => 200,
-      getSelectedCandidatePair: () => ({ remote: { address: '203.0.113.7' } }),
-    } } } as any
+    p1.channel = {
+      webrtcConnection: {
+        peerConnection: {
+          rtt: () => 42,
+          bytesSent: () => 1000,
+          bytesReceived: () => 200,
+          getSelectedCandidatePair: () => ({
+            remote: { address: '203.0.113.7' },
+          }),
+        },
+      },
+    } as any
     addPlayer(game, 'bot')
 
     const [connected, bot] = metrics.snapshot().players
     expect(connected.connectedFor).toBe(90)
-    expect(connected.connection).toEqual({ address: '203.0.113.7', rttMs: 42, bytesSent: 1000, bytesReceived: 200 })
+    expect(connected.connection).toEqual({
+      address: '203.0.113.7',
+      rttMs: 42,
+      bytesSent: 1000,
+      bytesReceived: 200,
+    })
     expect(bot.connection).toBeNull()
   })
 
   it('shows the account the auth plugin let a player in as, and nothing secret of it', () => {
     const { game, metrics } = makeMetrics()
 
-    addPlayer(game, 'p1').channel = { userData: { id: 'acc-1', name: 'Ada', session: 'abc123' } } as any
-    addPlayer(game, 'p2').channel = { userData: { id: 'acc-2', name: 'Guest-4821', guest: true } } as any
+    addPlayer(game, 'p1').channel = {
+      userData: { id: 'acc-1', name: 'Ada', session: 'abc123' },
+    } as any
+    addPlayer(game, 'p2').channel = {
+      userData: { id: 'acc-2', name: 'Guest-4821', guest: true },
+    } as any
     addPlayer(game, 'bot')
 
     expect(metrics.snapshot().players.map(player => player.account)).toEqual([

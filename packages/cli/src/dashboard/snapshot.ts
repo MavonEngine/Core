@@ -77,27 +77,39 @@ function isRecord(value: unknown): value is AnyRecord {
 }
 
 function num(value: unknown, fallback = 0): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : fallback
 }
 
 function str(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
+  return typeof value === 'string'
+    ? value
+    : fallback
 }
 
 function numOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : null
 }
 
 function strOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
+  return typeof value === 'string'
+    ? value
+    : null
 }
 
 function arr<T>(value: unknown, map: (item: AnyRecord) => T): T[] {
-  return Array.isArray(value) ? value.filter(isRecord).map(map) : []
+  return Array.isArray(value)
+    ? value.filter(isRecord).map(map)
+    : []
 }
 
 function section(value: unknown): AnyRecord {
-  return isRecord(value) ? value : {}
+  return isRecord(value)
+    ? value
+    : {}
 }
 
 function tickSample(t: AnyRecord) {
@@ -133,7 +145,11 @@ function queueSample(q: AnyRecord) {
 function accountFrom(value: unknown): PlayerAccount | null {
   if (!isRecord(value) || typeof value.id !== 'string' || !value.id)
     return null
-  return { id: value.id, name: strOrNull(value.name), guest: value.guest === true }
+  return {
+    id: value.id,
+    name: strOrNull(value.name),
+    guest: value.guest === true,
+  }
 }
 
 export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
@@ -143,9 +159,15 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
   const bandwidth = section(s.bandwidth)
   const tick = section(s.tick)
   const memory = section(s.memory)
-  const physics = isRecord(s.physics) ? s.physics : null
-  const latency = isRecord(s.latencySimulation) ? s.latencySimulation : null
-  const queue = isRecord(s.queue) ? s.queue : null
+  const physics = isRecord(s.physics)
+    ? s.physics
+    : null
+  const latency = isRecord(s.latencySimulation)
+    ? s.latencySimulation
+    : null
+  const queue = isRecord(s.queue)
+    ? s.queue
+    : null
 
   return {
     schemaVersion: num(s.schemaVersion, SUPPORTED_SCHEMA_VERSION) as typeof SUPPORTED_SCHEMA_VERSION,
@@ -156,13 +178,19 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
     tickRate: num(s.tickRate),
     players: arr(s.players, (p) => {
       const position = section(p.position)
-      const connection = isRecord(p.connection) ? p.connection : null
+      const connection = isRecord(p.connection)
+        ? p.connection
+        : null
       const id = str(p.id, '?')
       return {
         id,
         // Older servers don't send a name
         displayName: str(p.displayName, id),
-        position: { x: num(position.x), y: num(position.y), z: num(position.z) },
+        position: {
+          x: num(position.x),
+          y: num(position.y),
+          z: num(position.z),
+        },
         lastProcessedSequenceId: num(p.lastProcessedSequenceId),
         trackedEntities: num(p.trackedEntities),
         connectedFor: num(p.connectedFor),
@@ -182,23 +210,35 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
       entities: num(world.entities),
     },
     physics: physics
-      ? { bodies: num(physics.bodies), colliders: num(physics.colliders) }
+      ? {
+          bodies: num(physics.bodies),
+          colliders: num(physics.colliders),
+        }
       : null,
     cpu: {
       current: num(cpu.current),
       avg1s: num(cpu.avg1s),
       avg10s: num(cpu.avg10s),
       avg60s: num(cpu.avg60s),
-      history: arr(cpu.history, h => ({ timestamp: num(h.timestamp), cpuPercentage: num(h.cpuPercentage) })),
+      history: arr(cpu.history, h => ({
+        timestamp: num(h.timestamp),
+        cpuPercentage: num(h.cpuPercentage),
+      })),
     },
     bandwidth: {
       sentPerSecond: num(bandwidth.sentPerSecond),
       receivedPerSecond: num(bandwidth.receivedPerSecond),
-      history: arr(bandwidth.history, b => ({ timestamp: num(b.timestamp), sent: num(b.sent), received: num(b.received) })),
+      history: arr(bandwidth.history, b => ({
+        timestamp: num(b.timestamp),
+        sent: num(b.sent),
+        received: num(b.received),
+      })),
     },
     tick: {
       budgetMs: num(tick.budgetMs),
-      latest: isRecord(tick.latest) ? tickSample(tick.latest) : null,
+      latest: isRecord(tick.latest)
+        ? tickSample(tick.latest)
+        : null,
       history: arr(tick.history, tickSample),
     },
     memory: {
@@ -208,14 +248,20 @@ export function normalizeSnapshot(raw: unknown): ServerMetricsSnapshot {
       external: num(memory.external),
     },
     latencySimulation: latency
-      ? { fixedLatency: num(latency.fixedLatency), jitter: num(latency.jitter), packetLoss: num(latency.packetLoss) }
+      ? {
+          fixedLatency: num(latency.fixedLatency),
+          jitter: num(latency.jitter),
+          packetLoss: num(latency.packetLoss),
+        }
       : null,
     // Servers older than the queue have none
     queue: queue
       ? {
           driver: str(queue.driver, 'unknown'),
           working: queue.working !== false,
-          latest: isRecord(queue.latest) ? queueSample(queue.latest) : null,
+          latest: isRecord(queue.latest)
+            ? queueSample(queue.latest)
+            : null,
           history: arr(queue.history, queueSample),
         }
       : null,
@@ -270,8 +316,12 @@ export function normalizePackets(raw: unknown): { entries: PacketLine[], latestI
   const entries = arr(r.records, (e): PacketLine => ({
     id: num(e.id),
     timestamp: num(e.timestamp),
-    kind: e.kind === 'event' ? 'event' : 'packet',
-    direction: e.direction === 'in' || e.direction === 'out' ? e.direction : null,
+    kind: e.kind === 'event'
+      ? 'event'
+      : 'packet',
+    direction: e.direction === 'in' || e.direction === 'out'
+      ? e.direction
+      : null,
     type: str(e.type, '?'),
     peer: strOrNull(e.peer),
     bytes: num(e.bytes),
@@ -293,17 +343,28 @@ export function normalizePackets(raw: unknown): { entries: PacketLine[], latestI
 export function normalizeSync(raw: unknown): SyncInfo {
   const r = section(raw)
   const players = arr(r.players, (p): SyncPlayerLine => {
-    const lastState = isRecord(p.lastState) ? p.lastState : null
+    const lastState = isRecord(p.lastState)
+      ? p.lastState
+      : null
     return {
       id: str(p.id),
       displayName: str(p.displayName, str(p.id)),
-      tracked: Array.isArray(p.tracked) ? p.tracked.length : 0,
+      tracked: Array.isArray(p.tracked)
+        ? p.tracked.length
+        : 0,
       ack: num(p.ack),
-      lastState: lastState && { tick: num(lastState.tick), bytes: num(lastState.bytes), entities: num(lastState.entities) },
+      lastState: lastState && {
+        tick: num(lastState.tick),
+        bytes: num(lastState.bytes),
+        entities: num(lastState.entities),
+      },
       account: accountFrom(p.account),
     }
   })
-  const entities = arr(r.entities, e => ({ player: e.player === true, trackedBy: num(e.trackedBy) }))
+  const entities = arr(r.entities, e => ({
+    player: e.player === true,
+    trackedBy: num(e.trackedBy),
+  }))
 
   return {
     tick: num(r.tick),
@@ -311,8 +372,12 @@ export function normalizeSync(raw: unknown): SyncInfo {
     syncDistance: numOrNull(r.syncDistance),
     entities: entities.length,
     // Without players nothing is tracked, which says nothing about the entities
-    untracked: players.length ? entities.filter(e => !e.player && e.trackedBy === 0).length : 0,
-    editors: Array.isArray(r.editors) ? r.editors.length : 0,
+    untracked: players.length
+      ? entities.filter(e => !e.player && e.trackedBy === 0).length
+      : 0,
+    editors: Array.isArray(r.editors)
+      ? r.editors.length
+      : 0,
     players,
   }
 }
@@ -327,11 +392,21 @@ export function normalizePacketDetail(id: number, raw: unknown): PacketDetail {
 
   const lines = (value: unknown) => JSON.stringify(value, null, 2).split('\n')
 
-  if (record.payload !== undefined && record.payload !== null)
-    return { id, status: 'loaded', lines: lines(record.payload) }
+  if (record.payload !== undefined && record.payload !== null) {
+    return {
+      id,
+      status: 'loaded',
+      lines: lines(record.payload),
+    }
+  }
   // An event has no payload: what it says is in its info
-  if (record.kind === 'event' && isRecord(record.info))
-    return { id, status: 'loaded', lines: lines(record.info) }
+  if (record.kind === 'event' && isRecord(record.info)) {
+    return {
+      id,
+      status: 'loaded',
+      lines: lines(record.info),
+    }
+  }
   // It had a payload once, dropped since to bound the server's memory
   if (record.kind !== 'event' && num(record.bytes) > 0)
     return { id, status: 'gone', lines: [] }
@@ -343,7 +418,10 @@ function descriptions(value: unknown): Record<string, string> | undefined {
   if (!isRecord(value))
     return undefined
 
-  return Object.fromEntries(Object.entries(value).map(([name, description]) => [name, str(description)]))
+  return Object.fromEntries(Object.entries(value).map(([name, description]) => [
+    name,
+    str(description),
+  ]))
 }
 
 /**
@@ -351,7 +429,9 @@ function descriptions(value: unknown): Record<string, string> | undefined {
  */
 export function normalizeRoutes(raw: unknown): RouteLine[] {
   return arr(section(raw).routes, (r) => {
-    const source = r.source === 'engine' || r.source === 'plugin' ? r.source : 'game'
+    const source = r.source === 'engine' || r.source === 'plugin'
+      ? r.source
+      : 'game'
     const plugin = strOrNull(r.plugin)
     const query = descriptions(r.query)
 
@@ -359,11 +439,20 @@ export function normalizeRoutes(raw: unknown): RouteLine[] {
       method: str(r.method, '?'),
       path: str(r.path),
       source,
-      ...(plugin ? { plugin } : {}),
+      ...(plugin
+        ? { plugin }
+        : {}),
       params: descriptions(r.params) ?? {},
       devOnly: r.devOnly === true,
-      ...(query ? { query } : {}),
-      ...Object.fromEntries((['summary', 'description', 'response', 'auth'] as const)
+      ...(query
+        ? { query }
+        : {}),
+      ...Object.fromEntries(([
+        'summary',
+        'description',
+        'response',
+        'auth',
+      ] as const)
         .filter(key => typeof r[key] === 'string')
         .map(key => [key, r[key] as string])),
     }
@@ -371,7 +460,9 @@ export function normalizeRoutes(raw: unknown): RouteLine[] {
 }
 
 function strings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
+  return Array.isArray(value)
+    ? value.filter(item => typeof item === 'string')
+    : []
 }
 
 /**
@@ -379,18 +470,31 @@ function strings(value: unknown): string[] {
  */
 export function normalizePlugins(raw: unknown): PluginLine[] {
   return arr(section(raw).plugins, (p) => {
-    const target = p.target === 'client' || p.target === 'server' || p.target === 'both' ? p.target : undefined
+    const target = p.target === 'client' || p.target === 'server' || p.target === 'both'
+      ? p.target
+      : undefined
 
     return {
       package: str(p.package, '?'),
       enabled: p.enabled !== false,
       installed: p.installed !== false,
       runningOnServer: p.runningOnServer === true,
-      ...(p.database === true ? { database: true as const } : {}),
+      ...(p.database === true
+        ? { database: true as const }
+        : {}),
       declaredPrefabs: strings(p.declaredPrefabs),
       usedPrefabs: strings(p.usedPrefabs),
-      ...(target ? { target } : {}),
-      ...Object.fromEntries((['problem', 'version', 'description', 'license', 'homepage', 'engine'] as const)
+      ...(target
+        ? { target }
+        : {}),
+      ...Object.fromEntries(([
+        'problem',
+        'version',
+        'description',
+        'license',
+        'homepage',
+        'engine',
+      ] as const)
         .filter(key => typeof p[key] === 'string')
         .map(key => [key, p[key] as string])),
     }
@@ -455,11 +559,19 @@ export function normalizeDatabase(raw: unknown): DatabaseInfo {
   const data = section(raw)
   return {
     provider: strOrNull(data.provider),
-    tables: arr(data.tables, t => ({ name: str(t.name, '?'), plugin: strOrNull(t.plugin), rows: numOrNull(t.rows), columns: columns(t.columns) })),
+    tables: arr(data.tables, t => ({
+      name: str(t.name, '?'),
+      plugin: strOrNull(t.plugin),
+      rows: numOrNull(t.rows),
+      columns: columns(t.columns),
+    })),
     migrations: arr(data.migrations, m => ({
       plugin: strOrNull(m.plugin),
       table: str(m.table, '?'),
-      applied: arr(m.applied, a => ({ name: str(a.name, '?'), executedAt: strOrNull(a.executedAt) })),
+      applied: arr(m.applied, a => ({
+        name: str(a.name, '?'),
+        executedAt: strOrNull(a.executedAt),
+      })),
     })),
   }
 }

@@ -30,8 +30,12 @@ let basePath = DEFAULT_PATH
 function read(): StoredSession | undefined {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    const session = raw ? JSON.parse(raw) as StoredSession : undefined
-    return session && typeof session.token === 'string' ? session : undefined
+    const session = raw
+      ? JSON.parse(raw) as StoredSession
+      : undefined
+    return session && typeof session.token === 'string'
+      ? session
+      : undefined
   }
   catch {
     // Storage blocked, e.g. in a private window, or what was stored isn't ours
@@ -59,7 +63,13 @@ async function call<T>(method: string, path: string, body?: object, token = read
   if (token)
     headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch(`${basePath}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined })
+  const res = await fetch(`${basePath}${path}`, {
+    method,
+    headers,
+    body: body
+      ? JSON.stringify(body)
+      : undefined,
+  })
   if (res.status === 204)
     return undefined
   const json = await res.json().catch(() => ({})) as T & Partial<AuthErrorResponse>
@@ -78,7 +88,9 @@ function keep(session: SessionResponse): AccountInfo {
  * one. Rejects with an `AuthRequestError`, e.g. 409 for a taken name or email
  */
 export async function register(username: string, password: string, email?: string): Promise<AccountInfo> {
-  return keep((await call<SessionResponse>('POST', '/register', email ? { username, password, email } : { username, password }))!)
+  return keep((await call<SessionResponse>('POST', '/register', email
+    ? { username, password, email }
+    : { username, password }))!)
 }
 
 /**
@@ -187,11 +199,15 @@ export default {
   name: 'Auth',
   setup(ctx: ClientPluginContext) {
     const path = ctx.options.path
-    basePath = typeof path === 'string' && path.startsWith('/') ? path.replace(TRAILING_SLASHES_RE, '') : DEFAULT_PATH
+    basePath = typeof path === 'string' && path.startsWith('/')
+      ? path.replace(TRAILING_SLASHES_RE, '')
+      : DEFAULT_PATH
   },
   // Read each time a NetworkManager is made, so connecting again after logging in sends the new session
   authorization() {
     const token = read()?.token
-    return token ? `Bearer ${token}` : undefined
+    return token
+      ? `Bearer ${token}`
+      : undefined
   },
 } satisfies ClientPlugin

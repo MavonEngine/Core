@@ -9,7 +9,9 @@ const TABLE_NAME = /^[a-z\d]\w*$/i
  * `my-plugin` → `my_plugin`. Only lowercase letters, digits and underscores, so it is a valid name in any database.
  */
 export function tablePrefix(pkg: string): string {
-  const name = pkg.startsWith(SCOPE) ? pkg.slice(SCOPE.length) : pkg
+  const name = pkg.startsWith(SCOPE)
+    ? pkg.slice(SCOPE.length)
+    : pkg
   const prefix = name
     .toLowerCase()
     .replace(NOT_NAME_CHARS, '_')
@@ -18,7 +20,9 @@ export function tablePrefix(pkg: string): string {
   if (!prefix)
     throw new Error(`Package name ${JSON.stringify(pkg)} gives no table prefix`)
 
-  return LEADING_DIGIT.test(prefix) ? `p_${prefix}` : prefix
+  return LEADING_DIGIT.test(prefix)
+    ? `p_${prefix}`
+    : prefix
 }
 
 /** The name of a plugin's table in the database: `tableName('@mavonengine/chat', 'mutes')` → `chat_mutes` */

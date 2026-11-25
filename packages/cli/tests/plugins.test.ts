@@ -11,13 +11,22 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const LIST = {
   version: 1,
   plugins: [
-    { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring' },
+    {
+      package: '@mavonengine/http-monitoring',
+      name: 'HTTP Monitoring',
+      description: 'The dashboard in the browser',
+      target: 'server',
+      engine: '>=0.0.22',
+      homepage: 'https://example.com/monitoring',
+    },
     { package: 'forest', target: 'both' },
   ],
 }
 
 function answer(status: number, body: unknown) {
-  return vi.fn(async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status }))
+  return vi.fn(async () => new Response(typeof body === 'string'
+    ? body
+    : JSON.stringify(body), { status }))
 }
 
 let dir: string
@@ -66,7 +75,14 @@ describe('plugins.json in the repository', () => {
       expect(readFileSync(join(dir, 'README.md'), 'utf8')).toContain(pkg.name)
     }
 
-    expect(registry.plugins.map(plugin => plugin.package)).toEqual(['@mavonengine/http-monitoring', '@mavonengine/chat', '@mavonengine/sqlite', '@mavonengine/auth', '@mavonengine/mail', '@mavonengine/notifications'])
+    expect(registry.plugins.map(plugin => plugin.package)).toEqual([
+      '@mavonengine/http-monitoring',
+      '@mavonengine/chat',
+      '@mavonengine/sqlite',
+      '@mavonengine/auth',
+      '@mavonengine/mail',
+      '@mavonengine/notifications',
+    ])
   })
 
   it('is read from the main branch on GitHub', () => {
@@ -83,26 +99,69 @@ describe('plugin registry', () => {
     expect(fetch).toHaveBeenCalledWith(PLUGIN_REGISTRY_URL, expect.objectContaining({ cache: 'no-store' }))
     expect(registry.url).toBe(PLUGIN_REGISTRY_URL)
     expect(registry.plugins).toEqual([
-      { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring', readme: undefined },
-      { package: 'forest', name: 'forest', description: undefined, target: 'both', engine: undefined, homepage: undefined, readme: undefined },
+      {
+        package: '@mavonengine/http-monitoring',
+        name: 'HTTP Monitoring',
+        description: 'The dashboard in the browser',
+        target: 'server',
+        engine: '>=0.0.22',
+        homepage: 'https://example.com/monitoring',
+        readme: undefined,
+      },
+      {
+        package: 'forest',
+        name: 'forest',
+        description: undefined,
+        target: 'both',
+        engine: undefined,
+        homepage: undefined,
+        readme: undefined,
+      },
     ])
   })
 
   it('leaves out entries without a package and ignores what it doesn\'t know', () => {
-    const registry = normalizeRegistry({ version: 3, plugins: [{ name: 'Nameless' }, null, { package: 'ok', target: 'sideways', stars: 5 }] }, 'x')
+    const registry = normalizeRegistry({
+      version: 3,
+      plugins: [
+        { name: 'Nameless' },
+        null,
+        { package: 'ok', target: 'sideways', stars: 5 },
+      ],
+    }, 'x')
 
     expect(registry.version).toBe(3)
-    expect(registry.plugins).toEqual([{ package: 'ok', name: 'ok', description: undefined, target: undefined, engine: undefined, homepage: undefined, readme: undefined }])
+    expect(registry.plugins).toEqual([
+      {
+        package: 'ok',
+        name: 'ok',
+        description: undefined,
+        target: undefined,
+        engine: undefined,
+        homepage: undefined,
+        readme: undefined,
+      },
+    ])
   })
 
   it('says what is wrong when there is no list', async () => {
-    await expect(fetchPluginRegistry({ fetch: vi.fn(async () => {
-      throw new Error('getaddrinfo ENOTFOUND')
-    }) })).rejects.toThrow(/Can't reach .*ENOTFOUND/)
-    await expect(fetchPluginRegistry({ fetch: answer(404, 'Not Found') })).rejects.toThrow('was not found')
-    await expect(fetchPluginRegistry({ fetch: answer(500, 'oops') })).rejects.toThrow('500')
-    await expect(fetchPluginRegistry({ fetch: answer(200, '<html>') })).rejects.toThrow('not valid JSON')
-    await expect(fetchPluginRegistry({ fetch: answer(200, { nothing: true }) })).rejects.toBeInstanceOf(PluginRegistryError)
+    await expect(fetchPluginRegistry({
+      fetch: vi.fn(async () => {
+        throw new Error('getaddrinfo ENOTFOUND')
+      }),
+    })).rejects.toThrow(/Can't reach .*ENOTFOUND/)
+    await expect(fetchPluginRegistry({
+      fetch: answer(404, 'Not Found'),
+    })).rejects.toThrow('was not found')
+    await expect(fetchPluginRegistry({
+      fetch: answer(500, 'oops'),
+    })).rejects.toThrow('500')
+    await expect(fetchPluginRegistry({
+      fetch: answer(200, '<html>'),
+    })).rejects.toThrow('not valid JSON')
+    await expect(fetchPluginRegistry({
+      fetch: answer(200, { nothing: true }),
+    })).rejects.toBeInstanceOf(PluginRegistryError)
   })
 })
 
@@ -118,7 +177,10 @@ describe('mavonengine plugins', () => {
 
   it('prints the available plugins and how to install one', async () => {
     let output = ''
-    const code = await runPluginsCommand({ cwd: dir, url: PLUGIN_REGISTRY_URL, json: false }, { fetch: answer(200, LIST), write: text => output += text })
+    const code = await runPluginsCommand({ cwd: dir, url: PLUGIN_REGISTRY_URL, json: false }, {
+      fetch: answer(200, LIST),
+      write: text => output += text,
+    })
 
     expect(code).toBe(0)
     expect(output).toBe([
@@ -138,12 +200,24 @@ describe('mavonengine plugins', () => {
   })
 
   it('says which plugins the project already has', async () => {
-    writeFileSync(join(dir, 'mavonengine.json'), JSON.stringify({ plugins: { '@mavonengine/http-monitoring': {}, 'forest': { enabled: false } } }))
+    writeFileSync(join(dir, 'mavonengine.json'), JSON.stringify({
+      plugins: {
+        '@mavonengine/http-monitoring': {},
+        'forest': { enabled: false },
+      },
+    }))
     mkdirSync(join(dir, 'client'))
     let output = ''
 
     // From inside a workspace of the project
-    await runPluginsCommand({ cwd: join(dir, 'client'), url: PLUGIN_REGISTRY_URL, json: false }, { fetch: answer(200, LIST), write: text => output += text })
+    await runPluginsCommand({
+      cwd: join(dir, 'client'),
+      url: PLUGIN_REGISTRY_URL,
+      json: false,
+    }, {
+      fetch: answer(200, LIST),
+      write: text => output += text,
+    })
 
     expect(output).toContain('runs on server · @mavonengine/core >=0.0.22 · in this project\n')
     expect(output).toContain('runs on client + server · in this project, disabled\n')
@@ -151,9 +225,19 @@ describe('mavonengine plugins', () => {
 
   it('prints the list as JSON when asked', async () => {
     let output = ''
-    await runPluginsCommand({ cwd: dir, url: 'https://example.com/mine.json', json: true }, { fetch: answer(200, LIST), write: text => output += text })
+    await runPluginsCommand({ cwd: dir, url: 'https://example.com/mine.json', json: true }, {
+      fetch: answer(200, LIST),
+      write: text => output += text,
+    })
 
-    expect(JSON.parse(output)).toMatchObject({ url: 'https://example.com/mine.json', version: 1, plugins: [{ package: '@mavonengine/http-monitoring' }, { package: 'forest' }] })
+    expect(JSON.parse(output)).toMatchObject({
+      url: 'https://example.com/mine.json',
+      version: 1,
+      plugins: [
+        { package: '@mavonengine/http-monitoring' },
+        { package: 'forest' },
+      ],
+    })
   })
 
   it('copes with an empty list, a newer format and a broken mavonengine.json', () => {

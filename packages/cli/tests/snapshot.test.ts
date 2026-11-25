@@ -26,20 +26,46 @@ describe('normalizeSnapshot', () => {
   it('survives garbage', () => {
     expect(() => normalizeSnapshot(null)).not.toThrow()
     expect(() => normalizeSnapshot('nope')).not.toThrow()
-    expect(normalizeSnapshot({ players: [null, 3, { id: 'a' }] }).players).toEqual([
-      { id: 'a', displayName: 'a', position: { x: 0, y: 0, z: 0 }, lastProcessedSequenceId: 0, trackedEntities: 0, connectedFor: 0, connection: null, account: null },
+    expect(normalizeSnapshot({
+      players: [
+        null,
+        3,
+        { id: 'a' },
+      ],
+    }).players).toEqual([
+      {
+        id: 'a',
+        displayName: 'a',
+        position: { x: 0, y: 0, z: 0 },
+        lastProcessedSequenceId: 0,
+        trackedEntities: 0,
+        connectedFor: 0,
+        connection: null,
+        account: null,
+      },
     ])
   })
 
   it('reads the account of a player, and none from servers without an auth plugin or from before accounts', () => {
-    const players = normalizeSnapshot({ players: [
-      { id: 'a', account: { id: 'acc-1', name: 'Ada', guest: false } },
-      { id: 'b', account: { id: 'acc-2', guest: true } },
-      { id: 'c', account: null },
-      // A server from before accounts sends no field at all
-      { id: 'd' },
-      { id: 'e', account: { name: 'no id' } },
-    ] }).players
+    const players = normalizeSnapshot({
+      players: [
+        {
+          id: 'a',
+          account: { id: 'acc-1', name: 'Ada', guest: false },
+        },
+        {
+          id: 'b',
+          account: { id: 'acc-2', guest: true },
+        },
+        { id: 'c', account: null },
+        // A server from before accounts sends no field at all
+        { id: 'd' },
+        {
+          id: 'e',
+          account: { name: 'no id' },
+        },
+      ],
+    }).players
 
     expect(players.map(player => player.account)).toEqual([
       { id: 'acc-1', name: 'Ada', guest: false },
@@ -51,12 +77,27 @@ describe('normalizeSnapshot', () => {
   })
 
   it('keeps unknown connection details as null', () => {
-    const [player] = normalizeSnapshot({ players: [{ id: 'a', connection: { address: 7, rttMs: Number.NaN, bytesSent: 10 } }] }).players
-    expect(player.connection).toEqual({ address: null, rttMs: null, bytesSent: 10, bytesReceived: 0 })
+    const [player] = normalizeSnapshot({
+      players: [
+        {
+          id: 'a',
+          connection: { address: 7, rttMs: Number.NaN, bytesSent: 10 },
+        },
+      ],
+    }).players
+    expect(player.connection).toEqual({
+      address: null,
+      rttMs: null,
+      bytesSent: 10,
+      bytesReceived: 0,
+    })
   })
 
   it('replaces non-finite numbers', () => {
-    const snapshot = normalizeSnapshot({ cpu: { current: Number.NaN, avg1s: 'x' }, sampleIntervalMs: 0 })
+    const snapshot = normalizeSnapshot({
+      cpu: { current: Number.NaN, avg1s: 'x' },
+      sampleIntervalMs: 0,
+    })
 
     expect(snapshot.cpu.current).toBe(0)
     expect(snapshot.cpu.avg1s).toBe(0)
@@ -64,7 +105,10 @@ describe('normalizeSnapshot', () => {
   })
 
   it('ignores fields it does not know', () => {
-    const snapshot = normalizeSnapshot({ uptime: 5, somethingNew: { a: 1 } })
+    const snapshot = normalizeSnapshot({
+      uptime: 5,
+      somethingNew: { a: 1 },
+    })
 
     expect(snapshot.uptime).toBe(5)
     expect(snapshot).not.toHaveProperty('somethingNew')
@@ -73,8 +117,21 @@ describe('normalizeSnapshot', () => {
 
 describe('normalizeLogs', () => {
   it('fills in missing fields and drops garbage entries', () => {
-    expect(normalizeLogs({ entries: [{ id: 4, message: 'hi' }, null, 'x'] })).toEqual({
-      entries: [{ id: 4, timestamp: 0, level: 'info', message: 'hi' }],
+    expect(normalizeLogs({
+      entries: [
+        { id: 4, message: 'hi' },
+        null,
+        'x',
+      ],
+    })).toEqual({
+      entries: [
+        {
+          id: 4,
+          timestamp: 0,
+          level: 'info',
+          message: 'hi',
+        },
+      ],
       latestId: 4,
     })
   })
@@ -86,13 +143,30 @@ describe('normalizeLogs', () => {
 
 describe('normalizeSnapshot queue', () => {
   it('fills in the queue\'s samples', () => {
-    const snapshot = normalizeSnapshot({ queue: { driver: 'memory', history: [{ timestamp: 1, size: 3 }, null] } })
+    const snapshot = normalizeSnapshot({
+      queue: {
+        driver: 'memory',
+        history: [
+          { timestamp: 1, size: 3 },
+          null,
+        ],
+      },
+    })
 
     expect(snapshot.queue).toEqual({
       driver: 'memory',
       working: true,
       latest: null,
-      history: [{ timestamp: 1, size: 3, running: 0, processed: 0, retried: 0, failed: 0 }],
+      history: [
+        {
+          timestamp: 1,
+          size: 3,
+          running: 0,
+          processed: 0,
+          retried: 0,
+          failed: 0,
+        },
+      ],
     })
   })
 })

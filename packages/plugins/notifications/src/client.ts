@@ -132,7 +132,9 @@ function stateOf(game: object): ClientState {
         return { notifications: result.notifications ?? [], unread: result.unread }
       },
       markRead: async (ids) => {
-        const result = await request(created, READ_MESSAGE, ids ? { ids } : {})
+        const result = await request(created, READ_MESSAGE, ids
+          ? { ids }
+          : {})
         return { marked: result.marked ?? 0, unread: result.unread }
       },
       get unread() {
@@ -200,7 +202,9 @@ const plugin: ClientPlugin = {
 
     socket.on(RESULT_MESSAGE, (data) => {
       const result = data as NotificationsResult | null
-      const pending = result && typeof result.requestId === 'string' ? state.pending.get(result.requestId) : undefined
+      const pending = result && typeof result.requestId === 'string'
+        ? state.pending.get(result.requestId)
+        : undefined
       if (!pending)
         return
       clearTimeout(pending.timer)

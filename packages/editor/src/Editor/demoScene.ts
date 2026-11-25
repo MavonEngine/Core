@@ -6,7 +6,18 @@ import { SCENE_FORMAT_VERSION } from '@mavonengine/core/Scene/types'
 export const DEFAULT_SCENE_NAME = 'main'
 
 function object(id: string, type: string, position: [number, number, number], props?: Record<string, unknown>): SceneObjectData {
-  return { id, type, transform: { position, rotation: [0, 0, 0], scale: [1, 1, 1] }, ...(props ? { props } : {}) }
+  return {
+    id,
+    type,
+    transform: {
+      position,
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    },
+    ...(props
+      ? { props }
+      : {}),
+  }
 }
 
 /**
@@ -24,7 +35,12 @@ export function demoScene(): SceneData {
     objects: [
       object('ambient_light', lightType('AmbientLight'), [0, 5, 0]),
       object('sun', lightType('DirectionalLightShadow'), [10, 15, 5], { intensity: 5, castShadow: true }),
-      object('ground', primitiveType('Plane'), [0, 0, 0], { width: 50, height: 50, color: '#ffbe6f', receiveShadow: true }),
+      object('ground', primitiveType('Plane'), [0, 0, 0], {
+        width: 50,
+        height: 50,
+        color: '#ffbe6f',
+        receiveShadow: true,
+      }),
       shape('box', 'Box', [r, 0.5, 0]),
       shape('sphere', 'Sphere', [d, 1, d]),
       shape('cone', 'Cone', [0, 0.5, r]),

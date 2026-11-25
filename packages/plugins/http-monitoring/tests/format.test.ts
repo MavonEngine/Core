@@ -16,15 +16,27 @@ describe('format', () => {
   })
 
   it('colors HTTP statuses', () => {
-    expect([null, 503, 404, 301, 200].map(statusClass)).toEqual(['danger', 'danger', 'warning', 'info', 'success'])
+    expect([null, 503, 404, 301, 200].map(statusClass)).toEqual([
+      'danger',
+      'danger',
+      'warning',
+      'info',
+      'success',
+    ])
   })
 
   it('sorts players by id and only shows names once a game sets them', () => {
-    const players = [{ id: 'b', displayName: 'b' }, { id: 'a', displayName: 'a' }]
+    const players = [
+      { id: 'b', displayName: 'b' },
+      { id: 'a', displayName: 'a' },
+    ]
 
     expect(sortedPlayers(players).map(p => p.id)).toEqual(['a', 'b'])
     expect(showNames(players)).toBe(false)
-    expect(showNames([...players, { id: 'c', displayName: 'Carol' }])).toBe(true)
+    expect(showNames([
+      ...players,
+      { id: 'c', displayName: 'Carol' },
+    ])).toBe(true)
   })
 
   it('keeps the newest feed entries', () => {
@@ -47,19 +59,46 @@ describe('format', () => {
     expect(accountLabel({ id: 'g1', name: 'Guest-12', guest: true })).toBe('Guest-12 (guest)')
     expect(accountLabel({ id: 'a2' })).toBe('a2')
     // The column only shows when someone has an account, as on a server without auth, or older than accounts
-    expect(showAccounts([{ account: null }, {}])).toBe(false)
-    expect(showAccounts([{ account: null }, { account: { id: 'a1' } }])).toBe(true)
+    expect(showAccounts([
+      { account: null },
+      {},
+    ])).toBe(false)
+    expect(showAccounts([
+      { account: null },
+      {
+        account: { id: 'a1' },
+      },
+    ])).toBe(true)
   })
 
   it('titles and totals the queue like the CLI', () => {
-    const sample = (timestamp: number, processed: number, retried: number, failed: number) => ({ timestamp, size: 0, running: 0, processed, retried, failed })
-    const queue = { driver: 'database', working: true, latest: null, history: [sample(0, 2, 0, 0), sample(30_000, 3, 1, 1), sample(90_000, 1, 0, 2)] }
+    const sample = (timestamp: number, processed: number, retried: number, failed: number) => ({
+      timestamp,
+      size: 0,
+      running: 0,
+      processed,
+      retried,
+      failed,
+    })
+    const queue = {
+      driver: 'database',
+      working: true,
+      latest: null,
+      history: [
+        sample(0, 2, 0, 0),
+        sample(30_000, 3, 1, 1),
+        sample(90_000, 1, 0, 2),
+      ],
+    }
 
     expect(queueTitle(queue)).toBe('Queue (database)')
     expect(queueTitle({ ...queue, driver: 'memory', working: false })).toBe('Queue (memory, not worked here)')
     expect(queueTotals(queue)).toEqual({ processed: 6, retried: 1, failed: 3 })
     expect(queueWindow(queue)).toBe('2m')
-    expect(queueWindow({ ...queue, history: queue.history.slice(0, 2) })).toBe('30s')
+    expect(queueWindow({
+      ...queue,
+      history: queue.history.slice(0, 2),
+    })).toBe('30s')
     expect(queueWindow({ ...queue, history: [] })).toBe('0s')
   })
 })

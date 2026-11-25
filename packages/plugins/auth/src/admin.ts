@@ -35,7 +35,9 @@ const NOTICES: Record<string, (req: Request) => { text: string, error?: boolean 
   'enabled': () => ({ text: 'The account can log in again.' }),
   'logged-out': (req) => {
     const ended = Math.max(0, Number(req.query.ended) || 0)
-    return { text: `Logged out everywhere: ${ended} session${ended === 1 ? '' : 's'} ended.` }
+    return { text: `Logged out everywhere: ${ended} session${ended === 1
+      ? ''
+      : 's'} ended.` }
   },
   'missing': () => ({ text: 'There is no such account any more.', error: true }),
   'unavailable': () => ({ text: 'Accounts are unavailable: the auth plugin has no database.', error: true }),
@@ -58,7 +60,9 @@ function formatTime(iso: string | null): string {
 }
 
 function badge(text: string, cls = ''): string {
-  return `<span class="adm-badge${cls ? ` ${cls}` : ''}">${escapeHtml(text)}</span>`
+  return `<span class="adm-badge${cls
+    ? ` ${cls}`
+    : ''}">${escapeHtml(text)}</span>`
 }
 
 function card(label: string, value: number): string {
@@ -72,7 +76,9 @@ function queryString(params: Record<string, string | number | undefined>): strin
       query.set(key, String(value))
   }
   const text = query.toString()
-  return text ? `?${text}` : ''
+  return text
+    ? `?${text}`
+    : ''
 }
 
 /**
@@ -118,16 +124,22 @@ function readForm(req: Request): Promise<Record<string, string>> {
 function accountRow(account: AccountListing, online: number, actionBase: string, back: string): string {
   const action = (name: Action, label: string, cls = '') => `<form class="adm-inline-form" method="post" action="${escapeHtml(`${actionBase}/${encodeURIComponent(account.id)}/${name}`)}">
           <input type="hidden" name="back" value="${escapeHtml(back)}">
-          <button type="submit" class="adm-button${cls ? ` ${cls}` : ''}">${escapeHtml(label)}</button>
+          <button type="submit" class="adm-button${cls
+            ? ` ${cls}`
+            : ''}">${escapeHtml(label)}</button>
         </form>`
 
   const login = [
-    account.username ? escapeHtml(account.username) : '',
+    account.username
+      ? escapeHtml(account.username)
+      : '',
     ...account.providers.filter(provider => provider !== 'password').map(provider => badge(provider)),
   ].filter(Boolean).join(' ') || '<span class="adm-muted">—</span>'
 
   const email = account.email
-    ? `${escapeHtml(account.email)} ${account.emailVerifiedAt ? badge('verified', 'adm-success') : badge('unverified', 'adm-muted')}`
+    ? `${escapeHtml(account.email)} ${account.emailVerifiedAt
+      ? badge('verified', 'adm-success')
+      : badge('unverified', 'adm-muted')}`
     : '<span class="adm-muted">—</span>'
 
   const status = account.disabledAt
@@ -137,7 +149,9 @@ function accountRow(account: AccountListing, online: number, actionBase: string,
       : '<span class="adm-muted">offline</span>'
 
   return `<tr>
-      <td>${escapeHtml(account.name)}${account.guest ? ` ${badge('guest', 'adm-warning')}` : ''}<br><span class="adm-muted adm-small">${escapeHtml(account.id)}</span></td>
+      <td>${escapeHtml(account.name)}${account.guest
+        ? ` ${badge('guest', 'adm-warning')}`
+        : ''}<br><span class="adm-muted adm-small">${escapeHtml(account.id)}</span></td>
       <td>${login}</td>
       <td>${email}</td>
       <td>${account.sessions}</td>
@@ -145,8 +159,12 @@ function accountRow(account: AccountListing, online: number, actionBase: string,
       <td>${formatTime(account.createdAt)}</td>
       <td>${formatTime(account.lastLoginAt)}</td>
       <td><div class="adm-actions">
-        ${account.disabledAt ? action('enable', 'Enable') : action('disable', 'Disable', 'adm-button-danger')}
-        ${account.sessions > 0 || online > 0 ? action('logout', 'Log out') : ''}
+        ${account.disabledAt
+          ? action('enable', 'Enable')
+          : action('disable', 'Disable', 'adm-button-danger')}
+        ${account.sessions > 0 || online > 0
+          ? action('logout', 'Log out')
+          : ''}
       </div></td>
     </tr>`
 }
@@ -157,33 +175,54 @@ async function renderAccounts(req: Request, admin: AdminApi, deps: AdminPageDeps
     return { html: `<div class="adm-page"><p class="adm-notice adm-danger">Accounts are unavailable: the auth plugin has no database. Install a database plugin such as <code>@mavonengine/sqlite</code>.</p></div>` }
   }
 
-  const search = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : ''
+  const search = typeof req.query.q === 'string'
+    ? req.query.q.trim().slice(0, 200)
+    : ''
   const offset = Math.max(0, Math.floor(Number(req.query.offset) || 0))
-  const pageUrl = `${admin.url(filter ? `${ADMIN_PAGE}/${filter}` : ADMIN_PAGE)}/`
+  const pageUrl = `${admin.url(filter
+    ? `${ADMIN_PAGE}/${filter}`
+    : ADMIN_PAGE)}/`
   const [{ accounts, total }, stats] = await Promise.all([
     store.listAccounts(PAGE_SIZE, offset, { search: search || undefined, filter }),
     store.stats(),
   ])
 
-  const notice = typeof req.query.notice === 'string' ? NOTICES[req.query.notice]?.(req) : undefined
+  const notice = typeof req.query.notice === 'string'
+    ? NOTICES[req.query.notice]?.(req)
+    : undefined
   // Where an action sends the admin back to: this page as it is, without the notice of the last action
   const back = `${pageUrl}${queryString({ q: search, offset })}`
   const actionBase = admin.url(`${ADMIN_PAGE}/actions`)
 
-  const from = total === 0 ? 0 : offset + 1
+  const from = total === 0
+    ? 0
+    : offset + 1
   const to = Math.min(total, offset + accounts.length)
-  const previous = offset > 0 ? `${pageUrl}${queryString({ q: search, offset: Math.max(0, offset - PAGE_SIZE) })}` : undefined
-  const next = to < total ? `${pageUrl}${queryString({ q: search, offset: offset + PAGE_SIZE })}` : undefined
+  const previous = offset > 0
+    ? `${pageUrl}${queryString({
+      q: search,
+      offset: Math.max(0, offset - PAGE_SIZE),
+    })}`
+    : undefined
+  const next = to < total
+    ? `${pageUrl}${queryString({ q: search, offset: offset + PAGE_SIZE })}`
+    : undefined
   const pagerLink = (href: string | undefined, label: string) => href
     ? `<a class="adm-button" href="${escapeHtml(href)}">${label}</a>`
     : `<a class="adm-button" aria-disabled="true">${label}</a>`
 
   const empty = search
     ? `No accounts match “${escapeHtml(search)}”.`
-    : filter === 'guests' ? 'No guest accounts.' : filter === 'disabled' ? 'No disabled accounts.' : 'No accounts yet.'
+    : filter === 'guests'
+      ? 'No guest accounts.'
+      : filter === 'disabled'
+        ? 'No disabled accounts.'
+        : 'No accounts yet.'
 
   const html = `<div class="adm-page">
-  ${notice ? `<p class="adm-notice${notice.error ? ' adm-danger' : ''}">${escapeHtml(notice.text)}</p>` : ''}
+  ${notice
+    ? `<p class="adm-notice${notice.error ? ' adm-danger' : ''}">${escapeHtml(notice.text)}</p>`
+    : ''}
   ${filter
     ? ''
     : `<div class="adm-cards">
@@ -196,7 +235,9 @@ async function renderAccounts(req: Request, admin: AdminApi, deps: AdminPageDeps
   <form class="adm-toolbar" method="get" action="${escapeHtml(pageUrl)}" role="search">
     <input class="adm-input" type="search" name="q" value="${escapeHtml(search)}" placeholder="Name, email, username or id" aria-label="Search accounts">
     <button type="submit" class="adm-button adm-button-primary">Search</button>
-    ${search ? `<a class="adm-button" href="${escapeHtml(pageUrl)}">Clear</a>` : ''}
+    ${search
+      ? `<a class="adm-button" href="${escapeHtml(pageUrl)}">Clear</a>`
+      : ''}
     <span class="adm-spacer"></span>
     <span class="adm-muted">${from}–${to} of ${total}</span>
   </form>
@@ -208,7 +249,9 @@ async function renderAccounts(req: Request, admin: AdminApi, deps: AdminPageDeps
     </tbody>
   </table></div>`
     : `<p class="adm-muted">${empty}</p>`}
-  ${previous || next ? `<div class="adm-pager">${pagerLink(previous, '← Newer')}${pagerLink(next, 'Older →')}</div>` : ''}
+  ${previous || next
+    ? `<div class="adm-pager">${pagerLink(previous, '← Newer')}${pagerLink(next, 'Older →')}</div>`
+    : ''}
 </div>`
 
   return { html }
@@ -226,8 +269,16 @@ export function mountAdminPages(app: Express, admin: AdminApi, deps: AdminPageDe
     icon: 'users',
     order: 20,
     children: [
-      { label: 'Guests', href: 'guests', render: req => renderAccounts(req, admin, deps, 'guests') },
-      { label: 'Disabled', href: 'disabled', render: req => renderAccounts(req, admin, deps, 'disabled') },
+      {
+        label: 'Guests',
+        href: 'guests',
+        render: req => renderAccounts(req, admin, deps, 'guests'),
+      },
+      {
+        label: 'Disabled',
+        href: 'disabled',
+        render: req => renderAccounts(req, admin, deps, 'disabled'),
+      },
     ],
     render: req => renderAccounts(req, admin, deps),
   })
@@ -252,7 +303,9 @@ export function mountAdminPages(app: Express, admin: AdminApi, deps: AdminPageDe
 
       const form = await readForm(req)
       // Only back to a page of this plugin's: anything else would make this an open redirect
-      const back = typeof form.back === 'string' && form.back.startsWith(`${base}/`) && !form.back.includes('\\') ? form.back : `${base}/`
+      const back = typeof form.back === 'string' && form.back.startsWith(`${base}/`) && !form.back.includes('\\')
+        ? form.back
+        : `${base}/`
       const goBack = (params: Record<string, string | number>) => {
         const url = new URL(back, 'http://panel')
         url.searchParams.delete('notice')
@@ -275,7 +328,9 @@ export function mountAdminPages(app: Express, admin: AdminApi, deps: AdminPageDe
         return
       }
 
-      const found = action === 'disable' ? await deps.disable(id) : await deps.enable(id)
+      const found = action === 'disable'
+        ? await deps.disable(id)
+        : await deps.enable(id)
       if (!found) {
         goBack({ notice: 'missing' })
         return

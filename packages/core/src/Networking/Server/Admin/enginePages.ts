@@ -53,14 +53,35 @@ function rapierVersionOrUndefined(): string | undefined {
 
 function runtimeCard(sources: EnginePageSources): string {
   const physics = sources.inspector?.physics()
-  const rapier = physics ? rapierVersionOrUndefined() : undefined
+  const rapier = physics
+    ? rapierVersionOrUndefined()
+    : undefined
   return valuesCard('Runtime', [
-    ['Engine', escapeHtml(version)],
+    [
+      'Engine',
+      escapeHtml(version),
+    ],
     ['Three.js', `r${escapeHtml(THREE_REVISION)}`],
-    ['Rapier', physics ? (rapier ? escapeHtml(rapier) : 'in use') : muted('not used on the server')],
-    ['Node.js', escapeHtml(process.version)],
-    ['Mode', escapeHtml(process.env.NODE_ENV || 'development')],
-    ['Platform', escapeHtml(`${process.platform} ${process.arch}`)],
+    [
+      'Rapier',
+      physics
+        ? (rapier
+            ? escapeHtml(rapier)
+            : 'in use')
+        : muted('not used on the server'),
+    ],
+    [
+      'Node.js',
+      escapeHtml(process.version),
+    ],
+    [
+      'Mode',
+      escapeHtml(process.env.NODE_ENV || 'development'),
+    ],
+    [
+      'Platform',
+      escapeHtml(`${process.platform} ${process.arch}`),
+    ],
   ])
 }
 
@@ -70,12 +91,34 @@ function sceneGraphCard(sources: EnginePageSources): string {
     return ''
   const types = Object.entries(graph.byType)
   return valuesCard('Server scene graph (three.js)', [
-    ['Objects', formatNumber(graph.objects)],
-    ['Meshes', formatNumber(graph.meshes)],
-    ['Triangles', formatNumber(graph.triangles)],
-    ['Lights', formatNumber(graph.lights)],
-    ...types.slice(0, 6).map(([type, count]): [string, string] => [type, formatNumber(count)]),
-    ...(types.length > 6 ? [['Other types', formatNumber(types.slice(6).reduce((sum, [, count]) => sum + count, 0))] as [string, string]] : []),
+    [
+      'Objects',
+      formatNumber(graph.objects),
+    ],
+    [
+      'Meshes',
+      formatNumber(graph.meshes),
+    ],
+    [
+      'Triangles',
+      formatNumber(graph.triangles),
+    ],
+    [
+      'Lights',
+      formatNumber(graph.lights),
+    ],
+    ...types.slice(0, 6).map(([type, count]): [string, string] => [
+      type,
+      formatNumber(count),
+    ]),
+    ...(types.length > 6
+      ? [
+          [
+            'Other types',
+            formatNumber(types.slice(6).reduce((sum, [, count]) => sum + count, 0)),
+          ] as [string, string],
+        ]
+      : []),
   ])
 }
 
@@ -86,13 +129,31 @@ function physicsCard(sources: EnginePageSources): string {
   if (!physics)
     return `<section class="adm-card"><h2>Physics (Rapier)</h2><p class="adm-muted">The server runs without a physics world.</p></section>`
   return valuesCard('Physics (Rapier)', [
-    ['Bodies', formatNumber(physics.bodies)],
-    ['Dynamic', formatNumber(physics.dynamic)],
-    ['Fixed', formatNumber(physics.fixed)],
-    ['Kinematic', formatNumber(physics.kinematic)],
+    [
+      'Bodies',
+      formatNumber(physics.bodies),
+    ],
+    [
+      'Dynamic',
+      formatNumber(physics.dynamic),
+    ],
+    [
+      'Fixed',
+      formatNumber(physics.fixed),
+    ],
+    [
+      'Kinematic',
+      formatNumber(physics.kinematic),
+    ],
     ['Sleeping', `${formatNumber(physics.sleeping)} ${muted(`of ${physics.bodies}`)}`],
-    ['Colliders', formatNumber(physics.colliders)],
-    ['Gravity', escapeHtml(formatVector(physics.gravity))],
+    [
+      'Colliders',
+      formatNumber(physics.colliders),
+    ],
+    [
+      'Gravity',
+      escapeHtml(formatVector(physics.gravity)),
+    ],
     ['Timestep', `${Number((physics.timestep * 1000).toFixed(2))} ms`],
   ])
 }
@@ -148,7 +209,13 @@ export function registerEnginePages(panel: AdminPanel, sources: EnginePageSource
       const routes = sources.routes()
       return `<div class="adm-page">
   <p class="adm-muted">Every HTTP endpoint of this server: the engine's, the game's and those of plugins.</p>
-  ${table(['Method', 'Path', 'From', 'What it does', 'Auth'], routes.map(route => [
+  ${table([
+    'Method',
+    'Path',
+    'From',
+    'What it does',
+    'Auth',
+  ], routes.map(route => [
     `<span class="adm-badge">${escapeHtml(route.method)}</span>`,
     `${escapeHtml(route.path)}${route.devOnly ? ' <span class="adm-badge adm-warning">dev</span>' : ''}`,
     escapeHtml(route.plugin ?? route.source),
@@ -167,7 +234,13 @@ export function registerEnginePages(panel: AdminPanel, sources: EnginePageSource
       icon: 'plugin',
       order: 20,
       render: () => `<div class="adm-page">
-  ${table(['Package', 'Version', 'Status', 'Role', 'Description'], plugins().map((plugin) => {
+  ${table([
+    'Package',
+    'Version',
+    'Status',
+    'Role',
+    'Description',
+  ], plugins().map((plugin) => {
     const status = !plugin.enabled
       ? '<span class="adm-muted">disabled</span>'
       : plugin.problem
@@ -176,7 +249,13 @@ export function registerEnginePages(panel: AdminPanel, sources: EnginePageSource
           ? '<span class="adm-success">running</span>'
           : '<span class="adm-muted">not on the server</span>'
     const roles = (['database', 'auth', 'notifications'] as const).filter(role => plugin[role]).map(role => `<span class="adm-badge">${role}</span>`).join(' ')
-    return [escapeHtml(plugin.package), escapeHtml(plugin.version ?? ''), status, roles, `<span class="adm-muted">${escapeHtml(plugin.description ?? '')}</span>`]
+    return [
+      escapeHtml(plugin.package),
+      escapeHtml(plugin.version ?? ''),
+      status,
+      roles,
+      `<span class="adm-muted">${escapeHtml(plugin.description ?? '')}</span>`,
+    ]
   }), 'No plugins')}
 </div>`,
     })
