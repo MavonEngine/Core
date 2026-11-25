@@ -185,7 +185,7 @@ async function main() {
     await waitFor(player, () => window.Game?.network?.connected)
     check(await player.evaluate(() => window.Game.network.identity?.id) === eve.account.id, 'with the session, the game connects as that account (network.identity)')
     check(await player.evaluate(() => window.Game.network.connectError) === null, 'without a connect error')
-    check(server.output().includes(`as Eve (${eve.account.id})`), 'the server knows the connection is Eve\'s account')
+    check(await server.waitForOutput(`as Eve (${eve.account.id})`), 'the server knows the connection is Eve\'s account')
 
     // Its own browser context: its own localStorage, so its own session
     const visitor = await (await browser.newContext({ viewport: { width: 1000, height: 700 } })).newPage()
@@ -197,8 +197,8 @@ async function main() {
     await joinGame(visitor, 'Visitor')
     await waitFor(visitor, () => window.Game?.network?.connected)
     check(await visitor.evaluate(() => window.Game.network.identity?.guest) === true, 'the guest joins as its guest account')
-    check(server.output().includes(`as ${visiting.account.name} (${visiting.account.id})`), 'the server knows the guest too')
-    check(server.output().includes('2 total players connected'), 'the guest plays next to the registered player')
+    check(await server.waitForOutput(`as ${visiting.account.name} (${visiting.account.id})`), 'the server knows the guest too')
+    check(await server.waitForOutput('2 total players connected'), 'the guest plays next to the registered player')
     check(pageErrors.length === 0, `no errors in the pages${pageErrors.length ? `: ${pageErrors.join('; ')}` : ''}`)
 
     log('\nauth e2e passed')

@@ -22,7 +22,9 @@ export interface XROptions {
   input?: XRInputOptions | false
   /**
    * Keep drawing the game in the browser window while a headset plays, from the player's head, e.g. for someone
-   * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`
+   * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`.
+   * Drawing to the page can tie the session to the monitor's refresh: a Valve Index through SteamVR in Chrome on
+   * Linux ran at the monitor's 60 Hz with it, and at the headset's rate without
    */
   mirror?: boolean | XRMirrorOptions
 }
@@ -214,6 +216,11 @@ export default class XR {
  *   headset's GL projection into the reversed buffer: the depth test inverted, the far side drawn over the near.
  *   After three found the view's frustum from the GL projections (it reads the near and far planes off them), the
  *   eyes, and the game's camera that three gives their union, get the reversed form instead.
+ * - **Reversed depth for the compositor**: the headset reads the depth buffer to correct the picture for the head's
+ *   movement since it was rendered (positional timewarp, space warp), by the session's depthNear and depthFar. Read
+ *   the GL way, a reversed buffer puts the far landscape right at the eyes, and it jitters as the head moves. The
+ *   session is given them swapped (WebXR lets depthNear be the larger), which is how reversed depth reads, and the
+ *   headset's projections come with the near plane at +1: they're turned the GL way for three first.
  * - **Off-screen renders**: while presenting, `render()` draws through the headset's cameras whatever it's given,
  *   into a render target too, e.g. an environment map, a lookup table or a mirror. Renders into a target that isn't
  *   the headset's render with the camera they were given, as three's own Reflector does it.
@@ -221,14 +228,40 @@ export default class XR {
 function patchRenderer(renderer: WebGLRenderer) {
   const xr = renderer.xr
   const updateCamera = xr.updateCamera.bind(xr)
+  // The eyes' GL projections this frame, as three reads them: updateCamera can run more than once a frame
+  let frame: XRFrame | null = null
+  const glEyes: Matrix4[] = []
+  let requested = ''
+
   xr.updateCamera = (camera: PerspectiveCamera) => {
-    updateCamera(camera)
-    if (!renderer.state.buffers.depth.getReversed())
+    if (!renderer.state.buffers.depth.getReversed()) {
+      updateCamera(camera)
       return
-    for (const eye of xr.getCamera().cameras)
+    }
+
+    const eyes = xr.getCamera().cameras
+    if (xr.getFrame() !== frame) {
+      frame = xr.getFrame()
+      eyes.forEach((eye, i) => (glEyes[i] ??= eye.projectionMatrix.clone()).copy(glDepthOrder(eye.projectionMatrix, camera.near)))
+    }
+    eyes.forEach((eye, i) => eye.projectionMatrix.copy(glEyes[i]))
+    updateCamera(camera)
+    for (const eye of eyes)
       reverseDepth(eye)
     reverseDepth(camera)
+
+    // After three's own updateRenderState (sent when the camera's planes change), so this one wins
+    const session = xr.getSession()
+    const planes = `${camera.far}|${camera.near}`
+    if (session && planes !== requested) {
+      session.updateRenderState({ depthNear: camera.far, depthFar: camera.near })
+      requested = planes
+    }
   }
+  xr.addEventListener('sessionend', () => {
+    frame = null
+    requested = ''
+  })
 
   const render = renderer.render.bind(renderer)
   renderer.render = (scene, camera) => {
@@ -245,6 +278,22 @@ function patchRenderer(renderer: WebGLRenderer) {
       xr.enabled = true
     }
   }
+}
+
+/**
+ * A headset's projection in GL's order (-1 at the near plane, 1 at the far one). Given the planes swapped, the headset
+ * puts the near one at +1: the same projection with z negated. Told by where the near plane lands, in case a browser
+ * didn't take the swap.
+ */
+export function glDepthOrder(m: Matrix4, near: number): Matrix4 {
+  const e = m.elements
+  const z = -e[10] * near + e[14]
+  const w = -e[11] * near + e[15]
+  if (z / w > 0) {
+    for (const column of [0, 4, 8, 12])
+      e[column + 2] = -e[column + 2]
+  }
+  return m
 }
 
 /** Turn a camera's GL depth projection (as WebXR hands it out) into the reversed depth buffer's: 1 near, 0 far */

@@ -22,6 +22,8 @@ export default class PlayerController extends GameObject {
   /** Third person controls in a VR headset, when the game has VR */
   vrControls?: VRControls
   private lastMove?: object
+  /** Whether the last update was in VR, to catch the frame a session ends */
+  private wasInVR = false
   private lastSentAt = 0
 
   constructor(player: Character) {
@@ -49,9 +51,14 @@ export default class PlayerController extends GameObject {
     // Smoothly follow player. In VR the headset and VRControls place the view instead
     if (!inVR) {
       const desiredTarget = new Vector3().copy(this.player.position).add(new Vector3(0, 0.5, 0))
-      this.orbitControls.target.lerp(desiredTarget, 0.1)
+      // The target stood still in VR, where the character may have walked far away: start from the character
+      if (this.wasInVR)
+        this.orbitControls.target.copy(desiredTarget)
+      else
+        this.orbitControls.target.lerp(desiredTarget, 0.1)
       this.orbitControls.update(delta)
     }
+    this.wasInVR = inVR
 
     this.player.update(delta)
 

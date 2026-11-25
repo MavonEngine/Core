@@ -45,6 +45,7 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     getSession: vi.fn((): any => null),
     updateCamera: vi.fn(),
     getCamera: () => ({ cameras: eyes }),
+    getFrame: vi.fn((): any => ({})),
   })
   const depth = { reversed: false }
   const draw = vi.fn()
@@ -302,6 +303,35 @@ describe('xr', () => {
         expect(c.reversedDepth).toBe(true)
         expect(c.projectionMatrix.equals(reverseDepthMatrix(gl.clone()))).toBe(true)
       }
+    })
+
+    it('takes the headset\'s projection with the planes swapped, once a frame, and tells the session depth is reversed', () => {
+      const { xr, depth, eyes } = setup()
+      depth.reversed = true
+      const session = {
+        updateRenderState: vi.fn(),
+      }
+      xr.getSession.mockReturnValue(session)
+      const frame = {}
+      xr.getFrame.mockReturnValue(frame)
+      const camera = new PerspectiveCamera(50, 1, 0.1, 100)
+      // what the headset gives with depthNear 100 and depthFar 0.1: the near plane at +1
+      const swapped = new Matrix4().makePerspective(-0.1, 0.1, 0.1, -0.1, 0.1, 100)
+      const [near, far] = [100, 0.1]
+      swapped.elements[10] = -(far + near) / (far - near)
+      swapped.elements[14] = -2 * far * near / (far - near)
+      const expected = reverseDepthMatrix(new Matrix4().makePerspective(-0.1, 0.1, 0.1, -0.1, 0.1, 100))
+      for (const eye of eyes)
+        eye.projectionMatrix.copy(swapped)
+
+      xr.updateCamera(camera)
+      xr.updateCamera(camera)
+
+      for (const eye of eyes) {
+        eye.projectionMatrix.elements.forEach((v, i) => expect(v).toBeCloseTo(expected.elements[i]))
+      }
+      expect(session.updateRenderState).toHaveBeenCalledTimes(1)
+      expect(session.updateRenderState).toHaveBeenCalledWith({ depthNear: 100, depthFar: 0.1 })
     })
 
     it('leaves the projections alone with a normal depth buffer', () => {
