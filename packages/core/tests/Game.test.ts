@@ -163,6 +163,21 @@ describe('game', () => {
     expect(mockParticleSystem.update).toHaveBeenCalledWith(0.016)
   })
 
+  it('triggers beforeRender on each rendered frame, before rendering', () => {
+    const game = new Game([])
+    const render = mockRenderer.instance.setAnimationLoop.mock.calls[0][0]
+    const beforeRender = vi.fn(() => expect(mockRenderer.update).not.toHaveBeenCalled())
+    game.on('beforeRender', beforeRender)
+
+    mockRenderer.shouldRender.mockReturnValueOnce(false)
+    render(8)
+    expect(beforeRender).not.toHaveBeenCalled()
+
+    render(16)
+    expect(beforeRender).toHaveBeenCalledWith(0.016)
+    expect(mockRenderer.update).toHaveBeenCalled()
+  })
+
   describe('plugins', () => {
     afterEach(() => {
       Game.usePlugins([])

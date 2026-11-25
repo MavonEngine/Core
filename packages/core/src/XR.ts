@@ -1,8 +1,10 @@
 import type Game from './Game'
 import type Renderer from './Renderer'
 import type { XRInputOptions } from './XRInput'
+import type { XRLocomotionOptions } from './XRLocomotion'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
 import XRInput from './XRInput'
+import XRLocomotion from './XRLocomotion'
 
 export interface XROptions {
   /**
@@ -30,6 +32,9 @@ export default class XR {
 
   /** The controllers, also at `game.input.xr` */
   readonly input?: XRInput
+
+  /** Thumbstick movement, once `enableLocomotion()` was called */
+  locomotion?: XRLocomotion
 
   private readonly sessionInit: XRSessionInit
 
@@ -67,6 +72,25 @@ export default class XR {
       this.button = VRButton.createButton(renderer.instance, options.sessionInit)
       document.body.appendChild(this.button)
     }
+  }
+
+  /**
+   * Let the player walk with one thumbstick and turn with the other, by moving the camera rig. Only while in VR,
+   * and every rendered frame so the movement is smooth. For free roaming games: it doesn't collide with anything.
+   */
+  enableLocomotion(options?: XRLocomotionOptions): XRLocomotion {
+    if (!this.input)
+      throw new Error('Locomotion needs the controllers: enableXR() was called with input: false')
+
+    if (!this.locomotion) {
+      const locomotion = new XRLocomotion(this.game.camera, this.input, options)
+      this.game.on('beforeRender', (delta: number) => {
+        if (this.presenting)
+          locomotion.update(delta)
+      })
+      this.locomotion = locomotion
+    }
+    return this.locomotion
   }
 
   /** Whether this browser and device can run immersive VR */

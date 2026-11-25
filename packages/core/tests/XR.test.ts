@@ -13,6 +13,14 @@ vi.mock('three/examples/jsm/webxr/VRButton.js', () => ({
   },
 }))
 
+vi.mock('../src/XRLocomotion', () => ({
+  default: vi.fn(function () {
+    return {
+      update: vi.fn(),
+    }
+  }),
+}))
+
 vi.mock('../src/XRInput', () => ({
   default: vi.fn(function () {
     return {
@@ -41,6 +49,10 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   const game = {
     trigger: vi.fn(),
     camera: { rig: {} },
+    callbacks: {} as Record<string, ((event?: any) => void)[]>,
+    on(name: string, callback: (event?: any) => void) {
+      (this.callbacks[name] ??= []).push(callback)
+    },
     input: {} as Record<string, unknown>,
     sizes: {
       setSize: vi.fn(),
@@ -132,5 +144,24 @@ describe('xr', () => {
       },
     })
     await expect(XR.isSupported()).resolves.toBe(true)
+  })
+
+  it('runs locomotion every rendered frame, only while in VR', () => {
+    const { instance, game, xr } = setup()
+    const locomotion = instance.enableLocomotion()
+    expect(instance.enableLocomotion()).toBe(locomotion)
+    expect(game.callbacks.beforeRender).toHaveLength(1)
+
+    game.callbacks.beforeRender[0](0.016)
+    expect(locomotion.update).not.toHaveBeenCalled()
+
+    xr.isPresenting = true
+    game.callbacks.beforeRender[0](0.016)
+    expect(locomotion.update).toHaveBeenCalledWith(0.016)
+  })
+
+  it('needs the controllers for locomotion', () => {
+    const { instance } = setup({ input: false })
+    expect(() => instance.enableLocomotion()).toThrow('input: false')
   })
 })
