@@ -22,7 +22,9 @@ export interface XROptions {
   input?: XRInputOptions | false
   /**
    * Keep drawing the game in the browser window while a headset plays, from the player's head, e.g. for someone
-   * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`
+   * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`.
+   * Drawing to the page can tie the session to the monitor's refresh: a Valve Index through SteamVR in Chrome on
+   * Linux ran at the monitor's 60 Hz with it, and at the headset's rate without
    */
   mirror?: boolean | XRMirrorOptions
 }
