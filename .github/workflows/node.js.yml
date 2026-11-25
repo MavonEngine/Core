@@ -109,9 +109,8 @@ jobs:
 
     # `npm run dev` is `mavonengine dev`; without a terminal it runs the dev:server script without the dashboard
     - name: Start dev servers and verify startup
-      timeout-minutes: 1
-      run: npx concurrently --kill-others --success first "npm run dev" "npx wait-on http://localhost:8050/api/game/health --timeout 20000"
-      working-directory: ./packages/multiplayer-template
+      timeout-minutes: 2
+      run: node e2e/dev-startup.mjs
 
     # Links don't survive an archive on every OS: this records and removes them, the e2e jobs put them back.
     # Fails if the template doesn't use the local build of core, cli and editor
