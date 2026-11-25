@@ -6,6 +6,7 @@ import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
 import type IEditor from './Types/IEditor'
 import type GameObject from './World/GameObject'
+import type { XROptions } from './XR'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
 import Camera from './Camera'
@@ -25,6 +26,7 @@ import Logger from './Utils/Logger'
 import Resources from './Utils/Resources'
 import Sizes from './Utils/Sizes'
 import ClientGameWorld from './World/World'
+import XR from './XR'
 import './style.css'
 
 const LEADING_SLASHES_RE = /^\/+/
@@ -158,8 +160,10 @@ export default class Game extends BaseGame {
       Game.devModeHook?.()
     }
 
-    // The tick and physics run on their own interval, so skipping frames here for `renderer.maxFps` doesn't affect them
-    const render = (now: number) => {
+    // The tick and physics run on their own interval, so skipping frames here for `renderer.maxFps` doesn't affect them.
+    // The renderer's animation loop, not window.requestAnimationFrame, so frames keep coming during a WebXR session,
+    // which only hands them out through the session
+    this.renderer.instance.setAnimationLoop((now: number) => {
       if (this.renderer.shouldRender(now)) {
         // Measured since the last rendered frame, so the skipped frames' time isn't lost
         const delta = this.clock.getDelta()
@@ -167,12 +171,21 @@ export default class Game extends BaseGame {
         this.particleSystem.update(delta)
         this.renderer.update(delta)
       }
-
-      window.requestAnimationFrame(render)
-    }
-
-    render(performance.now())
+    })
   }
+
+  /**
+   * Let the game be played in a VR headset through WebXR. Adds an "Enter VR" button unless `button` is false,
+   * then call `xr.enter()` from your own UI instead.
+   * Triggers `xrSessionStart` and `xrSessionEnd` on the game.
+   */
+  enableXR(options: XROptions = {}): XR {
+    this.xr ??= new XR(this.renderer, this, options)
+    return this.xr
+  }
+
+  /** Set once `enableXR()` was called */
+  xr?: XR
 
   private createPluginHost() {
     // eslint-disable-next-line ts/no-this-alias
