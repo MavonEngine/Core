@@ -11,6 +11,11 @@ updates:
       time: '06:00'
       timezone: Europe/Dublin
     open-pull-requests-limit: 10
+    ignore:
+      # Stay on the Node 24 typings to match the runtime; minor/patch still flow
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
     groups:
       # three and its types must move together, and usually need code changes
       three:
