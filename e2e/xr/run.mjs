@@ -35,6 +35,20 @@ function installHeadset() {
   window.__headset = device
 }
 
+/**
+ * How many frames the renderer draws, waiting until it has drawn `count` or `ms` have passed. Software GL on a CI
+ * runner can take far longer per frame than a desktop, so a fixed window would fail a session that is rendering
+ */
+async function framesDrawn(page, count, ms = 10000) {
+  const frame = () => page.evaluate(() => window.Game.renderer.instance.info.render.frame)
+  const start = await frame()
+  const until = Date.now() + ms
+  let drawn = 0
+  while ((drawn = await frame() - start) < count && Date.now() < until)
+    await delay(100)
+  return drawn
+}
+
 const stick = (page, hand, x, y) => page.evaluate(([hand, x, y]) => window.__headset.controllers[hand].updateAxes('thumbstick', x, y), [hand, x, y])
 
 /** The character and the camera, relative to the character, in the world */
@@ -92,9 +106,8 @@ async function main() {
     await page.locator('#VRButton').click()
     await waitFor(page, () => window.Game.renderer.xrPresenting, null, 10000)
     check(true, 'clicking the button enters a VR session')
-    const frames = await page.evaluate(() => window.Game.renderer.instance.info.render.frame)
-    await delay(500)
-    check(await page.evaluate(() => window.Game.renderer.instance.info.render.frame) > frames + 5, 'frames render through the session')
+    const drawn = await framesDrawn(page, 6)
+    check(drawn >= 6, `frames render through the session (${drawn})`)
     await waitFor(page, () => window.Game.input.xr.left.connected && window.Game.input.xr.right.connected)
     check(true, 'both controllers connect, each to its hand')
 
@@ -225,21 +238,18 @@ async function main() {
     check(!(await page.evaluate(() => window.Game.xr.mirror)), 'the template leaves the mirror off in a standalone headset\'s browser')
     // As on a PC headset
     await page.evaluate(() => window.Game.xr.mirror = true)
-    const mirror = await page.evaluate(async () => {
+    const mirrored = await framesDrawn(page, 4)
+    check(mirrored >= 4 && await page.evaluate(() => window.Game.renderer.instance.xr.enabled), `the session keeps rendering with the mirror on (${mirrored} frames)`)
+    const mirror = await page.evaluate(() => {
       const game = window.Game
-      const frames = game.renderer.instance.info.render.frame
-      await new Promise(resolve => setTimeout(resolve, 300))
       game.camera.instance.updateWorldMatrix(true, false)
       const head = game.camera.instance.getWorldPosition(game.camera.worldPosition.clone())
       return {
-        rendered: game.renderer.instance.info.render.frame - frames,
         offset: game.xr.mirrorCamera.position.distanceTo(head),
         aspect: game.xr.mirrorCamera.aspect,
         window: game.sizes.width / game.sizes.height,
-        xr: game.renderer.instance.xr.enabled,
       }
     })
-    check(mirror.rendered > 3 && mirror.xr, `the session keeps rendering with the mirror on (${mirror.rendered} frames in 0.3s)`)
     check(mirror.offset < 0.05, `the mirror looks from the player's head (${(mirror.offset * 100).toFixed(1)}cm off)`)
     check(Math.abs(mirror.aspect - mirror.window) < 0.01, `shaped like the browser window (${mirror.aspect.toFixed(2)})`)
 
@@ -252,9 +262,7 @@ async function main() {
     const desktop = await pose(page)
     const orbit = Math.hypot(...desktop.offset)
     check(orbit >= 4.5 && orbit <= 25.5, `the orbit controls take the camera back around the character (${orbit.toFixed(2)}m away)`)
-    const rendered = await page.evaluate(() => window.Game.renderer.instance.info.render.frame)
-    await delay(300)
-    check(await page.evaluate(() => window.Game.renderer.instance.info.render.frame) > rendered, 'the desktop renders again')
+    check(await framesDrawn(page, 1) >= 1, 'the desktop renders again')
 
     const relevant = errors.filter(e => !e.includes('favicon'))
     check(relevant.length === 0, `no console errors${relevant.length
