@@ -21,7 +21,7 @@
     "@antfu/eslint-config": "^8.0.0",
     "@mavonengine/cli": "0.0.7",
     "@mavonengine/editor": "0.0.12",
-    "@types/three": "0.184.1",
+    "@types/three": "0.187.0",
     "eslint": "^10.1.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2"
