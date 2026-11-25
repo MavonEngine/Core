@@ -169,6 +169,9 @@ export default class Game extends BaseGame {
         const delta = this.clock.getDelta()
 
         this.particleSystem.update(delta)
+        // For what has to move every displayed frame rather than every tick, like the view in VR: moving the camera
+        // rig at the tick rate while a headset shows 72 - 120 frames a second makes the world judder
+        this.trigger('beforeRender', delta)
         this.renderer.update(delta)
       }
     })
