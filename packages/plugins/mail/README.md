@@ -225,6 +225,20 @@ How it works:
 
 It is used only while no SMTP server or transport is set up, and only in development: never with `NODE_ENV=production` or in tests. Without `maildev` installed, mail is written to the log as before. Turn it off with `"devInbox": false`.
 
+### With an AI assistant
+
+While the game runs under `mavonengine dev`, [`mavonengine mcp`](https://github.com/MavonEngine/Core/tree/main/packages/cli#mavonengine-mcp) gives your assistant the dev inbox. It can then follow a flow that sends mail to the end on its own, e.g. "sign up a test account and verify its address":
+
+| Tool | |
+| --- | --- |
+| `mail_inbox` | The mail in the dev inbox, newest first: sender, recipients, subject and the start of the text. Filter by recipient, subject, words or unread |
+| `mail_read` | One mail, by id or the newest to an address or with a subject: its text and every link in it, like the one to verify an address or reset a password. Can wait for mail the game queued a moment ago |
+| `mail_clear` | Delete one mail from the inbox, or all of them |
+
+The first two only read; reading a mail marks it read in the inbox. Your assistant's MCP client asks you before it deletes mail, and `mavonengine mcp --read-only` leaves `mail_clear` out. Only the dev inbox is ever touched: these tools send no mail.
+
+The tools come from the plugin's dev entry, which runs in the client's Vite dev server. The game server writes where MailDev listens to `.mavonengine/plugins/@mavonengine/mail/inbox.json` when it starts it and removes the file when it stops. Without a running dev inbox, the tools say why there may be none.
+
 ## Options
 
 Set them under the plugin in `mavonengine.json`. All are optional.

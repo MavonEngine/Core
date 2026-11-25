@@ -417,7 +417,7 @@ Tools from your project's plugins, while the client's dev server runs:
 
 | Tool | |
 | --- | --- |
-| `<plugin>_<tool>` | Whatever the project's plugins offer through their [dev entries](#dev-entries), e.g. `kenney_search_packs` and `kenney_import` from `@mavonengine/kenney`. Each says in its description what it does |
+| `<plugin>_<tool>` | Whatever the project's plugins offer through their [dev entries](#dev-entries), e.g. `kenney_search_packs` and `kenney_import` from `@mavonengine/kenney`, or `mail_inbox` and `mail_read` from `@mavonengine/mail`. Each says in its description what it does |
 
 They appear when the dev server starts and go when plugins are removed: `mavonengine mcp` asks the dev server every few seconds and tells your assistant when the list changes. Unlike the tools above, a plugin's tool may change your project, e.g. copy files into it or edit `mavonengine.json`. Each says whether it does, and your MCP client asks you before running one that changes something. `--read-only` leaves those out.
 
