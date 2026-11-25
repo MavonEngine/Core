@@ -131,8 +131,9 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       devPlugins = root
         ? new DevPluginHost({
             projectRoot: root,
-            clientRoot: config.root,
-            publicDir: config.publicDir || join(config.root, 'public'),
+            // Vite's paths use / on Windows too: native ones, like projectRoot and dataDir, so plugins can compare them
+            clientRoot: resolve(config.root),
+            publicDir: resolve(config.publicDir || join(config.root, 'public')),
             logger: {
               info: message => config.logger.info(`[mavonengine] ${message}`),
               warn,
