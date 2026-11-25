@@ -224,6 +224,14 @@ export default class Game extends BaseGame {
     this.canvas.setAttribute('draggable', 'false')
     this.canvas.addEventListener('mousedown', (e) => {
       e.preventDefault()
+      // preventDefault also cancels the browser's default focus handling, so do
+      // it by hand: blur whatever had focus (e.g. a chat input) and focus this
+      // window, otherwise clicking back into an embedded iframe never
+      // returns keyboard input to the game.
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body)
+        active.blur()
+      window.focus()
     })
     document.getElementsByTagName('body')[0].setAttribute('onContextMenu', 'return false;')
 
