@@ -16,6 +16,12 @@ export default class Entity3D extends Actor {
   previousAction?: AnimationAction
   activeAction?: AnimationAction
 
+  /**
+   * Animations advance every rendered frame rather than every tick, so they play at the display's rate
+   * (60 - 120 fps, or a VR headset's) instead of stepping at the 30 Hz tick
+   */
+  private readonly advanceAnimations = (delta: number) => this.animationMixer?.update(delta)
+
   protected initModel(model: GLTF) {
     this.instance = clone(model.scene) as Group<Object3DEventMap>
 
@@ -39,6 +45,8 @@ export default class Entity3D extends Actor {
       }
     })
 
+    if (!this.animationMixer)
+      Game.instance().on('beforeRender', this.advanceAnimations)
     this.animationMixer = new AnimationMixer(this.instance)
     model.animations.forEach(a => this.animationsMap!.set(a.name, this.animationMixer!.clipAction(a)))
 
@@ -47,6 +55,7 @@ export default class Entity3D extends Actor {
 
   destroy(): void {
     super.destroy()
+    Game.instance().off('beforeRender', this.advanceAnimations)
 
     this.instance?.traverse((o) => {
       if (o instanceof Mesh) {
@@ -56,12 +65,6 @@ export default class Entity3D extends Actor {
 
     if (this.instance)
       Game.instance().scene.remove(this.instance)
-  }
-
-  update(delta: number): void {
-    this.animationMixer?.update(delta)
-
-    super.update(delta)
   }
 
   /**
