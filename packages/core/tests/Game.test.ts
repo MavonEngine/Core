@@ -25,6 +25,9 @@ const mockCamera = {
   update: vi.fn(),
 }
 const mockRenderer = {
+  instance: {
+    setAnimationLoop: vi.fn(),
+  },
   resize: vi.fn(),
   update: vi.fn(),
   shouldRender: vi.fn().mockReturnValue(true),
@@ -142,15 +145,17 @@ describe('game', () => {
     expect(game.world).toBeDefined()
   })
 
-  it('skips rendering the frames the renderer limits, but keeps requesting them', () => {
-    mockRenderer.shouldRender.mockReturnValueOnce(false)
+  it('renders through the renderer\'s animation loop, skipping the frames it limits', () => {
     void new Game([])
 
+    expect(mockRenderer.instance.setAnimationLoop).toHaveBeenCalledTimes(1)
+    const render = mockRenderer.instance.setAnimationLoop.mock.calls[0][0]
+
+    mockRenderer.shouldRender.mockReturnValueOnce(false)
+    render(8)
     expect(mockRenderer.update).not.toHaveBeenCalled()
     expect(mockParticleSystem.update).not.toHaveBeenCalled()
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
 
-    const render = vi.mocked(requestAnimationFrame).mock.calls[0][0]
     render(16)
 
     expect(mockRenderer.shouldRender).toHaveBeenLastCalledWith(16)
