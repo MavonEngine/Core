@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EnabledPlugin } from './ProjectConfig.js'
-import type { DevMiddleware, DevPlugin, DevPluginContext, PluginOptions } from './types.js'
+import type { DevMiddleware, DevPlugin, DevPluginContext, PluginOptions, PluginTool, PluginToolInfo } from './types.js'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { fromLocalhost, fromThisPage } from './devRequest.js'
+import { fromLocalhost, fromThisPage, readBody } from './devRequest.js'
 import { enabledPlugins, readConfig, updateConfig } from './ProjectConfig.js'
-import { DEV_PLUGINS_PATH, devPluginBase } from './types.js'
+import { DEV_PLUGINS_PATH, DEV_TOOLS_PATH, devPluginBase, pluginToolName } from './types.js'
 
 export interface DevPluginHostOptions {
   projectRoot: string
@@ -23,7 +23,11 @@ interface Running {
   plugin: DevPlugin
   ctx: DevPluginContext
   middleware?: DevMiddleware
+  tools: { info: PluginToolInfo, tool: PluginTool }[]
 }
+
+const TOOL_NAME_RE = /^[a-z][a-z0-9_]*$/
+const MAX_TOOL_ARGS_BYTES = 1024 * 1024
 
 /** Where a plugin keeps files that are not part of the game: `<root>/.mavonengine/plugins/<package>` */
 export function pluginDataDir(projectRoot: string, pkg: string): string {
@@ -112,12 +116,62 @@ export class DevPluginHost {
       try {
         await plugin.setup?.(ctx)
         const middleware = plugin.middleware?.(ctx)
-        this.running.push({ package: enabled.package, entry: enabled.entry, plugin, ctx, middleware })
+        this.running.push({ package: enabled.package, entry: enabled.entry, plugin, ctx, middleware, tools: this.tools(enabled.package, plugin, ctx) })
       }
       catch (err) {
         this.fail(enabled.package, `its dev entry failed to start: ${(err as Error).message}`)
       }
     }
+  }
+
+  /** The plugin's tools for `mavonengine mcp`, leaving out the ones it describes wrong, with a warning */
+  private tools(pkg: string, plugin: DevPlugin, ctx: DevPluginContext): Running['tools'] {
+    let tools: PluginTool[]
+    try {
+      tools = plugin.mcpTools?.(ctx) ?? []
+    }
+    catch (err) {
+      this.options.logger.warn(`${pkg}: its MCP tools are left out, mcpTools() failed: ${(err as Error).message}`)
+      return []
+    }
+
+    const taken = new Set(this.running.flatMap(running => running.tools.map(({ info }) => info.name)))
+    return (Array.isArray(tools) ? tools : []).flatMap((tool) => {
+      const problem = !tool || typeof tool !== 'object'
+        ? 'not an object'
+        : typeof tool.name !== 'string' || !TOOL_NAME_RE.test(tool.name)
+          ? `its name ${JSON.stringify(tool.name)} is not lowercase letters, digits and _`
+          : typeof tool.description !== 'string' || !tool.description
+            ? 'it has no description'
+            : typeof tool.run !== 'function'
+              ? 'it has no run()'
+              : tool.input !== undefined && (typeof tool.input !== 'object' || (tool.input as { type?: unknown }).type !== 'object')
+                ? 'its input is not a JSON Schema of an object'
+                : undefined
+      const name = problem ? '' : pluginToolName(pkg, tool.name)
+      if (!problem && taken.has(name)) {
+        this.options.logger.warn(`${pkg}: MCP tool ${name} left out, another plugin has one by that name`)
+        return []
+      }
+      if (problem) {
+        this.options.logger.warn(`${pkg}: an MCP tool is left out, ${problem}`)
+        return []
+      }
+      taken.add(name)
+      return [{
+        tool,
+        info: {
+          name,
+          plugin: pkg,
+          title: tool.title,
+          description: tool.description,
+          input: tool.input ?? { type: 'object', properties: {} },
+          readOnly: tool.readOnly === true,
+          destructive: tool.readOnly !== true && tool.destructive === true,
+          openWorld: tool.openWorld === true,
+        },
+      }]
+    })
   }
 
   private fail(pkg: string, reason: string) {
@@ -187,11 +241,89 @@ export class DevPluginHost {
    */
   handle(req: IncomingMessage, res: ServerResponse): boolean {
     const url = req.url ?? ''
+    if (url.split('?')[0] === DEV_TOOLS_PATH || url.startsWith(`${DEV_TOOLS_PATH}/`)) {
+      void this.dispatchTool(req, res, url.split('?')[0])
+      return true
+    }
     if (!url.startsWith(`${DEV_PLUGINS_PATH}/`))
       return false
 
     void this.dispatch(req, res, url)
     return true
+  }
+
+  /** The tools of every running dev entry */
+  get toolInfos(): PluginToolInfo[] {
+    return this.running.flatMap(running => running.tools.map(({ info }) => info))
+  }
+
+  /** GET lists the tools, POST `<DEV_TOOLS_PATH>/<name>` with `{ arguments }` runs one: `{ result }` or `{ error }` */
+  private async dispatchTool(req: IncomingMessage, res: ServerResponse, path: string) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(JSON.stringify(body))
+    }
+
+    // Tools change the project: only for this machine, and never for another site open in the browser
+    if (!fromLocalhost(req)) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    await this.pending
+
+    if (req.method === 'GET' && path === DEV_TOOLS_PATH) {
+      reply(200, { tools: this.toolInfos })
+      return
+    }
+
+    if (req.method !== 'POST' || path === DEV_TOOLS_PATH) {
+      reply(405, { error: `GET ${DEV_TOOLS_PATH} lists the tools, POST ${DEV_TOOLS_PATH}/<name> runs one` })
+      return
+    }
+    if (!fromThisPage(req) || !req.headers['content-type']?.includes('application/json')) {
+      reply(403, { error: 'Tools only run for tools on this machine, with a JSON body' })
+      return
+    }
+
+    let name: string
+    try {
+      name = decodeURIComponent(path.slice(DEV_TOOLS_PATH.length + 1))
+    }
+    catch {
+      reply(400, { error: 'Malformed tool name' })
+      return
+    }
+    const found = this.running.flatMap(running => running.tools.map(tool => ({ ...tool, running }))).find(({ info }) => info.name === name)
+    if (!found) {
+      reply(404, { error: `No tool ${name}: the plugins' dev entries offer ${this.toolInfos.map(info => info.name).join(', ') || 'none'}` })
+      return
+    }
+
+    let args: unknown
+    try {
+      const body = await readBody(req, MAX_TOOL_ARGS_BYTES)
+      args = body ? (JSON.parse(body) as { arguments?: unknown }).arguments ?? {} : {}
+    }
+    catch (err) {
+      reply(400, { error: `Expected { arguments }: ${(err as Error).message}` })
+      return
+    }
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      reply(400, { error: 'arguments must be an object' })
+      return
+    }
+
+    try {
+      const result = await found.tool.run(args as Record<string, unknown>)
+      reply(200, { result: result ?? null })
+    }
+    catch (err) {
+      found.running.ctx.logger.warn(`MCP tool ${name} failed: ${(err as Error).message}`)
+      reply(200, { error: (err as Error).message ?? String(err) })
+    }
   }
 
   private async dispatch(req: IncomingMessage, res: ServerResponse, url: string) {

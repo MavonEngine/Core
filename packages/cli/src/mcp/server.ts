@@ -13,7 +13,9 @@ import { LOG_LEVELS, READ_ONLY, run, vec3 } from './result'
 
 const INSTRUCTIONS = `Reads the live state of a running MavonEngine game: the game server (health, performance, players, scene,
 entities, logs, HTTP requests) and, in development, the game tabs open in a browser (renderer stats, the client's world,
-network state, console logs, screenshots). Every tool is read-only.
+network state, console logs, screenshots). These tools are read-only.
+Tools named <plugin>_<tool> come from the project's plugins, through the client's dev server: what they do is in their
+descriptions, and their annotations say whether they change the project (files, mavonengine.json).
 Server scene / entity tools need the server in development (NODE_ENV is not "production"); client tools need the client
 served by Vite in dev. Start with server_status and list_clients. Use type / near filters rather than paging through a world.
 compare_entity shows one entity on both sides, for prediction, interpolation and sync bugs.

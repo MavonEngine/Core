@@ -13,7 +13,9 @@ It lets the assistant read a running game: the game server (status, metrics,
 players, scene, entities, logs, HTTP requests, plugins) and the game tabs open
 in a browser (renderer stats, entities, network, console, screenshots), compare
 an entity on both sides, and see which official plugins the project could add.
-Every tool is read-only. Server scene and entity tools
+Its own tools are read-only. The project's plugins can add tools of their own
+while the client's dev server runs, named <plugin>_<tool>; those may change the
+project, and say so to the client, which asks before running them. Server scene and entity tools
 need the game server in development (NODE_ENV is not "production"); client
 tools need the client served by Vite in dev.
 
@@ -38,6 +40,7 @@ Options:
                        plugin_readme (default: plugins.json on the main branch of the
                        MavonEngine repository, or MAVONENGINE_PLUGINS_URL)
   --no-plugin-list     Leave out available_plugins and plugin_readme, e.g. offline
+  --read-only          Leave out the plugins' tools that change something
   -h, --help           Show this help
 `
 
@@ -47,6 +50,8 @@ export interface McpOptions {
   docsUrl: string | false
   /** The list of plugins that can be installed, false without the tools that read it */
   pluginsUrl: string | false
+  /** Leave out the plugins' tools that change something */
+  readOnly: boolean
 }
 
 export function parseMcpArgs(args: string[], env: Record<string, string | undefined> = process.env): McpOptions | 'help' {
@@ -62,6 +67,7 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
       'docs': { type: 'boolean', default: true },
       'plugins-url': { type: 'string' },
       'plugin-list': { type: 'boolean', default: true },
+      'read-only': { type: 'boolean', default: false },
       'help': { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
@@ -96,22 +102,28 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN }),
     docsUrl: values.docs ? (values['docs-url'] ?? DEFAULT_DOCS_URL) : false,
     pluginsUrl: values['plugin-list'] ? (values['plugins-url'] ?? env[PLUGIN_REGISTRY_ENV] ?? PLUGIN_REGISTRY_URL) : false,
+    readOnly: values['read-only']!,
   }
 }
 
 /**
  * Serve MCP on stdin / stdout until the client disconnects. stdout carries the protocol, so nothing else may write to it.
  */
-export async function runMcpCommand({ client, docsUrl, pluginsUrl }: McpOptions): Promise<number> {
+export async function runMcpCommand({ client, docsUrl, pluginsUrl, readOnly }: McpOptions): Promise<number> {
   // Loaded lazily so the other commands don't pay for the MCP SDK
-  const [{ StdioServerTransport }, { createMcpServer }, { DocsClient }] = await Promise.all([
+  const [{ StdioServerTransport }, { createMcpServer }, { DocsClient }, { ProjectPluginTools }] = await Promise.all([
     import('@modelcontextprotocol/sdk/server/stdio.js'),
     import('../mcp/server'),
     import('../mcp/docs'),
+    import('../mcp/projectPluginTools'),
   ])
 
   const docs = docsUrl ? new DocsClient(docsUrl) : undefined
   const server = createMcpServer(client, docs, pluginsUrl ? { url: pluginsUrl } : undefined)
+  // The plugins' tools are listed from the start when the dev server already runs, and follow it from then on
+  const pluginTools = new ProjectPluginTools(server, client, { readOnly, warn: message => process.stderr.write(`mavonengine mcp: ${message}\n`) })
+  await pluginTools.refresh().catch(() => {})
+  const stopWatching = pluginTools.watch()
   const transport = new StdioServerTransport()
 
   const closed = new Promise<void>((resolve) => {
@@ -123,6 +135,7 @@ export async function runMcpCommand({ client, docsUrl, pluginsUrl }: McpOptions)
   process.stderr.write(`mavonengine mcp: reading the game server at ${client.url}\n`)
 
   await closed
+  stopWatching()
   await server.close().catch(() => {})
   await docs?.close()
   return 0

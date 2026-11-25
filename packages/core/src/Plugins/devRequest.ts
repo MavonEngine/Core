@@ -27,3 +27,20 @@ export function fromThisPage(req: IncomingMessage): boolean {
     return false
   }
 }
+
+/** The body of a request as text, rejecting one larger than `maxBytes` */
+export function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk: string) => {
+      body += chunk
+      if (body.length > maxBytes) {
+        reject(new Error(`Body is larger than ${maxBytes} bytes`))
+        req.destroy()
+      }
+    })
+    req.on('end', () => resolve(body))
+    req.on('error', reject)
+  })
+}

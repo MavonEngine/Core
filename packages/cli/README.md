@@ -391,7 +391,7 @@ Plugin tools:
 | `available_plugins` | The official plugins from [`mavonengine plugins`](#mavonengine-plugins): what each does, where it runs, the command that installs it, and whether the project already has it |
 | `plugin_readme` | The README of one of them as Markdown: its options, how a game hooks into it and its limits |
 
-With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: every tool is read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
+With these an assistant can suggest a plugin instead of building what one already does, and set it up from its readme. It can't install one: these tools are read-only, so it hands you the command. `available_plugins` and `plugin_readme` read the list and the readmes from GitHub when they are used; `--plugins-url` or `MAVONENGINE_PLUGINS_URL` points them at another list and `--no-plugin-list` leaves them out.
 
 Database tools, for the project's database plugin such as [`@mavonengine/sqlite`](https://github.com/MavonEngine/Core/tree/main/packages/plugins/sqlite):
 
@@ -413,7 +413,15 @@ They connect to the site the first time one is used, so the other tools also wor
 
 Client tools take a `clientId` from `list_clients`. Without one they ask the only open tab, or the only one not running the editor.
 
-Every tool is read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`). When Vite serves the client on its own port instead of through the game server, pass `--client-url`, e.g. `http://localhost:5173`.
+Tools from your project's plugins, while the client's dev server runs:
+
+| Tool | |
+| --- | --- |
+| `<plugin>_<tool>` | Whatever the project's plugins offer through their [dev entries](#dev-entries), e.g. `kenney_search_packs` and `kenney_import` from `@mavonengine/kenney`. Each says in its description what it does |
+
+They appear when the dev server starts and go when plugins are removed: `mavonengine mcp` asks the dev server every few seconds and tells your assistant when the list changes. Unlike the tools above, a plugin's tool may change your project, e.g. copy files into it or edit `mavonengine.json`. Each says whether it does, and your MCP client asks you before running one that changes something. `--read-only` leaves those out.
+
+The engine's own tools are read-only. It takes `--host`, `--port`, `--url` and `--token` like the dashboard, where `--url` is the server's base URL (`http://localhost:8050`). When Vite serves the client on its own port instead of through the game server, pass `--client-url`, e.g. `http://localhost:5173`.
 
 The server scene and entity tools read `GET /api/game/dev/*` on the game server. Those routes are only registered when `NODE_ENV` is not `production`: a metrics token does not turn them on there. Otherwise they follow the [server access](#server-access) rules of the metrics endpoint.
 
@@ -526,6 +534,32 @@ The context has `package`, `options` (read from `mavonengine.json` on every acce
 
 - `dataDir`: `.mavonengine/plugins/<package>/` in the project, for downloads and caches. The project's `.gitignore` leaves out `.mavonengine`, so nothing there is committed or shipped.
 - `updateOptions(change)`: changes the plugin's `options` in `mavonengine.json`. Use it to record what should be committed with the project.
+
+A dev entry can also give AI assistants tools, which [`mavonengine mcp`](#mavonengine-mcp) offers as `<plugin>_<tool>`: the package name without its scope, then the tool's name.
+
+```ts
+export default defineDevPlugin({
+  mcpTools: ctx => [
+    {
+      name: 'add_tree', // my-plugin_add_tree
+      title: 'Add a tree',
+      description: 'Adds a tree to the list in the plugin\'s options. Use it when the user asks for more trees',
+      input: { type: 'object', properties: { kind: { type: 'string', enum: ['pine', 'oak'] } }, required: ['kind'] },
+      run: ({ kind }) => {
+        ctx.updateOptions((options) => {
+          options.trees = [...(options.trees as string[] ?? []), kind]
+        })
+        return { trees: ctx.options.trees }
+      },
+    },
+  ],
+})
+```
+
+- `input` is the JSON Schema of the arguments, an object; `mavonengine mcp` turns away calls that don't match it. The arguments still come from a model, so check them in `run()` as you would any input, e.g. paths with `resolveInside()`.
+- What `run()` returns goes to the assistant as JSON. What it throws is reported as the tool's error.
+- Set `readOnly: true` on tools that change nothing; the rest are taken to change something, so assistants ask first and `mavonengine mcp --read-only` leaves them out. `destructive: true` marks one that deletes or overwrites what can't be had back, `openWorld: true` one that reaches outside the project, e.g. a website.
+- The dev server lists them on `GET /__mavonengine/mcp/tools` and runs them on `POST /__mavonengine/mcp/tools/<name>` with `{ "arguments": … }`, only for requests from this machine and never for another site open in the browser.
 
 Dev entries start with the dev server and restart when plugins are added, removed, turned on or off in `mavonengine.json`. Changing options doesn't restart them. One that fails to start is logged, and its URLs answer 404 with the reason.
 
