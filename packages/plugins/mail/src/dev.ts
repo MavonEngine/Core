@@ -49,7 +49,14 @@ const STYLE_RE = /<(style|script)[^>]*>[\s\S]*?<\/\1>/gi
 const BLANK_LINES_RE = /\n\s*\n\s*\n/g
 const TRAILING_PUNCTUATION_RE = /[.,;:!?]+$/
 const WEB_URL_RE = /^https?:\/\//i
-const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': '\'', '&nbsp;': ' ' }
+const ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': '\'',
+  '&nbsp;': ' ',
+}
 const ENTITY_RE = /&(?:amp|lt|gt|quot|#39|nbsp);/g
 
 const decode = (text: string) => text.replace(ENTITY_RE, entity => ENTITIES[entity])
@@ -91,7 +98,10 @@ export function linksOf(email: Pick<MailDevEmail, 'text' | 'html'>): string[] {
 
 function sentTo(mail: Pick<MailDevSummary, 'to' | 'cc'>, to: string): boolean {
   const wanted = to.trim().toLowerCase()
-  return [...mail.to, ...(mail.cc ?? [])].some(({ address }) => address.toLowerCase() === wanted)
+  return [
+    ...mail.to,
+    ...(mail.cc ?? []),
+  ].some(({ address }) => address.toLowerCase() === wanted)
 }
 
 function stringArg(args: Record<string, unknown>, key: string): string | undefined {
@@ -118,7 +128,10 @@ export class DevInboxClient {
     const { api } = this.location()
     let res: Response
     try {
-      res = await this.fetchImpl(`${api}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+      res = await this.fetchImpl(`${api}${path}`, {
+        ...init,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
     }
     catch (err) {
       throw new Error(`The dev inbox at ${api} doesn't answer (${(err as Error).message}): the game server probably stopped. ${NO_INBOX}`)
@@ -132,7 +145,10 @@ export class DevInboxClient {
 
   /** The newest mail first, at most `PAGE`, matching MailDev's search: subject, addresses and text */
   async list(options: { search?: string, unread?: boolean } = {}): Promise<{ items: MailDevSummary[], total: number, storeTotal: number, unread: number }> {
-    const params = new URLSearchParams({ limit: String(PAGE), sort: 'desc' })
+    const params = new URLSearchParams({
+      limit: String(PAGE),
+      sort: 'desc',
+    })
     if (options.search)
       params.set('search', options.search)
     if (options.unread)
@@ -160,7 +176,11 @@ function summary(mail: MailDevSummary) {
     subject: mail.subject,
     from: addresses(mail.from),
     to: addresses(mail.to),
-    ...(mail.cc?.length ? { cc: addresses(mail.cc) } : {}),
+    ...(mail.cc?.length
+      ? {
+          cc: addresses(mail.cc),
+        }
+      : {}),
     attachments: mail.attachmentCount,
     preview: mail.preview,
   }
@@ -192,7 +212,12 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           subject: { type: 'string', description: 'Only mail whose subject contains this, ignoring case' },
           search: { type: 'string', description: 'Words to find in the subject, addresses or text' },
           unread: { type: 'boolean', description: 'Only mail nobody opened yet, in the inbox or with mail_read' },
-          limit: { type: 'integer', minimum: 1, maximum: PAGE, default: 20 },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: PAGE,
+            default: 20,
+          },
         },
       },
       readOnly: true,
@@ -203,7 +228,9 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           search: stringArg(args, 'search'),
           unread: args.unread === true,
         })
-        const limit = typeof args.limit === 'number' ? Math.min(Math.max(1, Math.floor(args.limit)), PAGE) : 20
+        const limit = typeof args.limit === 'number'
+          ? Math.min(Math.max(1, Math.floor(args.limit)), PAGE)
+          : 20
         return {
           inboxTotal: found.total,
           inboxUnread: found.unread,
@@ -225,7 +252,13 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           id: { type: 'string', description: 'From mail_inbox' },
           to: { type: 'string', description: 'The newest mail to (or cc) this address' },
           subject: { type: 'string', description: 'The newest mail whose subject contains this, ignoring case' },
-          waitSeconds: { type: 'number', minimum: 0, maximum: MAX_WAIT_SECONDS, default: 0, description: 'Wait for a matching mail to arrive, without id' },
+          waitSeconds: {
+            type: 'number',
+            minimum: 0,
+            maximum: MAX_WAIT_SECONDS,
+            default: 0,
+            description: 'Wait for a matching mail to arrive, without id',
+          },
           html: { type: 'boolean', description: 'Include the html too. Default false: the text and links are usually enough' },
         },
       },
@@ -238,7 +271,9 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           throw new Error('Give id, or to and/or subject for the newest mail that matches')
 
         if (!id) {
-          const wait = typeof args.waitSeconds === 'number' ? Math.min(Math.max(0, args.waitSeconds), MAX_WAIT_SECONDS) : 0
+          const wait = typeof args.waitSeconds === 'number'
+            ? Math.min(Math.max(0, args.waitSeconds), MAX_WAIT_SECONDS)
+            : 0
           const until = Date.now() + wait * 1000
           for (;;) {
             id = (await find({ to, subject })).items[0]?.id
@@ -248,7 +283,9 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           }
           if (!id) {
             const which = [to && `to ${to}`, subject && `with "${subject}" in the subject`].filter(Boolean).join(' ')
-            throw new Error(`No mail ${which} in the dev inbox${wait ? ` after waiting ${wait}s` : ''}. Mail the game queued is sent `
+            throw new Error(`No mail ${which} in the dev inbox${wait
+              ? ` after waiting ${wait}s`
+              : ''}. Mail the game queued is sent `
               + 'by the server\'s queue, which may still be trying: see the server log. mail_inbox lists what arrived')
           }
         }
@@ -261,12 +298,22 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
           subject: email.subject,
           from: addresses(email.from),
           to: addresses(email.to),
-          ...(email.cc?.length ? { cc: addresses(email.cc) } : {}),
-          text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text,
-          ...(text.length > MAX_TEXT ? { textTruncated: true } : {}),
+          ...(email.cc?.length
+            ? {
+                cc: addresses(email.cc),
+              }
+            : {}),
+          text: text.length > MAX_TEXT
+            ? `${text.slice(0, MAX_TEXT)}…`
+            : text,
+          ...(text.length > MAX_TEXT
+            ? { textTruncated: true }
+            : {}),
           links: linksOf(email),
           attachments: email.attachments.map(({ filename, contentType, size }) => ({ filename, contentType, size })),
-          ...(args.html === true ? { html: email.html ?? null } : {}),
+          ...(args.html === true
+            ? { html: email.html ?? null }
+            : {}),
         }
       },
     },
@@ -286,7 +333,9 @@ export function mailTools(inbox: DevInboxClient): PluginTool[] {
         const id = stringArg(args, 'id')
         if (id) {
           await inbox.delete(id)
-          return { deleted: [id] }
+          return {
+            deleted: [id],
+          }
         }
         const { storeTotal } = await inbox.list()
         await inbox.delete()

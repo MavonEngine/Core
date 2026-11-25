@@ -31,7 +31,10 @@ async function startedServer() {
   vi.stubEnv('NODE_ENV', 'development')
   const app = express()
   const panel = new AdminPanel({
-    adminToken: { configured: true, matches: candidate => candidate === 'admin-token' },
+    adminToken: {
+      configured: true,
+      matches: candidate => candidate === 'admin-token',
+    },
     production: () => false,
   })
   panel.mount(app)
@@ -40,14 +43,23 @@ async function startedServer() {
   })
   cleanups.push(() => new Promise<void>(resolve => listener.close(() => resolve())))
 
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const queue = new Queue(logger, { pollIntervalMs: 10 })
   const projectRoot = tempDir()
   const ctx = {
     package: '@mavonengine/mail',
     options: {},
     logger,
-    server: { http: { server: listener }, requests: { ignorePrefix: vi.fn() } },
+    server: {
+      http: { server: listener },
+      requests: {
+        ignorePrefix: vi.fn(),
+      },
+    },
     queue,
     admin: panel.forPlugin('@mavonengine/mail'),
     projectRoot,
@@ -77,7 +89,9 @@ function toolsFor(dataDir: string): Record<string, PluginTool> {
 
 describe('the dev entry\'s tools for AI assistants', () => {
   it('is a dev plugin with the mail_ tools', () => {
-    const tools = createDevPlugin().mcpTools!({ dataDir: tempDir() } as any)
+    const tools = createDevPlugin().mcpTools!({
+      dataDir: tempDir(),
+    } as any)
     expect(tools.map(tool => [tool.name, tool.readOnly === true, tool.destructive === true])).toEqual([
       ['inbox', true, false],
       ['read', true, false],
@@ -107,7 +121,12 @@ describe('the dev entry\'s tools for AI assistants', () => {
 
     const forAda = await tools.inbox.run({ to: 'ADA@example.com' }) as any
     expect(forAda.mail).toEqual([
-      expect.objectContaining({ subject: 'Verify your address', to: ['Ada <ada@example.com>'], from: ['game@localhost'], read: false }),
+      expect.objectContaining({
+        subject: 'Verify your address',
+        to: ['Ada <ada@example.com>'],
+        from: ['game@localhost'],
+        read: false,
+      }),
     ])
 
     const verify = await tools.read.run({ to: 'ada@example.com' }) as any
@@ -121,11 +140,16 @@ describe('the dev entry\'s tools for AI assistants', () => {
     expect(verify).not.toHaveProperty('html')
 
     const welcome = await tools.read.run({ subject: 'welcome', html: true }) as any
-    expect(welcome).toMatchObject({ text: 'Hello Bob, see https://example.com/start.', links: ['https://example.com/start'] })
+    expect(welcome).toMatchObject({
+      text: 'Hello Bob, see https://example.com/start.',
+      links: ['https://example.com/start'],
+    })
     expect(welcome).toHaveProperty('html')
     expect((await tools.inbox.run({ unread: true }) as any).matched).toBe(0)
 
-    expect(await tools.clear.run({ id: verify.id })).toEqual({ deleted: [verify.id] })
+    expect(await tools.clear.run({ id: verify.id })).toEqual({
+      deleted: [verify.id],
+    })
     await expect(tools.read.run({ id: verify.id })).rejects.toThrow(`No mail ${verify.id} in the dev inbox`)
     expect(await tools.clear.run({})).toEqual({ deleted: 1 })
     expect((await tools.inbox.run({}) as any).inboxTotal).toBe(0)
@@ -140,7 +164,9 @@ describe('the dev entry\'s tools for AI assistants', () => {
     await api.send({ to: 'ada@example.com', subject: 'Reset your password', text: 'Go to http://localhost:8050/reset?token=xyz' })
     const reading = tools.read.run({ to: 'ada@example.com', subject: 'reset', waitSeconds: 10 })
     setTimeout(() => queue.start(), 300)
-    expect(await reading).toMatchObject({ links: ['http://localhost:8050/reset?token=xyz'] })
+    expect(await reading).toMatchObject({
+      links: ['http://localhost:8050/reset?token=xyz'],
+    })
   })
 
   it('says how to get an inbox when the server runs none, or stopped', async () => {
