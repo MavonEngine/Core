@@ -290,10 +290,10 @@ async function main() {
     await waitFor(page, () => !window.Game.renderer.xrPresenting, null, 10000)
     check(await page.evaluate(() => window.Game.camera.rig.position.length() === 0 && window.Game.camera.rig.rotation.y === 0), 'the camera rig is reset for the desktop controls')
     check(await page.evaluate(() => window.Game.camera.instance.fov) === 35, 'the camera has its own field of view back, not the headset\'s')
-    await delay(1000)
+    await framesDrawn(page, 3)
     const desktop = await pose(page)
     const orbit = Math.hypot(...desktop.offset)
-    check(orbit >= 4.5 && orbit <= 25.5, `the orbit controls take the camera back around the character (${orbit.toFixed(2)}m away)`)
+    check(orbit >= 4.5 && orbit <= 25.5, `the orbit controls take the camera back around the character, within their 5-25m (${orbit.toFixed(2)}m away)`)
     check(await framesDrawn(page, 1) >= 1, 'the desktop renders again')
 
     const relevant = errors.filter(e => !e.includes('favicon'))
