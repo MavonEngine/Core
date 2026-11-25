@@ -109,6 +109,10 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   }
 
   private initEditorScene() {
+    // The fly controls move the camera itself, so take back any rig offset a game (e.g. a VR or
+    // third person camera through camera.place()) left behind
+    Game.instance().camera.rig.position.set(0, 0, 0)
+    Game.instance().camera.rig.quaternion.identity()
     Game.instance().camera.instance.position.set(20, 10, 20)
     Game.instance().camera.instance.rotation.set(0, 0, 0)
     Game.instance().camera.instance.rotateY((Math.PI / 360) * 90)

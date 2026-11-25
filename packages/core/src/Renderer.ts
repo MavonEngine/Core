@@ -157,6 +157,8 @@ export default class Renderer {
 
   update(delta: number) {
     this.perf?.begin()
+    // Before rendering so uniforms holding it (rain, smoke) see this frame's camera
+    Game.instance().camera.updateWorldPosition()
     if (this.xrPresenting) {
       // EffectComposer renders a single view, so in XR render straight to the headset's stereo cameras.
       // The renderer's toneMapping and outputColorSpace stand in for the OutputPass
@@ -165,6 +167,7 @@ export default class Renderer {
     else {
       this.composer.render(delta)
     }
+    Game.instance().camera.afterRender()
     this.perf?.end()
 
     this._fpsFrameCount++
