@@ -11,7 +11,10 @@ class TestLivingActor extends NetworkedLivingActor {
   heal(_amount: number): void {}
 
   serialize() {
-    return { ...super.serialize(), name: this.name }
+    return {
+      ...super.serialize(),
+      name: this.name,
+    }
   }
 }
 

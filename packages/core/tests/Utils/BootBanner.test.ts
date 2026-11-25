@@ -3,7 +3,12 @@ import { bootBanner } from '../../src/Utils/BootBanner'
 
 describe('bootBanner', () => {
   it('lists the versions in a closed box', () => {
-    const lines = bootBanner({ version: '0.0.20', threeRevision: '180', rapierVersion: '0.19.0', mode: 'production' })
+    const lines = bootBanner({
+      version: '0.0.20',
+      threeRevision: '180',
+      rapierVersion: '0.19.0',
+      mode: 'production',
+    })
 
     expect(lines).toContain('│  Version:  0.0.20                       │')
     expect(lines).toContain('│  Three.js: r180                         │')

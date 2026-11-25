@@ -61,12 +61,19 @@ const SECURITY_HEADERS = {
 const trimSlashes = (path: string) => path.replace(EDGE_SLASHES_RE, '')
 
 function parseBasic(header: string | undefined): { user: string, password: string } | undefined {
-  const encoded = header ? BASIC_RE.exec(header.trim())?.[1] : undefined
+  const encoded = header
+    ? BASIC_RE.exec(header.trim())?.[1]
+    : undefined
   if (!encoded)
     return undefined
   const decoded = Buffer.from(encoded, 'base64').toString('utf8')
   const colon = decoded.indexOf(':')
-  return colon < 0 ? undefined : { user: decoded.slice(0, colon), password: decoded.slice(colon + 1) }
+  return colon < 0
+    ? undefined
+    : {
+        user: decoded.slice(0, colon),
+        password: decoded.slice(colon + 1),
+      }
 }
 
 /**
@@ -108,13 +115,19 @@ export default class AdminPanel implements AdminApi {
 
   url(path = ''): string {
     const rest = trimSlashes(path)
-    return rest ? `${this.path}/${rest}` : this.path
+    return rest
+      ? `${this.path}/${rest}`
+      : this.path
   }
 
   page(page: AdminPage, plugin?: string): void {
     const path = trimSlashes(page.path)
     const previous = this.pages.get(path)
-    this.pages.set(path, { page: { ...page, path }, plugin, index: previous?.index ?? this.registered++ })
+    this.pages.set(path, {
+      page: { ...page, path },
+      plugin,
+      index: previous?.index ?? this.registered++,
+    })
   }
 
   addLogin(login: AdminLogin): void {
@@ -161,7 +174,9 @@ export default class AdminPanel implements AdminApi {
       '/_admin/admin.js': ['text/javascript', ADMIN_SCRIPT],
     }
     router.use((req, res, next) => {
-      const file = req.method === 'GET' || req.method === 'HEAD' ? files[req.path] : undefined
+      const file = req.method === 'GET' || req.method === 'HEAD'
+        ? files[req.path]
+        : undefined
       if (!file) {
         next()
         return
@@ -180,7 +195,9 @@ export default class AdminPanel implements AdminApi {
   }
 
   private sorted(): RegisteredPage[] {
-    return [...this.pages.values()].sort((a, b) => (a.page.order ?? 100) - (b.page.order ?? 100) || a.index - b.index)
+    return [
+      ...this.pages.values(),
+    ].sort((a, b) => (a.page.order ?? 100) - (b.page.order ?? 100) || a.index - b.index)
   }
 
   private pageUrl(path: string): string {
@@ -189,12 +206,22 @@ export default class AdminPanel implements AdminApi {
 
   /** Where a sidebar link under `page` goes, and the sub page path it stands for when it is one */
   private childTarget(page: AdminPage, child: AdminNavLink): { href: string, hash?: string, path?: string } {
-    if (child.href.startsWith('#'))
-      return { href: `${this.pageUrl(page.path)}${child.href}`, hash: child.href.slice(1) }
+    if (child.href.startsWith('#')) {
+      return {
+        href: `${this.pageUrl(page.path)}${child.href}`,
+        hash: child.href.slice(1),
+      }
+    }
     if (ABSOLUTE_HREF_RE.test(child.href))
       return { href: child.href }
-    const path = [page.path, trimSlashes(child.href)].filter(Boolean).join('/')
-    return { href: this.pageUrl(path), path }
+    const path = [
+      page.path,
+      trimSlashes(child.href),
+    ].filter(Boolean).join('/')
+    return {
+      href: this.pageUrl(path),
+      path,
+    }
   }
 
   /** The page and, for a sub page, the link that serves `path` */
@@ -224,15 +251,29 @@ export default class AdminPanel implements AdminApi {
         current: page === current,
         children: (page.children ?? []).map((child) => {
           const target = this.childTarget(page, child)
-          return { label: child.label, href: target.href, hash: target.hash, current: target.path === path }
+          return {
+            label: child.label,
+            href: target.href,
+            hash: target.hash,
+            current: target.path === path,
+          }
         }),
       })
     }
 
     // The engine's own pages first, then the rest in the order their first page sorts
     const server = groups.get('Server')
-    const entries = [...groups.entries()].filter(([label]) => label !== 'Server')
-    return [...(server ? [{ label: 'Server', items: server }] : []), ...entries.map(([label, items]) => ({ label, items }))]
+    const entries = [
+      ...groups.entries(),
+    ].filter(([label]) => label !== 'Server')
+    return [
+      ...(server
+        ? [
+            { label: 'Server', items: server },
+          ]
+        : []),
+      ...entries.map(([label, items]) => ({ label, items })),
+    ]
   }
 
   private async serve(req: Request, res: Response, next: NextFunction) {
@@ -246,7 +287,9 @@ export default class AdminPanel implements AdminApi {
     // Relative URLs on a page need its trailing slash
     const [pathname, query] = req.originalUrl.split('?')
     if (!pathname.endsWith('/')) {
-      res.redirect(301, `${pathname}/${query === undefined ? '' : `?${query}`}`)
+      res.redirect(301, `${pathname}/${query === undefined
+        ? ''
+        : `?${query}`}`)
       return
     }
 
@@ -255,7 +298,9 @@ export default class AdminPanel implements AdminApi {
     let status = 200
     try {
       const rendered = await (child?.render ?? page.render)(req)
-      content = typeof rendered === 'string' ? { html: rendered } : rendered
+      content = typeof rendered === 'string'
+        ? { html: rendered }
+        : rendered
     }
     catch (err) {
       const message = (err as Error)?.message ?? String(err)
@@ -267,7 +312,9 @@ export default class AdminPanel implements AdminApi {
     if (res.headersSent)
       return
 
-    const title = content.title ?? (child ? `${page.label} · ${child.label}` : page.label)
+    const title = content.title ?? (child
+      ? `${page.label} · ${child.label}`
+      : page.label)
     res.status(status).type('html').send(renderLayout({
       base: this.path,
       appName: this.deps.appName?.(),
@@ -311,7 +358,9 @@ export default class AdminPanel implements AdminApi {
 
     if (basic || bearer !== undefined) {
       this.recordFailure(address)
-      this.deps.logger?.warn(`Admin: failed login ${basic ? `for "${basic.user}"` : 'with a token'} from ${address}`)
+      this.deps.logger?.warn(`Admin: failed login ${basic
+        ? `for "${basic.user}"`
+        : 'with a token'} from ${address}`)
     }
 
     res.setHeader('WWW-Authenticate', `Basic realm="${REALM}", charset="UTF-8"`)
@@ -341,15 +390,22 @@ export default class AdminPanel implements AdminApi {
       this.failures.delete(address)
       return 0
     }
-    return entry.count >= MAX_FAILURES ? LOCKOUT_MS - elapsed : 0
+    return entry.count >= MAX_FAILURES
+      ? LOCKOUT_MS - elapsed
+      : 0
   }
 
   private recordFailure(address: string) {
     const entry = this.failures.get(address)
-    if (entry)
+    if (entry) {
       entry.count++
-    else
-      this.failures.set(address, { count: 1, since: this.now() })
+    }
+    else {
+      this.failures.set(address, {
+        count: 1,
+        since: this.now(),
+      })
+    }
 
     // Don't let an address scan grow this forever
     if (this.failures.size > 10000)

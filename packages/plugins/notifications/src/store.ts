@@ -57,7 +57,14 @@ function fromRow(row: Row): StoredNotification {
   catch {
     data = null
   }
-  return { id: row.id, notificationId: row.notification_id, type: row.type, data, readAt: row.read_at, createdAt: row.created_at }
+  return {
+    id: row.id,
+    notificationId: row.notification_id,
+    type: row.type,
+    data,
+    readAt: row.read_at,
+    createdAt: row.created_at,
+  }
 }
 
 /** The notifications of the `database` channel, in the plugin's table */
@@ -113,9 +120,15 @@ export default class NotificationStore {
   async markRead(owner: Owner, ids?: string[]): Promise<number> {
     if (ids && ids.length === 0)
       return 0
-    let query = this.owned(this.db.updateTable(this.table).set({ read_at: new Date().toISOString() }), owner).where('read_at', 'is', null)
-    if (ids)
-      query = query.where(eb => eb.or([eb('id', 'in', ids), eb('notification_id', 'in', ids)]))
+    let query = this.owned(this.db.updateTable(this.table).set({
+      read_at: new Date().toISOString(),
+    }), owner).where('read_at', 'is', null)
+    if (ids) {
+      query = query.where(eb => eb.or([
+        eb('id', 'in', ids),
+        eb('notification_id', 'in', ids),
+      ]))
+    }
     const result = await query.executeTakeFirst()
     return Number(result.numUpdatedRows)
   }
@@ -125,8 +138,12 @@ export default class NotificationStore {
     if (ids && ids.length === 0)
       return 0
     let query = this.owned(this.db.deleteFrom(this.table), owner)
-    if (ids)
-      query = query.where(eb => eb.or([eb('id', 'in', ids), eb('notification_id', 'in', ids)]))
+    if (ids) {
+      query = query.where(eb => eb.or([
+        eb('id', 'in', ids),
+        eb('notification_id', 'in', ids),
+      ]))
+    }
     const result = await query.executeTakeFirst()
     return Number(result.numDeletedRows)
   }

@@ -90,7 +90,13 @@ export default class WorldInspector {
 
   /** Counts of what the server's three.js scene graph holds */
   sceneGraph(): SceneGraphStats {
-    const stats: SceneGraphStats = { objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 }
+    const stats: SceneGraphStats = {
+      objects: 0,
+      byType: {},
+      meshes: 0,
+      triangles: 0,
+      lights: 0,
+    }
     const root = this.source.game.scene
     root?.traverse((node) => {
       if (node === root)
@@ -146,6 +152,8 @@ export default class WorldInspector {
 
   entity(id: string): EntityDetail | null {
     const entity = this.source.game.world.entities.items.get(id)
-    return entity ? detailEntity(entity, this.source.game.activeScene, isPlayer) : null
+    return entity
+      ? detailEntity(entity, this.source.game.activeScene, isPlayer)
+      : null
   }
 }

@@ -29,8 +29,27 @@ interface FakeChannel {
 function world(options: object = {}, extra: { server?: object, ctx?: object } = {}) {
   const connections = new Map<string, { channel: FakeChannel }>()
   const entities = new Map<string, any>()
-  const server = { gameSocket: { connectionsManager: { connections } }, ...extra.server }
-  const ctx = { server, game: { world: { entities: { items: entities } } }, logger: { info: vi.fn(), error: vi.fn() }, options, package: '@mavonengine/chat', ...extra.ctx } as any
+  const server = {
+    gameSocket: {
+      connectionsManager: { connections },
+    },
+    ...extra.server,
+  }
+  const ctx = {
+    server,
+    game: {
+      world: {
+        entities: { items: entities },
+      },
+    },
+    logger: {
+      info: vi.fn(),
+      error: vi.fn(),
+    },
+    options,
+    package: '@mavonengine/chat',
+    ...extra.ctx,
+  } as any
 
   plugin.setup!(ctx)
 
@@ -40,15 +59,22 @@ function world(options: object = {}, extra: { server?: object, ctx?: object } = 
     const channel: FakeChannel = {
       id,
       // What core keeps from the auth plugin, read back with ctx.identity()
-      userData: account ? { id: account, name } : {},
+      userData: account
+        ? { id: account, name }
+        : {},
       emit,
       on: (event, callback) => void handlers.set(event, callback),
       receive: (event, data) => handlers.get(event)?.(data),
       got: event => emit.mock.calls.filter(call => !event || call[0] === event).map(call => call[1]),
     }
     connections.set(id, { channel })
-    if (player)
-      entities.set(id, { id, name, position: new Position(x) })
+    if (player) {
+      entities.set(id, {
+        id,
+        name,
+        position: new Position(x),
+      })
+    }
     plugin.onConnection!(channel as any, entities.get(id), ctx)
     return channel
   }
@@ -59,7 +85,13 @@ function world(options: object = {}, extra: { server?: object, ctx?: object } = 
     entities.delete(channel.id)
   }
 
-  return { ctx, connect, disconnect, entities, tick: () => plugin.tick!(0.033, ctx) }
+  return {
+    ctx,
+    connect,
+    disconnect,
+    entities,
+    tick: () => plugin.tick!(0.033, ctx),
+  }
 }
 
 const texts = (messages: unknown[]) => (messages as { text: string }[]).map(message => message.text)
@@ -77,8 +109,16 @@ describe('chat server plugin', () => {
 
     ada.receive('chat:send', { text: ' hello  there ' })
 
-    for (const channel of [ada, bob])
-      expect(channel.got('chat:message')).toEqual([{ id: 1, from: { id: 'a1', name: 'Ada' }, text: 'hello there', at: expect.any(Number) }])
+    for (const channel of [ada, bob]) {
+      expect(channel.got('chat:message')).toEqual([
+        {
+          id: 1,
+          from: { id: 'a1', name: 'Ada' },
+          text: 'hello there',
+          at: expect.any(Number),
+        },
+      ])
+    }
     expect(bob.emit).toHaveBeenCalledWith('chat:message', expect.anything(), { reliable: true })
   })
 
@@ -107,7 +147,9 @@ describe('chat server plugin', () => {
     ada.receive('chat:send', { text: '   ' })
     ada.receive('chat:send', null)
 
-    expect(ada.got('chat:notice')).toEqual([{ text: 'That message is too long, the limit is 5 characters' }])
+    expect(ada.got('chat:notice')).toEqual([
+      { text: 'That message is too long, the limit is 5 characters' },
+    ])
     expect(bob.emit).not.toHaveBeenCalledWith('chat:notice', expect.anything(), expect.anything())
     expect(bob.got('chat:message')).toEqual([])
   })
@@ -132,8 +174,19 @@ describe('chat server plugin', () => {
 
     const bob = connect('b2', { name: 'Bob' })
 
-    expect(ada.got('chat:history')).toEqual([{ messages: [] }])
-    expect(bob.got('chat:history')).toEqual([{ messages: [expect.objectContaining({ text: 'anyone?', from: { id: 'a1', name: 'Ada' } })] }])
+    expect(ada.got('chat:history')).toEqual([
+      { messages: [] },
+    ])
+    expect(bob.got('chat:history')).toEqual([
+      {
+        messages: [
+          expect.objectContaining({
+            text: 'anyone?',
+            from: { id: 'a1', name: 'Ada' },
+          }),
+        ],
+      },
+    ])
   })
 
   describe('chat(server)', () => {
@@ -152,7 +205,13 @@ describe('chat server plugin', () => {
       ada.receive('chat:send', { text: ' darn  it ' })
 
       // Interceptors get the cleaned up text and who sent it
-      expect(seen).toEqual([[{ id: 'a1', name: 'Ada' }, 'darn it', 'a1']])
+      expect(seen).toEqual([
+        [
+          { id: 'a1', name: 'Ada' },
+          'darn it',
+          'a1',
+        ],
+      ])
       expect(texts(ada.got('chat:message'))).toEqual(['**** it!'])
     })
 
@@ -171,7 +230,9 @@ describe('chat server plugin', () => {
       ada.receive('chat:send', { text: '/roll' })
       ada.receive('chat:send', { text: 'did you see that' })
 
-      expect(ada.got('chat:notice')).toEqual([{ text: 'You rolled 4' }])
+      expect(ada.got('chat:notice')).toEqual([
+        { text: 'You rolled 4' },
+      ])
       expect(bob.got('chat:notice')).toEqual([])
       expect(texts(bob.got('chat:message'))).toEqual(['did you see that'])
       // A dropped message is not in the history either
@@ -187,7 +248,12 @@ describe('chat server plugin', () => {
 
       chat(ctx.server).intercept((message) => {
         const whisper = /^\/w (\S+) (.+)$/.exec(message.text)
-        return whisper ? { text: whisper[2], to: [whisper[1]] } : undefined
+        return whisper
+          ? {
+              text: whisper[2],
+              to: [whisper[1]],
+            }
+          : undefined
       })
 
       ada.receive('chat:send', { text: '/w b2 meet me at the lake' })
@@ -201,7 +267,11 @@ describe('chat server plugin', () => {
     })
 
     it('runs interceptors after the chat\'s own checks, in the order they were added, and can remove them', () => {
-      const { ctx, connect } = world({ announce: false, maxLength: 10, rateLimit: { messages: 2, perSeconds: 60 } })
+      const { ctx, connect } = world({
+        announce: false,
+        maxLength: 10,
+        rateLimit: { messages: 2, perSeconds: 60 },
+      })
       const ada = connect('a1', { name: 'Ada' })
       const order: string[] = []
       const off = chat(ctx.server).intercept(() => void order.push('first'))
@@ -223,7 +293,10 @@ describe('chat server plugin', () => {
     })
 
     it('drops a message when an interceptor throws or empties it, and says so in the log', () => {
-      const { ctx, connect } = world({ announce: false, rateLimit: { messages: 10 } })
+      const { ctx, connect } = world({
+        announce: false,
+        rateLimit: { messages: 10 },
+      })
       ctx.logger.error = vi.fn()
       const ada = connect('a1', { name: 'Ada' })
       const broken = chat(ctx.server).intercept(() => {
@@ -253,8 +326,16 @@ describe('chat server plugin', () => {
       chat(ctx.server).announce('Server restarts soon')
 
       expect(heard).toEqual([
-        ['Ada', 'psst', ['a1', 'n2']],
-        [null, 'Server restarts soon', ['a1', 'n2', 'f3']],
+        [
+          'Ada',
+          'psst',
+          ['a1', 'n2'],
+        ],
+        [
+          null,
+          'Server restarts soon',
+          ['a1', 'n2', 'f3'],
+        ],
       ])
 
       off()
@@ -283,7 +364,11 @@ describe('chat server plugin', () => {
       const ada = connect('a1', { name: 'Ada' })
       const hooks = chat(ctx.server)
 
-      expect(hooks.mute('a1', 5)).toEqual({ playerId: 'a1', kind: 'connection', until: expect.any(Number) })
+      expect(hooks.mute('a1', 5)).toEqual({
+        playerId: 'a1',
+        kind: 'connection',
+        until: expect.any(Number),
+      })
       ada.receive('chat:send', { text: 'hello?' })
       expect(ada.got('chat:notice')).toHaveLength(1)
 
@@ -294,7 +379,13 @@ describe('chat server plugin', () => {
     })
 
     it('takes callbacks before the plugin runs and keeps them when it stops', () => {
-      const server = { gameSocket: { connectionsManager: { connections: new Map() } } }
+      const server = {
+        gameSocket: {
+          connectionsManager: {
+            connections: new Map(),
+          },
+        },
+      }
       const hooks = chat(server)
       const interceptor = vi.fn()
       hooks.intercept(interceptor)
@@ -305,11 +396,36 @@ describe('chat server plugin', () => {
       expect(hooks.mute('a1')).toBeUndefined()
       expect(hooks.unmute('a1')).toBe(false)
 
-      const entities = new Map<string, any>([['a1', { id: 'a1', name: 'Ada', position: new Position() }]])
-      const ctx = { server, game: { world: { entities: { items: entities } } }, logger: { info: vi.fn(), error: vi.fn() }, options: { announce: false } } as any
+      const entities = new Map<string, any>([
+        [
+          'a1',
+          {
+            id: 'a1',
+            name: 'Ada',
+            position: new Position(),
+          },
+        ],
+      ])
+      const ctx = {
+        server,
+        game: {
+          world: {
+            entities: { items: entities },
+          },
+        },
+        logger: {
+          info: vi.fn(),
+          error: vi.fn(),
+        },
+        options: { announce: false },
+      } as any
       plugin.setup!(ctx)
       const handlers = new Map<string, (data: unknown) => void>()
-      const channel = { id: 'a1', emit: vi.fn(), on: (event: string, callback: (data: unknown) => void) => void handlers.set(event, callback) }
+      const channel = {
+        id: 'a1',
+        emit: vi.fn(),
+        on: (event: string, callback: (data: unknown) => void) => void handlers.set(event, callback),
+      }
       server.gameSocket.connectionsManager.connections.set('a1', { channel })
       plugin.onConnection!(channel as any, entities.get('a1'), ctx)
 
@@ -372,7 +488,14 @@ describe('chat server plugin', () => {
       tick()
       tick()
 
-      expect(ada.got('chat:message')).toEqual([{ id: 1, from: null, text: 'Ada joined', at: expect.any(Number) }])
+      expect(ada.got('chat:message')).toEqual([
+        {
+          id: 1,
+          from: null,
+          text: 'Ada joined',
+          at: expect.any(Number),
+        },
+      ])
     })
 
     it('uses the id when no name comes', () => {
@@ -390,7 +513,9 @@ describe('chat server plugin', () => {
     })
 
     it('says who left, by the name it last had', () => {
-      const { connect, disconnect, entities, tick } = world({ rateLimit: { messages: 100 } })
+      const { connect, disconnect, entities, tick } = world({
+        rateLimit: { messages: 100 },
+      })
       const ada = connect('a1', { name: 'Ada' })
       const bob = connect('b2', { name: 'Bob' })
       tick()
@@ -399,7 +524,12 @@ describe('chat server plugin', () => {
       bob.receive('chat:send', { text: 'new name' })
       disconnect(bob)
 
-      expect(texts(ada.got('chat:message'))).toEqual(['Ada joined', 'Bob joined', 'new name', 'Robert left'])
+      expect(texts(ada.got('chat:message'))).toEqual([
+        'Ada joined',
+        'Bob joined',
+        'new name',
+        'Robert left',
+      ])
       expect(bob.got('chat:message')).toHaveLength(3)
     })
 
@@ -432,7 +562,10 @@ describe('chat server plugin', () => {
   })
 
   it('forgets a player\'s recent messages when it leaves, and stops when the server does', () => {
-    const { ctx, connect, disconnect } = world({ announce: false, rateLimit: { messages: 1, perSeconds: 60 } })
+    const { ctx, connect, disconnect } = world({
+      announce: false,
+      rateLimit: { messages: 1, perSeconds: 60 },
+    })
     const ada = connect('a1', { name: 'Ada' })
     ada.receive('chat:send', { text: 'one' })
     ada.receive('chat:send', { text: 'two' })
@@ -468,7 +601,13 @@ describe('chat server plugin', () => {
       close = () => listener.close()
       const base = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`
       const request = (path: string, init: RequestInit = {}) => fetch(`${base}${path}`, init)
-      const post = (path: string, body: unknown, headers: Record<string, string> = {}) => request(path, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers })
+      const post = (path: string, body: unknown, headers: Record<string, string> = {}) => request(path, {
+        method: 'POST',
+        body: typeof body === 'string'
+          ? body
+          : JSON.stringify(body),
+        headers,
+      })
 
       return { ...game, app, request, post }
     }
@@ -479,7 +618,14 @@ describe('chat server plugin', () => {
       ada.receive('chat:send', { text: 'hello' })
 
       const announced = await post('/api/chat/messages', { text: '  Server restarts\nsoon ' })
-      expect(await announced.json()).toEqual({ message: { id: 2, from: null, text: 'Server restarts soon', at: expect.any(Number) } })
+      expect(await announced.json()).toEqual({
+        message: {
+          id: 2,
+          from: null,
+          text: 'Server restarts soon',
+          at: expect.any(Number),
+        },
+      })
       expect(texts(ada.got('chat:message'))).toEqual(['hello', 'Server restarts soon'])
 
       const { messages } = await (await request('/api/chat/messages')).json() as { messages: { text: string }[] }
@@ -494,19 +640,37 @@ describe('chat server plugin', () => {
       const ada = connect('a1', { name: 'Ada' })
 
       const muted = await post('/api/chat/mutes', { playerId: 'a1', minutes: 5 })
-      expect(await muted.json()).toEqual({ mute: { playerId: 'a1', kind: 'connection', until: expect.any(Number) } })
+      expect(await muted.json()).toEqual({
+        mute: {
+          playerId: 'a1',
+          kind: 'connection',
+          until: expect.any(Number),
+        },
+      })
       expect(ctx.logger.info).toHaveBeenCalledWith(expect.stringContaining('Chat: muted connection a1 until '))
 
       ada.receive('chat:send', { text: 'hello?' })
-      expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted for another 5 min' }])
-      expect(await (await request('/api/chat/mutes')).json()).toEqual({ mutes: [{ playerId: 'a1', kind: 'connection', until: expect.any(Number) }] })
+      expect(ada.got('chat:notice')).toEqual([
+        { text: 'You are muted for another 5 min' },
+      ])
+      expect(await (await request('/api/chat/mutes')).json()).toEqual({
+        mutes: [
+          {
+            playerId: 'a1',
+            kind: 'connection',
+            until: expect.any(Number),
+          },
+        ],
+      })
 
       expect(await (await request('/api/chat/mutes/a1', { method: 'DELETE' })).json()).toEqual({ unmuted: true })
       expect(await (await request('/api/chat/mutes/a1', { method: 'DELETE' })).json()).toEqual({ unmuted: false })
       ada.receive('chat:send', { text: 'back' })
       expect(texts(ada.got('chat:message'))).toEqual(['back'])
 
-      expect(await (await post('/api/chat/mutes', { playerId: 'a1' })).json()).toEqual({ mute: { playerId: 'a1', kind: 'connection', until: null } })
+      expect(await (await post('/api/chat/mutes', { playerId: 'a1' })).json()).toEqual({
+        mute: { playerId: 'a1', kind: 'connection', until: null },
+      })
       expect((await post('/api/chat/mutes', { minutes: 5 })).status).toBe(400)
     })
 
@@ -543,16 +707,25 @@ describe('chat server plugin', () => {
     it('only answers localhost on a core without an admin guard', async () => {
       const { app } = await api()
       // What Express would hand the route for a request from another machine
-      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() }
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      }
       const next = vi.fn()
       const layer = (app as any).router.stack.find((entry: any) => entry.route?.path === '/api/chat/mutes' && entry.route.methods.get)
       const guard = layer.route.stack[1].handle
 
-      guard({ headers: {}, socket: { remoteAddress: '203.0.113.9' } }, res, next)
+      guard({
+        headers: {},
+        socket: { remoteAddress: '203.0.113.9' },
+      }, res, next)
       expect(res.status).toHaveBeenCalledWith(403)
       expect(next).not.toHaveBeenCalled()
 
-      guard({ headers: {}, socket: { remoteAddress: '::1' } }, res, next)
+      guard({
+        headers: {},
+        socket: { remoteAddress: '::1' },
+      }, res, next)
       expect(next).toHaveBeenCalledTimes(1)
     })
 
@@ -602,7 +775,9 @@ describe('mutes on accounts', () => {
     const again = connect('a2', { name: 'Ada', account: 'acc-ada' })
 
     again.receive('chat:send', { text: 'I\'m back' })
-    expect(again.got('chat:notice')).toEqual([{ text: 'You are muted' }])
+    expect(again.got('chat:notice')).toEqual([
+      { text: 'You are muted' },
+    ])
     bob.receive('chat:send', { text: 'hi' })
     expect(texts(bob.got('chat:message'))).toEqual(['hi'])
 
@@ -618,7 +793,9 @@ describe('mutes on accounts', () => {
     expect(chat(ctx.server).mute('acc-ada', 10)).toMatchObject({ playerId: 'acc-ada', kind: 'account' })
     const ada = connect('a1', { name: 'Ada', account: 'acc-ada' })
     ada.receive('chat:send', { text: 'hello?' })
-    expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted for another 10 min' }])
+    expect(ada.got('chat:notice')).toEqual([
+      { text: 'You are muted for another 10 min' },
+    ])
   })
 
   it('mutes a player let in without an account on its connection', () => {
@@ -637,7 +814,9 @@ describe('mutes on accounts', () => {
     chat(first.ctx.server).mute('g1')
     await mutesSaved(first.ctx.server)
 
-    expect(await db.selectFrom('chat_mutes').select(['account_id', 'until']).execute()).toEqual([{ account_id: 'acc-ada', until: null }])
+    expect(await db.selectFrom('chat_mutes').select(['account_id', 'until']).execute()).toEqual([
+      { account_id: 'acc-ada', until: null },
+    ])
 
     // A new server on the same database
     const second = withAuth(db)
@@ -645,7 +824,9 @@ describe('mutes on accounts', () => {
     expect(second.ctx.logger.info).toHaveBeenCalledWith('Chat: 1 player is still muted')
     const ada = second.connect('a9', { name: 'Ada', account: 'acc-ada' })
     ada.receive('chat:send', { text: 'new server, who dis' })
-    expect(ada.got('chat:notice')).toEqual([{ text: 'You are muted' }])
+    expect(ada.got('chat:notice')).toEqual([
+      { text: 'You are muted' },
+    ])
 
     chat(second.ctx.server).unmute('a9')
     await mutesSaved(second.ctx.server)
@@ -681,6 +862,8 @@ describe('mutes on accounts', () => {
     chat(ctx.server).mute('a1')
 
     await plugin.destroy!(ctx)
-    expect(await db.selectFrom('chat_mutes').select('account_id').execute()).toEqual([{ account_id: 'acc-ada' }])
+    expect(await db.selectFrom('chat_mutes').select('account_id').execute()).toEqual([
+      { account_id: 'acc-ada' },
+    ])
   })
 })

@@ -28,7 +28,13 @@ export interface RequestLogResponse {
 }
 
 /** Requests the dashboard makes every poll, which would bury everything else */
-export const UNLOGGED_PATHS = new Set(['/api/game/metrics', '/api/game/logs', '/api/game/requests', '/api/game/routes', '/api/game/plugins'])
+export const UNLOGGED_PATHS = new Set([
+  '/api/game/metrics',
+  '/api/game/logs',
+  '/api/game/requests',
+  '/api/game/routes',
+  '/api/game/plugins',
+])
 
 /** The network debug endpoints, polled by the dashboard's Network tab and the editor's Network panel */
 export const UNLOGGED_PREFIX = '/api/game/dev/net/'
@@ -134,9 +140,17 @@ export default class RequestLog {
     }
 
     socket.write = function (this: Duplex, chunk: any, ...rest: any[]) {
-      const head = typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString('latin1', 0, 32) : ''
+      const head = typeof chunk === 'string'
+        ? chunk
+        : Buffer.isBuffer(chunk)
+          ? chunk.toString('latin1', 0, 32)
+          : ''
       const status = STATUS_LINE_RE.exec(head)?.[1]
-      record(status ? Number(status) : null, typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk?.length ?? 0)
+      record(status
+        ? Number(status)
+        : null, typeof chunk === 'string'
+        ? Buffer.byteLength(chunk)
+        : chunk?.length ?? 0)
       return write.apply(this, [chunk, ...rest] as Parameters<Duplex['write']>)
     } as Duplex['write']
 
@@ -147,5 +161,7 @@ export default class RequestLog {
 function pathOf(req: IncomingMessage) {
   const url = req.url ?? '/'
   const query = url.indexOf('?')
-  return query === -1 ? url : url.slice(0, query)
+  return query === -1
+    ? url
+    : url.slice(0, query)
 }

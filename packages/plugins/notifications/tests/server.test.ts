@@ -10,7 +10,14 @@ import winston from 'winston'
 import plugin, { Notification, NOTIFICATION_MESSAGE, notifications, parseOptions } from '../src/server'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 // No client connects through geckos in these tests: connections are handed to the plugins directly
@@ -51,7 +58,11 @@ const accounts: Record<string, { email: string | null, emailVerifiedAt: string |
 }
 
 /** Stands in for @mavonengine/auth: only the api the mail channel uses */
-const fakeAuth: ServerPlugin = { api: () => ({ account: async (id: string) => accounts[id] }) }
+const fakeAuth: ServerPlugin = {
+  api: () => ({
+    account: async (id: string) => accounts[id],
+  }),
+}
 
 const servers: TestServer[] = []
 
@@ -67,18 +78,26 @@ async function start({ options = {}, withMail = true, withAuth = true, extra = [
     ...extra,
   ]
   if (withMail) {
-    loaded.push({ package: '@mavonengine/mail', options: { from: 'game@example.com', queued: false }, plugin: {
-      ...mailPlugin,
-      setup(ctx) {
-        mailPlugin.setup(ctx)
-        ctx.plugin('@mavonengine/mail')!.useTransport(memory)
+    loaded.push({
+      package: '@mavonengine/mail',
+      options: { from: 'game@example.com', queued: false },
+      plugin: {
+        ...mailPlugin,
+        setup(ctx) {
+          mailPlugin.setup(ctx)
+          ctx.plugin('@mavonengine/mail')!.useTransport(memory)
+        },
       },
-    } })
+    })
   }
   if (withAuth)
     loaded.push({ package: '@mavonengine/auth', options: {}, plugin: fakeAuth })
 
-  const server = new TestServer(logger, undefined, { stopOnSignals: false, plugins: loaded, queue: { pollIntervalMs: 10 } })
+  const server = new TestServer(logger, undefined, {
+    stopOnSignals: false,
+    plugins: loaded,
+    queue: { pollIntervalMs: 10 },
+  })
   vi.spyOn(server.http, 'start').mockImplementation(() => {})
   servers.push(server)
   await server.start()
@@ -87,7 +106,9 @@ async function start({ options = {}, withMail = true, withAuth = true, extra = [
     const handlers = new Map<string, (data: unknown) => void>()
     const channel = {
       id: `ch-${Math.random()}`,
-      userData: accountId ? { id: accountId } : undefined,
+      userData: accountId
+        ? { id: accountId }
+        : undefined,
       emit: vi.fn(),
       on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)),
       /** A message from the player's game */
@@ -97,7 +118,13 @@ async function start({ options = {}, withMail = true, withAuth = true, extra = [
     return channel
   }
   const disconnect = (channel: ReturnType<typeof connect>) => server.plugins!.run('onDisconnect', channel as unknown as ServerChannel)
-  return { server, memory, logger, connect, disconnect }
+  return {
+    server,
+    memory,
+    logger,
+    connect,
+    disconnect,
+  }
 }
 
 class BaseGuild {
@@ -111,7 +138,11 @@ class Guild extends notifiable(BaseGuild) {
   }
 
   routeNotificationFor(channel: string) {
-    return channel === 'game' ? this.members : channel === 'mail' ? this.officers : undefined
+    return channel === 'game'
+      ? this.members
+      : channel === 'mail'
+        ? this.officers
+        : undefined
   }
 }
 
@@ -133,7 +164,15 @@ describe('notifications plugin', () => {
       }, { reliable: true })
     }
     expect(other.emit).not.toHaveBeenCalled()
-    expect(memory.sent).toEqual([expect.objectContaining({ to: [{ address: 'ada@example.com' }], subject: 'Level 5!', text: 'You reached level 5.' })])
+    expect(memory.sent).toEqual([
+      expect.objectContaining({
+        to: [
+          { address: 'ada@example.com' },
+        ],
+        subject: 'Level 5!',
+        text: 'You reached level 5.',
+      }),
+    ])
     // One notification: the same id on every channel
     expect(tab1.emit.mock.calls[0][1].id).toBe(tab2.emit.mock.calls[0][1].id)
   })
@@ -154,24 +193,47 @@ describe('notifications plugin', () => {
 
     await new Guild(['acc-2', 'acc-3'], ['officer@example.com']).notify(new LevelUp(9))
 
-    expect(member.emit).toHaveBeenCalledWith(NOTIFICATION_MESSAGE, expect.objectContaining({ data: { level: 9 } }), { reliable: true })
+    expect(member.emit).toHaveBeenCalledWith(NOTIFICATION_MESSAGE, expect.objectContaining({
+      data: { level: 9 },
+    }), { reliable: true })
     expect(outsider.emit).not.toHaveBeenCalled()
-    expect(memory.sent.map(m => m.to)).toEqual([[{ address: 'officer@example.com' }]])
+    expect(memory.sent.map(m => m.to)).toEqual([
+      [
+        { address: 'officer@example.com' },
+      ],
+    ])
   })
 
   it('skips the mail of accounts without an address, or without a confirmed one when told to', async () => {
     const plain = await start()
-    await notify([account('acc-2'), account('acc-3')], new LevelUp(1, ['mail']))
+    await notify([
+      account('acc-2'),
+      account('acc-3'),
+    ], new LevelUp(1, ['mail']))
     expect(plain.memory.sent.map(m => m.to[0].address)).toEqual(['bob@example.com'])
 
-    const verified = await start({ options: { verifiedEmailOnly: true } })
-    await notify([account('acc-1'), account('acc-2')], new LevelUp(1, ['mail']))
+    const verified = await start({
+      options: { verifiedEmailOnly: true },
+    })
+    await notify([
+      account('acc-1'),
+      account('acc-2'),
+    ], new LevelUp(1, ['mail']))
     expect(verified.memory.sent.map(m => m.to[0].address)).toEqual(['ada@example.com'])
   })
 
   it('leaves the mail to the mail plugin, which queues it unless the notification says not to', async () => {
     // The mail plugin with its default: queued
-    const { server } = await start({ withMail: false, extra: [{ package: '@mavonengine/mail', options: { from: 'game@example.com' }, plugin: mailPlugin }] })
+    const { server } = await start({
+      withMail: false,
+      extra: [
+        {
+          package: '@mavonengine/mail',
+          options: { from: 'game@example.com' },
+          plugin: mailPlugin,
+        },
+      ],
+    })
     await server.queue.stop()
     const memory = memoryTransport()
     mail(server)!.useTransport(memory)
@@ -223,9 +285,15 @@ describe('notifications plugin', () => {
   it('skips recipients without an id, like a player without an account', async () => {
     const { connect } = await start()
     const tab = connect('acc-1')
-    const nobody: Notifiable = { notifiableType: 'account', notifiableId: () => undefined }
+    const nobody: Notifiable = {
+      notifiableType: 'account',
+      notifiableId: () => undefined,
+    }
 
-    await notify([nobody, account('acc-1')], new LevelUp(1, ['game']))
+    await notify([
+      nobody,
+      account('acc-1'),
+    ], new LevelUp(1, ['game']))
     expect(tab.emit).toHaveBeenCalledTimes(1)
   })
 
@@ -245,7 +313,9 @@ describe('notifications plugin', () => {
   })
 
   it('takes channels of its own, queued ones retried on the server\'s queue', async () => {
-    const { server } = await start({ options: { tries: 3, backoffMs: 0 } })
+    const { server } = await start({
+      options: { tries: 3, backoffMs: 0 },
+    })
     const sent: Delivery[] = []
     let failures = 1
     const api = notifications(server)!
@@ -274,7 +344,13 @@ describe('notifications plugin', () => {
     expect(await server.queue.size()).toBe(1)
 
     await vi.waitFor(() => expect(sent).toHaveLength(1))
-    expect(sent[0]).toMatchObject({ channel: 'discord', type: 'Raid', route: 'webhook-1', recipient: { type: 'account', id: 'acc-1' }, payload: { content: 'Raid in 10 minutes' } })
+    expect(sent[0]).toMatchObject({
+      channel: 'discord',
+      type: 'Raid',
+      route: 'webhook-1',
+      recipient: { type: 'account', id: 'acc-1' },
+      payload: { content: 'Raid in 10 minutes' },
+    })
   })
 
   it('names a notification by its notificationType when it sets one', async () => {
@@ -295,8 +371,33 @@ describe('notifications plugin', () => {
 
 describe('notifications options', () => {
   it('fills in the defaults', () => {
-    expect(parseOptions({})).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000], keepReadDays: 90 })
-    expect(parseOptions({ verifiedEmailOnly: true, tries: 5, backoffMs: 100, keepReadDays: 0 })).toEqual({ verifiedEmailOnly: true, tries: 5, backoffMs: 100, keepReadDays: 0 })
-    expect(parseOptions({ verifiedEmailOnly: 'yes', tries: 0, backoffMs: ['x'], keepReadDays: -1 })).toEqual({ verifiedEmailOnly: false, tries: 3, backoffMs: [10_000, 60_000], keepReadDays: 90 })
+    expect(parseOptions({})).toEqual({
+      verifiedEmailOnly: false,
+      tries: 3,
+      backoffMs: [10_000, 60_000],
+      keepReadDays: 90,
+    })
+    expect(parseOptions({
+      verifiedEmailOnly: true,
+      tries: 5,
+      backoffMs: 100,
+      keepReadDays: 0,
+    })).toEqual({
+      verifiedEmailOnly: true,
+      tries: 5,
+      backoffMs: 100,
+      keepReadDays: 0,
+    })
+    expect(parseOptions({
+      verifiedEmailOnly: 'yes',
+      tries: 0,
+      backoffMs: ['x'],
+      keepReadDays: -1,
+    })).toEqual({
+      verifiedEmailOnly: false,
+      tries: 3,
+      backoffMs: [10_000, 60_000],
+      keepReadDays: 90,
+    })
   })
 })

@@ -75,5 +75,7 @@ export function backoffAfter(backoffMs: number | number[], attempt: number): num
   const delay = Array.isArray(backoffMs)
     ? backoffMs[Math.min(attempt, backoffMs.length) - 1]
     : backoffMs
-  return typeof delay === 'number' && Number.isFinite(delay) && delay > 0 ? delay : 0
+  return typeof delay === 'number' && Number.isFinite(delay) && delay > 0
+    ? delay
+    : 0
 }

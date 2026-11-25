@@ -93,7 +93,9 @@ export default class Grass extends WithEditorHelper(Entity3D) {
 
       if (Math.random() < densityFalloff) {
         positions[bladeIndex * 3] = x
-        positions[bladeIndex * 3 + 1] = coordCallback ? coordCallback(x, z) : 0
+        positions[bladeIndex * 3 + 1] = coordCallback
+          ? coordCallback(x, z)
+          : 0
         positions[bladeIndex * 3 + 2] = z
 
         instanceRotation[bladeIndex] = Math.random() * Math.PI * 2
@@ -198,7 +200,12 @@ export default class Grass extends WithEditorHelper(Entity3D) {
 
   addBindings(folder: ContainerApi): void {
     const proxy = { bladeCount: this.mesh?.geometry.getAttribute('offset')?.count ?? 0 }
-    folder.addBinding(proxy, 'bladeCount', { min: 1000, max: 50000, step: 1000, label: 'Blade Count' })
+    folder.addBinding(proxy, 'bladeCount', {
+      min: 1000,
+      max: 50000,
+      step: 1000,
+      label: 'Blade Count',
+    })
       .on('change', ({ value }) => this.reallocate(value))
   }
 

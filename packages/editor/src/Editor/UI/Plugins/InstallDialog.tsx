@@ -26,7 +26,9 @@ export function sourceOf(spec: string, homepage?: string): string | undefined {
     return undefined
 
   const name = PACKAGE_NAME_RE.exec(spec)?.[0]
-  return name ? `https://www.npmjs.com/package/${name}` : undefined
+  return name
+    ? `https://www.npmjs.com/package/${name}`
+    : undefined
 }
 
 type Phase = 'confirm' | 'starting' | 'installing' | 'restarting' | 'done' | 'failed'
@@ -54,7 +56,9 @@ export default function InstallDialog({ request, onClose, fetchFn }: { request: 
 
     const timer = setInterval(async () => {
       const status = await fetchInstallStatus(fetchFn)
-      const current = status.job?.id === job.id ? status.job : null
+      const current = status.job?.id === job.id
+        ? status.job
+        : null
 
       // The dev server is one of the things being restarted, so it can't answer for a moment
       if (!current) {
@@ -106,7 +110,9 @@ export default function InstallDialog({ request, onClose, fetchFn }: { request: 
             <p>Check the source before you install it:</p>
             <ul className={styles.sources}>
               {request.packages.map((spec) => {
-                const source = sourceOf(spec, request.packages.length === 1 ? request.homepage : undefined)
+                const source = sourceOf(spec, request.packages.length === 1
+                  ? request.homepage
+                  : undefined)
                 return (
                   <li key={spec}>
                     <code>{spec}</code>

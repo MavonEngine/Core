@@ -22,7 +22,9 @@ export function publishedDir(root: string, pkg: string): string {
  */
 export function publishedFile(root: string, pkg: string, path: string): string | undefined {
   const file = resolveInside(publishedDir(root, pkg), path)
-  return file && existsSync(file) && statSync(file).isFile() ? file : undefined
+  return file && existsSync(file) && statSync(file).isFile()
+    ? file
+    : undefined
 }
 
 /** The plugin's directory of files to publish, undefined when it publishes none */
@@ -78,6 +80,10 @@ export function publishFiles(root: string, plugin: InstalledPlugin, { force = fa
 
     mkdirSync(dirname(to), { recursive: true })
     copyFileSync(from, to)
-    return { path, to, status: existed ? 'replaced' as const : 'published' as const }
+    return {
+      path,
+      to,
+      status: existed ? 'replaced' as const : 'published' as const,
+    }
   })
 }

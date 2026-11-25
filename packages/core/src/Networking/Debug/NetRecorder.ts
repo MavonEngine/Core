@@ -100,7 +100,9 @@ export function netDebugDefault() {
   return debugByDefault
 }
 
-const encoder = typeof TextEncoder === 'undefined' ? undefined : new TextEncoder()
+const encoder = typeof TextEncoder === 'undefined'
+  ? undefined
+  : new TextEncoder()
 
 /** UTF-8 size of a string */
 export function byteLength(text: string): number {
@@ -111,7 +113,13 @@ export function byteLength(text: string): number {
   let bytes = 0
   for (const char of text) {
     const code = char.codePointAt(0)!
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4
+    bytes += code < 0x80
+      ? 1
+      : code < 0x800
+        ? 2
+        : code < 0x10000
+          ? 3
+          : 4
   }
   return bytes
 }
@@ -137,10 +145,16 @@ export function describePayload(type: string, data: unknown): Pick<NetRecordInpu
     info.id = packet.id
 
   return {
-    tick: typeof packet.tick === 'number' ? packet.tick : undefined,
+    tick: typeof packet.tick === 'number'
+      ? packet.tick
+      : undefined,
     // sv_state carries the ack instead: its sequenceId is unused
-    sequenceId: typeof packet.sequenceId === 'number' && typeof packet.tick !== 'number' ? packet.sequenceId : undefined,
-    info: Object.keys(info).length ? info : undefined,
+    sequenceId: typeof packet.sequenceId === 'number' && typeof packet.tick !== 'number'
+      ? packet.sequenceId
+      : undefined,
+    info: Object.keys(info).length
+      ? info
+      : undefined,
   }
 }
 
@@ -194,7 +208,12 @@ export default class NetRecorder {
       return undefined
 
     const { json, timestamp, ...rest } = input
-    const record: Stored = { id: this.nextId++, timestamp: timestamp ?? Date.now(), ...rest, hasPayload: json !== undefined }
+    const record: Stored = {
+      id: this.nextId++,
+      timestamp: timestamp ?? Date.now(),
+      ...rest,
+      hasPayload: json !== undefined,
+    }
     if (json !== undefined) {
       record.json = json
       this.payloadBytes += json.length
@@ -226,7 +245,9 @@ export default class NetRecorder {
       kind: 'packet',
       direction,
       type,
-      bytes: json === undefined ? 0 : byteLength(json),
+      bytes: json === undefined
+        ? 0
+        : byteLength(json),
       ...describePayload(type, data),
       ...extra,
       json,
@@ -239,7 +260,9 @@ export default class NetRecorder {
 
   list(query: NetRecordQuery = {}): NetRecordList {
     const after = query.after ?? 0
-    const types = query.type ? new Set(query.type.split(',').map(type => type.trim()).filter(Boolean)) : undefined
+    const types = query.type
+      ? new Set(query.type.split(',').map(type => type.trim()).filter(Boolean))
+      : undefined
     const limit = Math.max(1, Math.min(query.limit ?? DEFAULT_NET_RECORD_LIMIT, MAX_NET_RECORD_LIMIT))
 
     const matches = this.records.filter(record =>
@@ -260,12 +283,19 @@ export default class NetRecorder {
   get(id: number): NetRecordDetail | undefined {
     // Ids are consecutive, so the record sits at a fixed distance from the first one
     const first = this.records[0]
-    const stored = first ? this.records[id - first.id] : undefined
+    const stored = first
+      ? this.records[id - first.id]
+      : undefined
     if (!stored)
       return undefined
 
     const { json, ...record } = stored
-    return json === undefined ? record : { ...record, payload: JSON.parse(json) }
+    return json === undefined
+      ? record
+      : {
+          ...record,
+          payload: JSON.parse(json),
+        }
   }
 
   clear() {

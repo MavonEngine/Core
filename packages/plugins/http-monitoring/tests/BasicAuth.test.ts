@@ -43,7 +43,10 @@ async function call(auth: BasicAuth, { authorization, address = '203.0.113.5' }:
     },
   }
   const next = vi.fn()
-  auth.middleware({ headers: { authorization }, socket: { remoteAddress: address } } as any, res as any, next)
+  auth.middleware({
+    headers: { authorization },
+    socket: { remoteAddress: address },
+  } as any, res as any, next)
   await vi.waitFor(() => expect(next.mock.calls.length > 0 || res.body !== '').toBe(true))
   return { passed: next.mock.calls.length > 0, status: res.statusCode, headers: res.headers }
 }
@@ -70,7 +73,10 @@ describe('parseBasicAuth', () => {
 
 describe('basicAuth', () => {
   it('asks for a login with the realm', async () => {
-    const auth = new BasicAuth({ realm: 'Game "ops"', credentials: { kind: 'user', user: 'ops', password: 'pw' } })
+    const auth = new BasicAuth({
+      realm: 'Game "ops"',
+      credentials: { kind: 'user', user: 'ops', password: 'pw' },
+    })
 
     const result = await call(auth)
 
@@ -79,31 +85,67 @@ describe('basicAuth', () => {
   })
 
   it('lets in the configured user only', async () => {
-    const logger = { info: vi.fn(), warn: vi.fn() }
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'user', user: 'ops', password: 'pw' }, logger })
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    }
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: { kind: 'user', user: 'ops', password: 'pw' },
+      logger,
+    })
 
-    expect((await call(auth, { authorization: basic('ops', 'pw') })).passed).toBe(true)
-    expect((await call(auth, { authorization: basic('ops', 'nope') })).status).toBe(401)
-    expect((await call(auth, { authorization: basic('root', 'pw') })).status).toBe(401)
+    expect((await call(auth, {
+      authorization: basic('ops', 'pw'),
+    })).passed).toBe(true)
+    expect((await call(auth, {
+      authorization: basic('ops', 'nope'),
+    })).status).toBe(401)
+    expect((await call(auth, {
+      authorization: basic('root', 'pw'),
+    })).status).toBe(401)
     expect(logger.warn).toHaveBeenCalledWith('Monitoring: failed login for "ops" from 203.0.113.5')
   })
 
   it('checks users from an htpasswd file', async () => {
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'htpasswd', path: htpasswdFile(`${BOB}\n${CAROL}\n`) } })
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: {
+        kind: 'htpasswd',
+        path: htpasswdFile(`${BOB}\n${CAROL}\n`),
+      },
+    })
 
     expect(auth.userCount).toBe(2)
-    expect((await call(auth, { authorization: basic('bob', 'hunter2') })).passed).toBe(true)
-    expect((await call(auth, { authorization: basic('carol', 'pa55') })).passed).toBe(true)
-    expect((await call(auth, { authorization: basic('carol', 'hunter2') })).passed).toBe(false)
+    expect((await call(auth, {
+      authorization: basic('bob', 'hunter2'),
+    })).passed).toBe(true)
+    expect((await call(auth, {
+      authorization: basic('carol', 'pa55'),
+    })).passed).toBe(true)
+    expect((await call(auth, {
+      authorization: basic('carol', 'hunter2'),
+    })).passed).toBe(false)
   })
 
   it('fails at startup when the htpasswd file is missing', () => {
-    expect(() => new BasicAuth({ realm: 'r', credentials: { kind: 'htpasswd', path: join(dir, 'missing') } })).toThrow('ENOENT')
+    expect(() => new BasicAuth({
+      realm: 'r',
+      credentials: {
+        kind: 'htpasswd',
+        path: join(dir, 'missing'),
+      },
+    })).toThrow('ENOENT')
   })
 
   it('remembers a checked login so slow hashes don\'t run on every poll', async () => {
     let now = 0
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'user', user: 'ops', password: 'pw' }, cacheMs: 1000, now: () => now })
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: { kind: 'user', user: 'ops', password: 'pw' },
+      cacheMs: 1000,
+      now: () => now,
+    })
     const verifyPassword = vi.fn(async (password: string) => password === 'pw')
     ;(auth as any).users.set('ops', verifyPassword)
 
@@ -124,26 +166,46 @@ describe('basicAuth', () => {
 
   it('locks an address out after too many failures, then lets it try again', async () => {
     let now = 0
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'user', user: 'ops', password: 'pw' }, maxFailures: 3, lockoutMs: 60000, now: () => now })
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: { kind: 'user', user: 'ops', password: 'pw' },
+      maxFailures: 3,
+      lockoutMs: 60000,
+      now: () => now,
+    })
 
-    for (let i = 0; i < 3; i++)
-      await call(auth, { authorization: basic('ops', `guess${i}`) })
+    for (let i = 0; i < 3; i++) {
+      await call(auth, {
+        authorization: basic('ops', `guess${i}`),
+      })
+    }
 
-    const locked = await call(auth, { authorization: basic('ops', 'pw') })
+    const locked = await call(auth, {
+      authorization: basic('ops', 'pw'),
+    })
     expect(locked.status).toBe(429)
     expect(locked.headers['Retry-After']).toBe('60')
 
     // Other addresses are not affected
-    expect((await call(auth, { authorization: basic('ops', 'pw'), address: '198.51.100.7' })).passed).toBe(true)
+    expect((await call(auth, {
+      authorization: basic('ops', 'pw'),
+      address: '198.51.100.7',
+    })).passed).toBe(true)
 
     now = 60000
-    expect((await call(auth, { authorization: basic('ops', 'pw') })).passed).toBe(true)
+    expect((await call(auth, {
+      authorization: basic('ops', 'pw'),
+    })).passed).toBe(true)
   })
 
   it('picks up htpasswd changes and logs out removed users', async () => {
     let now = 0
     const path = htpasswdFile(`${BOB}\n${CAROL}\n`)
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'htpasswd', path }, now: () => now })
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: { kind: 'htpasswd', path },
+      now: () => now,
+    })
     expect(await auth.verify('bob', 'hunter2')).toBe(true)
 
     writeFileSync(path, CAROL)
@@ -156,9 +218,17 @@ describe('basicAuth', () => {
 
   it('keeps the old users when the htpasswd file disappears', async () => {
     let now = 0
-    const logger = { info: vi.fn(), warn: vi.fn() }
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    }
     const path = htpasswdFile(BOB)
-    const auth = new BasicAuth({ realm: 'r', credentials: { kind: 'htpasswd', path }, logger, now: () => now })
+    const auth = new BasicAuth({
+      realm: 'r',
+      credentials: { kind: 'htpasswd', path },
+      logger,
+      now: () => now,
+    })
 
     rmSync(path)
     now = 5000
@@ -168,7 +238,10 @@ describe('basicAuth', () => {
   })
 
   describe('with the game server\'s admin token', () => {
-    const adminToken = { configured: true, matches: (candidate: string) => candidate === 'server-secret' }
+    const adminToken = {
+      configured: true,
+      matches: (candidate: string) => candidate === 'server-secret',
+    }
 
     it('asks for a login and takes the token as the password or as a bearer token', async () => {
       const auth = new BasicAuth({ realm: 'r', adminToken })
@@ -176,18 +249,32 @@ describe('basicAuth', () => {
       expect(auth.requiresLogin).toBe(true)
       // Also from this machine: there is something to log in with now
       expect((await call(auth, { address: '127.0.0.1' })).status).toBe(401)
-      expect((await call(auth, { authorization: basic('whoever', 'server-secret') })).passed).toBe(true)
+      expect((await call(auth, {
+        authorization: basic('whoever', 'server-secret'),
+      })).passed).toBe(true)
       expect((await call(auth, { authorization: 'Bearer server-secret' })).passed).toBe(true)
-      expect((await call(auth, { authorization: basic('server-secret', 'x') })).status).toBe(401)
+      expect((await call(auth, {
+        authorization: basic('server-secret', 'x'),
+      })).status).toBe(401)
       expect((await call(auth, { authorization: 'Bearer nope' })).status).toBe(401)
     })
 
     it('counts wrong tokens as failed logins', async () => {
-      const logger = { info: vi.fn(), warn: vi.fn() }
-      const auth = new BasicAuth({ realm: 'r', adminToken, logger, maxFailures: 2 })
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }
+      const auth = new BasicAuth({
+        realm: 'r',
+        adminToken,
+        logger,
+        maxFailures: 2,
+      })
 
       await call(auth, { authorization: 'Bearer nope' })
-      await call(auth, { authorization: basic('ops', 'nope') })
+      await call(auth, {
+        authorization: basic('ops', 'nope'),
+      })
 
       expect(logger.warn.mock.calls.map(c => c[0])).toEqual([
         'Monitoring: failed login with a token from 203.0.113.5',
@@ -198,7 +285,13 @@ describe('basicAuth', () => {
     })
 
     it('is no login when the server has no token', async () => {
-      const auth = new BasicAuth({ realm: 'r', adminToken: { configured: false, matches: () => false } })
+      const auth = new BasicAuth({
+        realm: 'r',
+        adminToken: {
+          configured: false,
+          matches: () => false,
+        },
+      })
 
       expect(auth.requiresLogin).toBe(false)
       expect((await call(auth, { address: '127.0.0.1' })).passed).toBe(true)

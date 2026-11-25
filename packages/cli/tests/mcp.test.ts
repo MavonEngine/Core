@@ -14,10 +14,32 @@ import { createMcpServer } from '../src/mcp/server'
 const metrics = {
   schemaVersion: 1,
   tickRate: 30,
-  players: [{ id: 'p1', displayName: 'Ada' }],
-  cpu: { current: 12, avg1s: 11, avg10s: 10, avg60s: 9, history: [{ cpuPercentage: 1 }] },
-  bandwidth: { sentPerSecond: 100, receivedPerSecond: 50, history: [{ sent: 1 }] },
-  tick: { budgetMs: 33.33, latest: { durationMs: 2 }, history: [{ durationMs: 2 }] },
+  players: [
+    { id: 'p1', displayName: 'Ada' },
+  ],
+  cpu: {
+    current: 12,
+    avg1s: 11,
+    avg10s: 10,
+    avg60s: 9,
+    history: [
+      { cpuPercentage: 1 },
+    ],
+  },
+  bandwidth: {
+    sentPerSecond: 100,
+    receivedPerSecond: 50,
+    history: [
+      { sent: 1 },
+    ],
+  },
+  tick: {
+    budgetMs: 33.33,
+    latest: { durationMs: 2 },
+    history: [
+      { durationMs: 2 },
+    ],
+  },
 }
 
 type Route = (url: URL) => Response | undefined
@@ -31,7 +53,9 @@ function fakeFetch(routes: Record<string, unknown | Route>) {
     const route = routes[url.pathname]
     if (route === undefined)
       return new Response('', { status: 404 })
-    const res = typeof route === 'function' ? (route as Route)(url) : Response.json(route)
+    const res = typeof route === 'function'
+      ? (route as Route)(url)
+      : Response.json(route)
     return res ?? new Response('', { status: 404 })
   }) as unknown as typeof globalThis.fetch
   return { fetch, calls }
@@ -43,18 +67,34 @@ async function connect(routes: Record<string, unknown | Route>, url = 'http://lo
   const { fetch, calls } = fakeFetch(routes)
   // The list of plugins that can be installed is on another host than the game server
   const web = fakeFetch(pluginList || {})
-  const server = createMcpServer(new GameServerClient({ url, fetch }), undefined, pluginList ? { url: PLUGIN_LIST, fetch: web.fetch } : undefined)
+  const server = createMcpServer(new GameServerClient({ url, fetch }), undefined, pluginList
+    ? { url: PLUGIN_LIST, fetch: web.fetch }
+    : undefined)
   const client = new Client({ name: 'test', version: '0' })
   const [a, b] = InMemoryTransport.createLinkedPair()
-  await Promise.all([server.connect(a), client.connect(b)])
+  await Promise.all([
+    server.connect(a),
+    client.connect(b),
+  ])
 
   async function call(name: string, args: Record<string, unknown> = {}) {
     const result = await client.callTool({ name, arguments: args }) as { isError?: boolean, content: { text: string }[] }
     const text = result.content[0]!.text
-    return { isError: !!result.isError, text, data: result.isError ? undefined : JSON.parse(text) }
+    return {
+      isError: !!result.isError,
+      text,
+      data: result.isError
+        ? undefined
+        : JSON.parse(text),
+    }
   }
 
-  return { client, call, calls, webCalls: web.calls }
+  return {
+    client,
+    call,
+    calls,
+    webCalls: web.calls,
+  }
 }
 
 describe('mcp server', () => {
@@ -100,7 +140,13 @@ describe('mcp server', () => {
     const { call } = await connect({ '/api/game/metrics': metrics })
 
     const { data } = await call('server_status')
-    expect(data).toMatchObject({ server: 'http://localhost:8050/', tickRate: 30, players: 1, cpu: { current: 12 }, tick: { budgetMs: 33.33 } })
+    expect(data).toMatchObject({
+      server: 'http://localhost:8050/',
+      tickRate: 30,
+      players: 1,
+      cpu: { current: 12 },
+      tick: { budgetMs: 33.33 },
+    })
     expect(data.cpu.history).toBeUndefined()
     expect(data.tick.history).toBeUndefined()
   })
@@ -114,31 +160,56 @@ describe('mcp server', () => {
   })
 
   it('reads the scene and can leave out its objects', async () => {
-    const scene = { name: 'Forest', objects: [{ id: 'a' }, { id: 'b' }] }
-    const { call } = await connect({ '/api/game/dev/scene': { scene } })
+    const scene = {
+      name: 'Forest',
+      objects: [
+        { id: 'a' },
+        { id: 'b' },
+      ],
+    }
+    const { call } = await connect({
+      '/api/game/dev/scene': { scene },
+    })
 
     expect((await call('get_scene')).data).toEqual(scene)
     expect((await call('get_scene', { includeObjects: false })).data).toEqual({ name: 'Forest', objectCount: 2 })
   })
 
   it('says when no scene is loaded', async () => {
-    const { call } = await connect({ '/api/game/dev/scene': { scene: null } })
+    const { call } = await connect({
+      '/api/game/dev/scene': { scene: null },
+    })
 
     expect((await call('get_scene')).data).toMatchObject({ scene: null })
   })
 
   it('passes entity filters to the server', async () => {
-    const { call, calls } = await connect({ '/api/game/dev/entities': { total: 0, entities: [] } })
+    const { call, calls } = await connect({
+      '/api/game/dev/entities': { total: 0, entities: [] },
+    })
 
-    await call('list_entities', { type: 'Rock', near: { x: 1, y: 2, z: 3 }, radius: 10, limit: 5 })
+    await call('list_entities', {
+      type: 'Rock',
+      near: { x: 1, y: 2, z: 3 },
+      radius: 10,
+      limit: 5,
+    })
 
     const params = Object.fromEntries(calls[0]!.searchParams)
-    expect(params).toEqual({ type: 'Rock', near: '1,2,3', radius: '10', limit: '5', offset: '0' })
+    expect(params).toEqual({
+      type: 'Rock',
+      near: '1,2,3',
+      radius: '10',
+      limit: '5',
+      offset: '0',
+    })
   })
 
   it('gets one entity and explains a missing one', async () => {
     const { call } = await connect({
-      '/api/game/dev/entities/rock%201': { entity: { id: 'rock 1' } },
+      '/api/game/dev/entities/rock%201': {
+        entity: { id: 'rock 1' },
+      },
       '/api/game/dev/entities/nope': { entity: null },
     })
 
@@ -152,7 +223,14 @@ describe('mcp server', () => {
   it('explains that the dev tools need a development server', async () => {
     const { call } = await connect({ '/api/game/metrics': metrics })
 
-    for (const [tool, args] of [['get_scene', {}], ['list_entities', {}], ['get_entity', { id: 'x' }]] as const) {
+    for (const [tool, args] of [
+      ['get_scene', {}],
+      ['list_entities', {}],
+      [
+        'get_entity',
+        { id: 'x' },
+      ],
+    ] as const) {
       const result = await call(tool, args)
       expect(result.isError).toBe(true)
       expect(result.text).toContain('NODE_ENV=production')
@@ -161,12 +239,34 @@ describe('mcp server', () => {
 
   it('filters logs by level and text, keeping the newest', async () => {
     const entries = [
-      { id: 1, timestamp: 0, level: 'info', message: 'Server started' },
-      { id: 2, timestamp: 0, level: 'warn', message: 'Slow tick' },
-      { id: 3, timestamp: 0, level: 'error', message: 'Player crashed' },
-      { id: 4, timestamp: 0, level: 'debug', message: 'Player moved' },
+      {
+        id: 1,
+        timestamp: 0,
+        level: 'info',
+        message: 'Server started',
+      },
+      {
+        id: 2,
+        timestamp: 0,
+        level: 'warn',
+        message: 'Slow tick',
+      },
+      {
+        id: 3,
+        timestamp: 0,
+        level: 'error',
+        message: 'Player crashed',
+      },
+      {
+        id: 4,
+        timestamp: 0,
+        level: 'debug',
+        message: 'Player moved',
+      },
     ]
-    const { call, calls } = await connect({ '/api/game/logs': { entries, latestId: 4 } })
+    const { call, calls } = await connect({
+      '/api/game/logs': { entries, latestId: 4 },
+    })
 
     const warn = (await call('recent_logs', { level: 'warn' })).data
     expect(warn.entries.map((e: any) => e.id)).toEqual([2, 3])
@@ -185,14 +285,18 @@ describe('mcp server', () => {
       { id: 2, path: '/assets/a.png', status: 404 },
       { id: 3, path: '/api/game/metrics', status: 500 },
     ]
-    const { call } = await connect({ '/api/game/requests': { entries, latestId: 3 } })
+    const { call } = await connect({
+      '/api/game/requests': { entries, latestId: 3 },
+    })
 
     expect((await call('recent_requests', { minStatus: 400 })).data.entries.map((e: any) => e.id)).toEqual([2, 3])
     expect((await call('recent_requests', { pathContains: '/api/' })).data.entries.map((e: any) => e.id)).toEqual([1, 3])
   })
 
   it('turns auth and connection failures into tool errors', async () => {
-    const { call } = await connect({ '/api/game/metrics': () => new Response('', { status: 401 }) })
+    const { call } = await connect({
+      '/api/game/metrics': () => new Response('', { status: 401 }),
+    })
     expect((await call('server_status')).text).toContain('--token')
 
     const down = createMcpServer(new GameServerClient({
@@ -201,7 +305,10 @@ describe('mcp server', () => {
     }))
     const client = new Client({ name: 'test', version: '0' })
     const [a, b] = InMemoryTransport.createLinkedPair()
-    await Promise.all([down.connect(a), client.connect(b)])
+    await Promise.all([
+      down.connect(a),
+      client.connect(b),
+    ])
     const result = await client.callTool({ name: 'server_status', arguments: {} }) as { isError: boolean, content: { text: string }[] }
     expect(result.isError).toBe(true)
     expect(result.content[0]!.text).toContain('Is it running?')
@@ -230,10 +337,23 @@ describe('client tools', () => {
   const bridge = '/__mavonengine/clients'
 
   it('lists the open tabs', async () => {
-    const { call } = await connect({ [bridge]: { clients: [{ id: 'tab1', playerId: 'p1' }] } })
+    const { call } = await connect({
+      [bridge]: {
+        clients: [
+          { id: 'tab1', playerId: 'p1' },
+        ],
+      },
+    })
 
-    expect((await call('list_clients')).data).toEqual({ devServer: 'http://localhost:8050/', clients: [{ id: 'tab1', playerId: 'p1' }] })
-    const empty = await connect({ [bridge]: { clients: [] } })
+    expect((await call('list_clients')).data).toEqual({
+      devServer: 'http://localhost:8050/',
+      clients: [
+        { id: 'tab1', playerId: 'p1' },
+      ],
+    })
+    const empty = await connect({
+      [bridge]: { clients: [] },
+    })
     expect((await empty.call('list_clients')).data.note).toContain('No game tab is open')
   })
 
@@ -245,27 +365,69 @@ describe('client tools', () => {
 
     expect((await call('client_status')).data).toEqual({ fps: 60 })
 
-    await call('client_entities', { clientId: 'tab 2', type: 'Rock', near: { x: 1, y: 2, z: 3 }, limit: 5 })
-    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ type: 'Rock', near: '1,2,3', limit: '5', offset: '0' })
+    await call('client_entities', {
+      clientId: 'tab 2',
+      type: 'Rock',
+      near: { x: 1, y: 2, z: 3 },
+      limit: 5,
+    })
+    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({
+      type: 'Rock',
+      near: '1,2,3',
+      limit: '5',
+      offset: '0',
+    })
   })
 
   it('filters client logs by console level', async () => {
     const entries = [
-      { id: 1, timestamp: 0, level: 'log', message: 'hello' },
-      { id: 2, timestamp: 0, level: 'warn', message: 'careful' },
-      { id: 3, timestamp: 0, level: 'debug', message: 'noise' },
-      { id: 4, timestamp: 0, level: 'error', message: 'Uncaught TypeError' },
+      {
+        id: 1,
+        timestamp: 0,
+        level: 'log',
+        message: 'hello',
+      },
+      {
+        id: 2,
+        timestamp: 0,
+        level: 'warn',
+        message: 'careful',
+      },
+      {
+        id: 3,
+        timestamp: 0,
+        level: 'debug',
+        message: 'noise',
+      },
+      {
+        id: 4,
+        timestamp: 0,
+        level: 'error',
+        message: 'Uncaught TypeError',
+      },
     ]
-    const { call } = await connect({ [`${bridge}/auto/logs`]: { entries, latestId: 4 } })
+    const { call } = await connect({
+      [`${bridge}/auto/logs`]: { entries, latestId: 4 },
+    })
 
     expect((await call('client_logs', { level: 'info' })).data.entries.map((e: any) => e.id)).toEqual([1, 2, 4])
     expect((await call('client_logs', { contains: 'typeerror' })).data.entries.map((e: any) => e.id)).toEqual([4])
   })
 
   it('returns a screenshot as an image', async () => {
-    const { client } = await connect({ [`${bridge}/auto/screenshot`]: { mimeType: 'image/jpeg', width: 640, height: 360, data: 'QUJD' } })
+    const { client } = await connect({
+      [`${bridge}/auto/screenshot`]: {
+        mimeType: 'image/jpeg',
+        width: 640,
+        height: 360,
+        data: 'QUJD',
+      },
+    })
 
-    const result = await client.callTool({ name: 'client_screenshot', arguments: { maxWidth: 640 } }) as any
+    const result = await client.callTool({
+      name: 'client_screenshot',
+      arguments: { maxWidth: 640 },
+    }) as any
     expect(result.content[0]).toEqual({ type: 'image', data: 'QUJD', mimeType: 'image/jpeg' })
     expect(result.content[1].text).toBe('640x360 image/jpeg')
   })
@@ -273,19 +435,42 @@ describe('client tools', () => {
   it('compares an entity on the server and a client', async () => {
     const at = (x: number) => ({ x, y: 0, z: 0 })
     const { call } = await connect({
-      '/api/game/dev/entities/p1': { entity: { id: 'p1', position: at(10), rotation: at(0), scale: at(1), serialized: { id: 'p1', health: 90, $typeName: 'Player' } } },
-      [`${bridge}/auto/entity`]: { entity: { id: 'localPlayer', position: at(10.5), rotation: at(0), scale: at(1), serialized: { id: 'localPlayer', health: 100, $typeName: 'Player' } } },
+      '/api/game/dev/entities/p1': {
+        entity: {
+          id: 'p1',
+          position: at(10),
+          rotation: at(0),
+          scale: at(1),
+          serialized: { id: 'p1', health: 90, $typeName: 'Player' },
+        },
+      },
+      [`${bridge}/auto/entity`]: {
+        entity: {
+          id: 'localPlayer',
+          position: at(10.5),
+          rotation: at(0),
+          scale: at(1),
+          serialized: { id: 'localPlayer', health: 100, $typeName: 'Player' },
+        },
+      },
     })
 
     const { data } = await call('compare_entity', { id: 'p1' })
     expect(data.clientId).toBe('localPlayer')
     expect(data.positionDelta).toEqual({ x: 0.5, y: 0, z: 0, length: 0.5 })
-    expect(data.differentFields).toEqual([{ field: 'health', server: 90, client: 100 }])
+    expect(data.differentFields).toEqual([
+      { field: 'health', server: 90, client: 100 },
+    ])
     expect(data.server.serialized).toBeUndefined()
   })
 
   it('explains an entity that exists on one side only', () => {
-    const entity = { id: 'a', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } }
+    const entity = {
+      id: 'a',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    }
 
     expect(compareEntities('a', entity, null).note).toContain('Only the server has it')
     expect(compareEntities('a', null, entity).note).toContain('Only the client has it')
@@ -294,7 +479,9 @@ describe('client tools', () => {
 
   it('explains a dev server without the bridge, and passes on bridge errors', async () => {
     const { call } = await connect({
-      [bridge]: () => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }),
+      [bridge]: () => new Response('<html></html>', {
+        headers: { 'content-type': 'text/html' },
+      }),
       [`${bridge}/auto/status`]: () => Response.json({ error: '2 game tabs are open, pick one by id: a, b' }, { status: 409 }),
     })
 
@@ -308,7 +495,9 @@ describe('client tools', () => {
   })
 
   it('asks a separate client URL when given', async () => {
-    const { fetch, calls } = fakeFetch({ '/vite/__mavonengine/clients': { clients: [] } })
+    const { fetch, calls } = fakeFetch({
+      '/vite/__mavonengine/clients': { clients: [] },
+    })
     const gameServer = new GameServerClient({ url: 'http://localhost:8050', clientUrl: 'http://localhost:5173/vite', fetch })
 
     await gameServer.clients()
@@ -318,31 +507,86 @@ describe('client tools', () => {
 
 describe('network tools', () => {
   const bridge = '/__mavonengine/clients'
-  const record = (id: number, timestamp: number, extra: Record<string, unknown> = {}) => ({ id, timestamp, kind: 'packet', type: 'sv_state', hasPayload: true, ...extra })
+  const record = (id: number, timestamp: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    timestamp,
+    kind: 'packet',
+    type: 'sv_state',
+    hasPayload: true,
+    ...extra,
+  })
 
   it('lists the server\'s packets, passing the filters on', async () => {
     const { call, calls } = await connect({
-      '/api/game/dev/net/packets': { enabled: true, latestId: 9, matched: 1, records: [record(9, 0, { direction: 'out', peer: 'p1', bytes: 120, tick: 4 })] },
+      '/api/game/dev/net/packets': {
+        enabled: true,
+        latestId: 9,
+        matched: 1,
+        records: [
+          record(9, 0, {
+            direction: 'out',
+            peer: 'p1',
+            bytes: 120,
+            tick: 4,
+          }),
+        ],
+      },
     })
 
-    const { data } = await call('network_packets', { peer: 'p1', direction: 'out', type: 'sv_state', afterId: 3, limit: 10 })
+    const { data } = await call('network_packets', {
+      peer: 'p1',
+      direction: 'out',
+      type: 'sv_state',
+      afterId: 3,
+      limit: 10,
+    })
 
-    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ peer: 'p1', direction: 'out', type: 'sv_state', after: '3', limit: '10' })
+    expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({
+      peer: 'p1',
+      direction: 'out',
+      type: 'sv_state',
+      after: '3',
+      limit: '10',
+    })
     expect(data).toEqual({
       latestId: 9,
       matched: 1,
-      records: [{ id: 9, kind: 'packet', type: 'sv_state', hasPayload: true, direction: 'out', peer: 'p1', bytes: 120, tick: 4, time: '1970-01-01T00:00:00.000Z' }],
+      records: [
+        {
+          id: 9,
+          kind: 'packet',
+          type: 'sv_state',
+          hasPayload: true,
+          direction: 'out',
+          peer: 'p1',
+          bytes: 120,
+          tick: 4,
+          time: '1970-01-01T00:00:00.000Z',
+        },
+      ],
     })
   })
 
   it('says when a side records nothing', async () => {
-    const { call } = await connect({ '/api/game/dev/net/packets': { enabled: false, latestId: 0, matched: 0, records: [] } })
+    const { call } = await connect({
+      '/api/game/dev/net/packets': {
+        enabled: false,
+        latestId: 0,
+        matched: 0,
+        records: [],
+      },
+    })
     expect((await call('network_packets')).data.note).toContain('Nothing is being recorded')
   })
 
   it('shows one packet with its payload and explains a missing one', async () => {
     const { call } = await connect({
-      '/api/game/dev/net/packets/9': { record: { ...record(9, 0), payload: { tick: 4, entities: [] } } },
+      '/api/game/dev/net/packets/9': {
+        record: {
+          ...record(9, 0),
+          payload: { tick: 4, entities: [] },
+        },
+      },
       '/api/game/dev/net/packets/1': { record: null },
     })
 
@@ -363,9 +607,22 @@ describe('network tools', () => {
     const sync = {
       tick: 40,
       syncDistance: 100,
-      players: [{ id: 'p1', tracked: ['p1', 'rock'] }, { id: 'p2', tracked: ['p2'] }],
+      players: [
+        {
+          id: 'p1',
+          tracked: ['p1', 'rock'],
+        },
+        {
+          id: 'p2',
+          tracked: ['p2'],
+        },
+      ],
       editors: [],
-      entities: [{ id: 'p1' }, { id: 'p2' }, { id: 'rock' }],
+      entities: [
+        { id: 'p1' },
+        { id: 'p2' },
+        { id: 'rock' },
+      ],
     }
     const { call } = await connect({ '/api/game/dev/net/sync': sync })
 
@@ -373,8 +630,15 @@ describe('network tools', () => {
     expect((await call('network_sync', { includeEntities: false })).data).toMatchObject({ tick: 40, entityCount: 3, players: sync.players })
 
     const asPlayer = (await call('network_sync', { player: 'p2' })).data
-    expect(asPlayer.player).toEqual({ id: 'p2', tracked: ['p2'] })
-    expect(asPlayer.entities).toEqual([{ id: 'p1', tracked: false }, { id: 'p2', tracked: true }, { id: 'rock', tracked: false }])
+    expect(asPlayer.player).toEqual({
+      id: 'p2',
+      tracked: ['p2'],
+    })
+    expect(asPlayer.entities).toEqual([
+      { id: 'p1', tracked: false },
+      { id: 'p2', tracked: true },
+      { id: 'rock', tracked: false },
+    ])
 
     const unknown = await call('network_sync', { player: 'nope' })
     expect(unknown.isError).toBe(true)
@@ -383,11 +647,25 @@ describe('network tools', () => {
 
   it('lists and shows a tab\'s packets', async () => {
     const { call, calls } = await connect({
-      [`${bridge}/auto/packets`]: { enabled: true, latestId: 2, matched: 1, records: [record(2, 0, { direction: 'in' })] },
-      [`${bridge}/tab1/packet`]: { record: { ...record(2, 0), payload: { tick: 1 } } },
+      [`${bridge}/auto/packets`]: {
+        enabled: true,
+        latestId: 2,
+        matched: 1,
+        records: [
+          record(2, 0, { direction: 'in' }),
+        ],
+      },
+      [`${bridge}/tab1/packet`]: {
+        record: {
+          ...record(2, 0),
+          payload: { tick: 1 },
+        },
+      },
     })
 
-    expect((await call('client_packets', { kind: 'packet' })).data.records).toMatchObject([{ id: 2, direction: 'in' }])
+    expect((await call('client_packets', { kind: 'packet' })).data.records).toMatchObject([
+      { id: 2, direction: 'in' },
+    ])
     expect(Object.fromEntries(calls.at(-1)!.searchParams)).toEqual({ kind: 'packet', after: '0', limit: '50' })
 
     expect((await call('client_packet', { id: 2, clientId: 'tab1' })).data.payload).toEqual({ tick: 1 })
@@ -397,7 +675,9 @@ describe('network tools', () => {
   it('merges both sides of one client into a timeline', async () => {
     const now = Date.now()
     const { call, calls } = await connect({
-      [`${bridge}/auto/network`]: { network: { playerId: 'p1', pingMs: 20 } },
+      [`${bridge}/auto/network`]: {
+        network: { playerId: 'p1', pingMs: 20 },
+      },
       '/api/game/dev/net/packets': {
         latestId: 4,
         matched: 4,
@@ -411,7 +691,10 @@ describe('network tools', () => {
       [`${bridge}/auto/packets`]: {
         latestId: 2,
         matched: 2,
-        records: [record(1, now - 280, { direction: 'in', tick: 7 }), record(2, now - 250, { type: 'command', direction: 'out', sequenceId: 3 })],
+        records: [
+          record(1, now - 280, { direction: 'in', tick: 7 }),
+          record(2, now - 250, { type: 'command', direction: 'out', sequenceId: 3 }),
+        ],
       },
     })
 
@@ -432,38 +715,108 @@ describe('network tools', () => {
   })
 
   it('explains a tab that is not connected', async () => {
-    const { call } = await connect({ [`${bridge}/auto/network`]: { network: null } })
+    const { call } = await connect({
+      [`${bridge}/auto/network`]: { network: null },
+    })
     const result = await call('network_timeline')
     expect(result.isError).toBe(true)
     expect(result.text).toContain('not connected')
   })
 
   it('orders records with the same time server first', () => {
-    const merged = mergeTimeline([record(5, 100), record(6, 100)], [record(1, 100), record(2, 50)])
-    expect(merged.map(r => [r.side, r.id])).toEqual([['client', 2], ['server', 5], ['server', 6], ['client', 1]])
+    const merged = mergeTimeline([
+      record(5, 100),
+      record(6, 100),
+    ], [
+      record(1, 100),
+      record(2, 50),
+    ])
+    expect(merged.map(r => [r.side, r.id])).toEqual([
+      ['client', 2],
+      ['server', 5],
+      ['server', 6],
+      ['client', 1],
+    ])
   })
 })
 
 describe('plugin tools', () => {
   const installed = {
     plugins: [
-      { package: '@mavonengine/chat', enabled: true, installed: true, runningOnServer: true, version: '0.0.1', target: 'both', declaredPrefabs: [], usedPrefabs: [] },
-      { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+      {
+        package: '@mavonengine/chat',
+        enabled: true,
+        installed: true,
+        runningOnServer: true,
+        version: '0.0.1',
+        target: 'both',
+        declaredPrefabs: [],
+        usedPrefabs: [],
+      },
+      {
+        package: 'ghost',
+        enabled: true,
+        installed: false,
+        runningOnServer: false,
+        problem: 'Listed in mavonengine.json but not installed',
+        declaredPrefabs: [],
+        usedPrefabs: [],
+      },
     ],
   }
   const routes = {
     routes: [
-      { method: 'GET', path: '/api/game/health', source: 'engine', devOnly: false },
-      { method: 'GET', path: '/api/chat/messages', source: 'plugin', plugin: '@mavonengine/chat', devOnly: false, summary: 'The recent chat messages', auth: 'The admin token' },
-      { method: 'POST', path: '/api/chat/mutes', source: 'plugin', plugin: '@mavonengine/chat', devOnly: false, summary: 'Mute a player' },
-      { method: 'GET', path: '/other', source: 'plugin', plugin: 'other', devOnly: false },
+      {
+        method: 'GET',
+        path: '/api/game/health',
+        source: 'engine',
+        devOnly: false,
+      },
+      {
+        method: 'GET',
+        path: '/api/chat/messages',
+        source: 'plugin',
+        plugin: '@mavonengine/chat',
+        devOnly: false,
+        summary: 'The recent chat messages',
+        auth: 'The admin token',
+      },
+      {
+        method: 'POST',
+        path: '/api/chat/mutes',
+        source: 'plugin',
+        plugin: '@mavonengine/chat',
+        devOnly: false,
+        summary: 'Mute a player',
+      },
+      {
+        method: 'GET',
+        path: '/other',
+        source: 'plugin',
+        plugin: 'other',
+        devOnly: false,
+      },
     ],
   }
   const list = {
     version: 1,
     plugins: [
-      { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring', readme: 'https://plugins.test/monitoring/README.md' },
-      { package: '@mavonengine/chat', name: 'Chat', description: 'In-game text chat', target: 'both', readme: 'https://plugins.test/chat/README.md' },
+      {
+        package: '@mavonengine/http-monitoring',
+        name: 'HTTP Monitoring',
+        description: 'The dashboard in the browser',
+        target: 'server',
+        engine: '>=0.0.22',
+        homepage: 'https://example.com/monitoring',
+        readme: 'https://plugins.test/monitoring/README.md',
+      },
+      {
+        package: '@mavonengine/chat',
+        name: 'Chat',
+        description: 'In-game text chat',
+        target: 'both',
+        readme: 'https://plugins.test/chat/README.md',
+      },
       { package: 'bare' },
     ],
   }
@@ -481,8 +834,18 @@ describe('plugin tools', () => {
       {
         ...installed.plugins[0],
         endpoints: [
-          { method: 'GET', path: '/api/chat/messages', devOnly: false, summary: 'The recent chat messages' },
-          { method: 'POST', path: '/api/chat/mutes', devOnly: false, summary: 'Mute a player' },
+          {
+            method: 'GET',
+            path: '/api/chat/messages',
+            devOnly: false,
+            summary: 'The recent chat messages',
+          },
+          {
+            method: 'POST',
+            path: '/api/chat/mutes',
+            devOnly: false,
+            summary: 'Mute a player',
+          },
         ],
       },
       { ...installed.plugins[1], endpoints: [] },
@@ -491,7 +854,10 @@ describe('plugin tools', () => {
 
   it('still lists the plugins of a server that doesn\'t list its endpoints, and says so when it lists neither', async () => {
     const withoutRoutes = await connect({ '/api/game/plugins': installed })
-    expect((await withoutRoutes.call('list_plugins')).data.plugins.map((plugin: any) => [plugin.package, plugin.endpoints])).toEqual([['@mavonengine/chat', null], ['ghost', null]])
+    expect((await withoutRoutes.call('list_plugins')).data.plugins.map((plugin: any) => [plugin.package, plugin.endpoints])).toEqual([
+      ['@mavonengine/chat', null],
+      ['ghost', null],
+    ])
 
     const older = await connect({})
     const { isError, text } = await older.call('list_plugins')
@@ -509,9 +875,33 @@ describe('plugin tools', () => {
       source: PLUGIN_LIST,
       projectPlugins: 'known',
       plugins: [
-        { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', runsOn: 'server', engine: '>=0.0.22', homepage: 'https://example.com/monitoring', hasReadme: true, inProject: false, install: 'npx @mavonengine/cli install @mavonengine/http-monitoring' },
-        { package: '@mavonengine/chat', name: 'Chat', description: 'In-game text chat', runsOn: 'both', hasReadme: true, inProject: true, install: 'npx @mavonengine/cli install @mavonengine/chat' },
-        { package: 'bare', name: 'bare', hasReadme: false, inProject: false, install: 'npx @mavonengine/cli install bare' },
+        {
+          package: '@mavonengine/http-monitoring',
+          name: 'HTTP Monitoring',
+          description: 'The dashboard in the browser',
+          runsOn: 'server',
+          engine: '>=0.0.22',
+          homepage: 'https://example.com/monitoring',
+          hasReadme: true,
+          inProject: false,
+          install: 'npx @mavonengine/cli install @mavonengine/http-monitoring',
+        },
+        {
+          package: '@mavonengine/chat',
+          name: 'Chat',
+          description: 'In-game text chat',
+          runsOn: 'both',
+          hasReadme: true,
+          inProject: true,
+          install: 'npx @mavonengine/cli install @mavonengine/chat',
+        },
+        {
+          package: 'bare',
+          name: 'bare',
+          hasReadme: false,
+          inProject: false,
+          install: 'npx @mavonengine/cli install bare',
+        },
       ],
     })
   })
@@ -522,13 +912,20 @@ describe('plugin tools', () => {
     const { data } = await call('available_plugins')
 
     expect(data.projectPlugins).toContain('unknown')
-    expect(data.plugins.map((plugin: any) => [plugin.package, plugin.inProject])).toEqual([['@mavonengine/http-monitoring', null], ['@mavonengine/chat', null], ['bare', null]])
+    expect(data.plugins.map((plugin: any) => [plugin.package, plugin.inProject])).toEqual([
+      ['@mavonengine/http-monitoring', null],
+      ['@mavonengine/chat', null],
+      ['bare', null],
+    ])
   })
 
   it('reads the readme of a plugin on the list', async () => {
     const { client, webCalls } = await connect({}, undefined, web)
 
-    const result = await client.callTool({ name: 'plugin_readme', arguments: { package: '@mavonengine/chat' } }) as { isError?: boolean, content: { text: string }[] }
+    const result = await client.callTool({
+      name: 'plugin_readme',
+      arguments: { package: '@mavonengine/chat' },
+    }) as { isError?: boolean, content: { text: string }[] }
 
     expect(result.isError).toBeFalsy()
     expect(result.content[0]!.text).toBe('# @mavonengine/chat\n\nText chat.')
@@ -569,10 +966,32 @@ describe('database tools', () => {
   const overview = {
     provider: '@mavonengine/sqlite',
     tables: [
-      { name: 'auth_accounts', plugin: '@mavonengine/auth', rows: 2, columns: [{ name: 'id', type: 'varchar', nullable: false }] },
-      { name: 'chat_mutes', plugin: '@mavonengine/chat', rows: 1, columns: [{ name: 'account_id', type: 'varchar', nullable: false }] },
+      {
+        name: 'auth_accounts',
+        plugin: '@mavonengine/auth',
+        rows: 2,
+        columns: [
+          { name: 'id', type: 'varchar', nullable: false },
+        ],
+      },
+      {
+        name: 'chat_mutes',
+        plugin: '@mavonengine/chat',
+        rows: 1,
+        columns: [
+          { name: 'account_id', type: 'varchar', nullable: false },
+        ],
+      },
     ],
-    migrations: [{ plugin: '@mavonengine/chat', table: 'chat__migrations', applied: [{ name: '001_init', executedAt: '2026-11-15T00:00:00.000Z' }] }],
+    migrations: [
+      {
+        plugin: '@mavonengine/chat',
+        table: 'chat__migrations',
+        applied: [
+          { name: '001_init', executedAt: '2026-11-15T00:00:00.000Z' },
+        ],
+      },
+    ],
   }
 
   it('lists the tables of the database plugin, filtered by name', async () => {
@@ -587,7 +1006,9 @@ describe('database tools', () => {
   })
 
   it('says how to get a database when the project has no database plugin', async () => {
-    const { call } = await connect({ '/api/game/database': { provider: null, tables: [], migrations: [] } })
+    const { call } = await connect({
+      '/api/game/database': { provider: null, tables: [], migrations: [] },
+    })
 
     expect((await call('database_overview')).data.note).toMatch(/install @mavonengine\/sqlite/)
   })
@@ -596,7 +1017,11 @@ describe('database tools', () => {
     const { call, calls } = await connect({
       '/api/game/database/tables/auth_identities': {
         table: 'auth_identities',
-        columns: [{ name: 'provider' }, { name: 'external_id' }, { name: 'secret' }],
+        columns: [
+          { name: 'provider' },
+          { name: 'external_id' },
+          { name: 'secret' },
+        ],
         rows: [
           { provider: 'password', external_id: 'ada', secret: 'scrypt$16384$8$1$salt$key' },
           { provider: 'discord', external_id: '123', secret: null },
@@ -607,8 +1032,13 @@ describe('database tools', () => {
       },
       '/api/game/database/tables/auth_sessions': {
         table: 'auth_sessions',
-        columns: [{ name: 'token_hash' }, { name: 'account_id' }],
-        rows: [{ token_hash: 'abc', account_id: 'acc-1' }],
+        columns: [
+          { name: 'token_hash' },
+          { name: 'account_id' },
+        ],
+        rows: [
+          { token_hash: 'abc', account_id: 'acc-1' },
+        ],
         total: 1,
         offset: 0,
         limit: 50,
@@ -626,17 +1056,33 @@ describe('database tools', () => {
     expect(JSON.stringify(identities)).not.toContain('scrypt')
 
     const sessions = (await call('database_rows', { table: 'auth_sessions' })).data
-    expect(sessions.rows).toEqual([{ token_hash: '[redacted]', account_id: 'acc-1' }])
+    expect(sessions.rows).toEqual([
+      { token_hash: '[redacted]', account_id: 'acc-1' },
+    ])
   })
 
   it('leaves rows of ordinary tables as they are', async () => {
     const { call } = await connect({
-      '/api/game/database/tables/chat_mutes': { table: 'chat_mutes', columns: [{ name: 'account_id' }, { name: 'until' }], rows: [{ account_id: 'acc-1', until: null }], total: 1, offset: 0, limit: 50 },
+      '/api/game/database/tables/chat_mutes': {
+        table: 'chat_mutes',
+        columns: [
+          { name: 'account_id' },
+          { name: 'until' },
+        ],
+        rows: [
+          { account_id: 'acc-1', until: null },
+        ],
+        total: 1,
+        offset: 0,
+        limit: 50,
+      },
     })
 
     const page = (await call('database_rows', { table: 'chat_mutes' })).data
     expect(page).not.toHaveProperty('redacted')
-    expect(page.rows).toEqual([{ account_id: 'acc-1', until: null }])
+    expect(page.rows).toEqual([
+      { account_id: 'acc-1', until: null },
+    ])
   })
 
   it('explains a missing table, a missing admin token and an older server', async () => {
@@ -709,18 +1155,31 @@ describe('writeMcpConfig', () => {
 
     expect(writeMcpConfig(dir)).toBe(true)
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
-      mcpServers: { mavonengine: { command: 'npx', args: ['-y', '@mavonengine/cli', 'mcp'] } },
+      mcpServers: {
+        mavonengine: {
+          command: 'npx',
+          args: ['-y', '@mavonengine/cli', 'mcp'],
+        },
+      },
     })
   })
 
   it('keeps other servers and an existing entry', () => {
     const file = setup()
-    writeFileSync(file, JSON.stringify({ mcpServers: { other: { command: 'x' } } }))
+    writeFileSync(file, JSON.stringify({
+      mcpServers: {
+        other: { command: 'x' },
+      },
+    }))
 
     expect(writeMcpConfig(dir)).toBe(true)
     expect(Object.keys(JSON.parse(readFileSync(file, 'utf8')).mcpServers)).toEqual(['other', 'mavonengine'])
 
-    writeFileSync(file, JSON.stringify({ mcpServers: { mavonengine: { command: 'custom' } } }))
+    writeFileSync(file, JSON.stringify({
+      mcpServers: {
+        mavonengine: { command: 'custom' },
+      },
+    }))
     expect(writeMcpConfig(dir)).toBe(false)
     expect(JSON.parse(readFileSync(file, 'utf8')).mcpServers.mavonengine.command).toBe('custom')
   })

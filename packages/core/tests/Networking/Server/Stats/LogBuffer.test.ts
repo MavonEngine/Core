@@ -5,7 +5,10 @@ import LogBuffer from '../../../../src/Networking/Server/Stats/LogBuffer'
 describe('logBuffer', () => {
   it('records entries logged through winston', () => {
     const buffer = new LogBuffer()
-    const logger = winston.createLogger({ level: 'info', transports: [buffer.transport] })
+    const logger = winston.createLogger({
+      level: 'info',
+      transports: [buffer.transport],
+    })
 
     logger.info('hello')
     logger.warn('careful')
@@ -44,7 +47,9 @@ describe('logBuffer', () => {
     buffer.push('info', 'three')
 
     expect(buffer.since(2)).toEqual({
-      entries: [expect.objectContaining({ id: 3, message: 'three' })],
+      entries: [
+        expect.objectContaining({ id: 3, message: 'three' }),
+      ],
       latestId: 3,
     })
     expect(buffer.since(3)).toEqual({ entries: [], latestId: 3 })

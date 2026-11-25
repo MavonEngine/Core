@@ -95,7 +95,10 @@ export default class DatabaseQueueDriver implements QueueDriver {
       .selectAll()
       .where('name', 'in', names)
       .where('available_at', '<=', now)
-      .where(eb => eb.or([eb('reserved_at', 'is', null), eb('reserved_at', '<=', staleBefore)]))
+      .where(eb => eb.or([
+        eb('reserved_at', 'is', null),
+        eb('reserved_at', '<=', staleBefore),
+      ]))
     if (queues)
       query = query.where('queue', 'in', queues)
 
@@ -104,13 +107,22 @@ export default class DatabaseQueueDriver implements QueueDriver {
     for (const row of candidates) {
       // Only claims it when no other worker did since it was read: their reserved_at would differ
       const result = await this.db.updateTable(JOBS_TABLE)
-        .set(eb => ({ reserved_at: now, attempts: eb('attempts', '+', 1) }))
+        .set(eb => ({
+          reserved_at: now,
+          attempts: eb('attempts', '+', 1),
+        }))
         .where('id', '=', row.id)
-        .where(row.reserved_at === null ? eb => eb('reserved_at', 'is', null) : eb => eb('reserved_at', '=', row.reserved_at))
+        .where(row.reserved_at === null
+          ? eb => eb('reserved_at', 'is', null)
+          : eb => eb('reserved_at', '=', row.reserved_at))
         .executeTakeFirst()
 
-      if (Number(result.numUpdatedRows) === 1)
-        return { ...fromRow(row), attempts: Number(row.attempts) + 1 }
+      if (Number(result.numUpdatedRows) === 1) {
+        return {
+          ...fromRow(row),
+          attempts: Number(row.attempts) + 1,
+        }
+      }
     }
 
     return undefined

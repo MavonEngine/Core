@@ -32,8 +32,15 @@ function summarize(metrics: any) {
   const { cpu, bandwidth, tick, players, ...rest } = metrics ?? {}
   return {
     ...rest,
-    players: Array.isArray(players) ? players.length : 0,
-    cpu: cpu && { current: cpu.current, avg1s: cpu.avg1s, avg10s: cpu.avg10s, avg60s: cpu.avg60s },
+    players: Array.isArray(players)
+      ? players.length
+      : 0,
+    cpu: cpu && {
+      current: cpu.current,
+      avg1s: cpu.avg1s,
+      avg10s: cpu.avg10s,
+      avg60s: cpu.avg60s,
+    },
     bandwidth: bandwidth && { sentPerSecond: bandwidth.sentPerSecond, receivedPerSecond: bandwidth.receivedPerSecond },
     tick: tick && { budgetMs: tick.budgetMs, latest: tick.latest },
   }
@@ -56,12 +63,17 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
     description: 'Health and current performance of the game server: uptime, tick rate and tick time against its budget, CPU, '
       + 'bandwidth, memory, player and entity counts, physics bodies, latency simulation. History is left out, see server_metrics.',
     annotations: READ_ONLY,
-  }, () => run(async () => ({ server: client.url, ...summarize(await client.metrics()) })))
+  }, () => run(async () => ({
+    server: client.url,
+    ...summarize(await client.metrics()),
+  })))
 
   server.registerTool('server_metrics', {
     title: 'Full metrics snapshot',
     description: 'The full metrics snapshot. With includeHistory, also the last ~60 samples of CPU, bandwidth and tick timings, to spot spikes.',
-    inputSchema: { includeHistory: z.boolean().default(false).describe('Include the per-sample history arrays') },
+    inputSchema: {
+      includeHistory: z.boolean().default(false).describe('Include the per-sample history arrays'),
+    },
     annotations: READ_ONLY,
   }, ({ includeHistory }) => run(async () => {
     const metrics = await client.metrics()
@@ -71,7 +83,12 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
     const { history: _cpu, ...cpuNow } = cpu ?? {}
     const { history: _bandwidth, ...bandwidthNow } = bandwidth ?? {}
     const { history: _tick, ...tickNow } = tick ?? {}
-    return { ...metrics, cpu: cpuNow, bandwidth: bandwidthNow, tick: tickNow }
+    return {
+      ...metrics,
+      cpu: cpuNow,
+      bandwidth: bandwidthNow,
+      tick: tickNow,
+    }
   }))
 
   server.registerTool('list_players', {
@@ -86,7 +103,9 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
     description: 'The scene loaded on the server: name, file, whether it hot-reloads, unsaved changes, settings, and its objects '
       + 'with type, transform, props, the plugin that registered the type and whether the server built it (false for client-only types). '
       + 'Development only.',
-    inputSchema: { includeObjects: z.boolean().default(true).describe('Include the scene objects, not just the summary') },
+    inputSchema: {
+      includeObjects: z.boolean().default(true).describe('Include the scene objects, not just the summary'),
+    },
     annotations: READ_ONLY,
   }, ({ includeObjects }) => run(async () => {
     const { scene } = await client.scene()
@@ -116,7 +135,9 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
   server.registerTool('get_entity', {
     title: 'One entity',
     description: 'One entity by id, with the state it sends to clients (its serialize() output). Development only.',
-    inputSchema: { id: z.string().min(1) },
+    inputSchema: {
+      id: z.string().min(1),
+    },
     annotations: READ_ONLY,
   }, ({ id }) => run(async () => {
     const { entity } = await client.entity(id)
@@ -138,7 +159,9 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
     annotations: READ_ONLY,
   }, ({ level, contains, afterId, limit }) => run(async () => {
     const { entries = [], latestId = 0 } = await client.logs(afterId)
-    const maxSeverity = level ? LOG_LEVELS.indexOf(level) : Infinity
+    const maxSeverity = level
+      ? LOG_LEVELS.indexOf(level)
+      : Infinity
     const needle = contains?.toLowerCase()
 
     const matches = (entries as { id: number, timestamp: number, level: string, message: string }[]).filter((entry) => {
@@ -149,7 +172,10 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
     return {
       latestId,
       matched: matches.length,
-      entries: matches.slice(-limit).map(({ timestamp, ...entry }) => ({ ...entry, time: new Date(timestamp).toISOString() })),
+      entries: matches.slice(-limit).map(({ timestamp, ...entry }) => ({
+        ...entry,
+        time: new Date(timestamp).toISOString(),
+      })),
     }
   }))
 
@@ -170,7 +196,11 @@ export function createMcpServer(client: GameServerClient, docs?: DocsClient, plu
       (!pathContains || entry.path.includes(pathContains))
       && (minStatus === undefined || (entry.status ?? 0) >= minStatus))
 
-    return { latestId, matched: matches.length, entries: matches.slice(-limit) }
+    return {
+      latestId,
+      matched: matches.length,
+      entries: matches.slice(-limit),
+    }
   }))
 
   registerClientTools(server, client)

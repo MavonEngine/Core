@@ -21,6 +21,8 @@ export default class NetworkedEntityFactory {
   create(typeName: string, data: Record<string, unknown>): NetworkedActor | null {
     const factory = registry.get(typeName)
 
-    return factory ? factory(data) : null
+    return factory
+      ? factory(data)
+      : null
   }
 }

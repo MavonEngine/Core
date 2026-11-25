@@ -11,13 +11,19 @@ class TestPlayer extends Player {
 
 function withPeer(overrides: Record<string, unknown> = {}) {
   const player = new TestPlayer('p1')
-  player.channel = { webrtcConnection: { peerConnection: {
-    rtt: () => 35,
-    bytesSent: () => 5000,
-    bytesReceived: () => 700,
-    getSelectedCandidatePair: () => ({ remote: { address: '198.51.100.4' } }),
-    ...overrides,
-  } } } as any
+  player.channel = {
+    webrtcConnection: {
+      peerConnection: {
+        rtt: () => 35,
+        bytesSent: () => 5000,
+        bytesReceived: () => 700,
+        getSelectedCandidatePair: () => ({
+          remote: { address: '198.51.100.4' },
+        }),
+        ...overrides,
+      },
+    },
+  } as any
   return player
 }
 
@@ -47,7 +53,10 @@ describe('player', () => {
   })
 
   it('leaves out what the peer connection does not know yet', () => {
-    const player = withPeer({ rtt: () => -1, getSelectedCandidatePair: () => null })
+    const player = withPeer({
+      rtt: () => -1,
+      getSelectedCandidatePair: () => null,
+    })
     expect(player.connection).toMatchObject({ address: null, rttMs: null })
   })
 
@@ -57,6 +66,11 @@ describe('player', () => {
         throw new Error('closed')
       },
     })
-    expect(player.connection).toEqual({ address: null, rttMs: null, bytesSent: 0, bytesReceived: 0 })
+    expect(player.connection).toEqual({
+      address: null,
+      rttMs: null,
+      bytesSent: 0,
+      bytesReceived: 0,
+    })
   })
 })

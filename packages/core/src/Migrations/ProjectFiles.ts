@@ -33,7 +33,9 @@ export class ProjectFiles {
 
   private onDisk(path: string): string | undefined {
     const full = this.full(path)
-    return existsSync(full) ? readFileSync(full, 'utf8') : undefined
+    return existsSync(full)
+      ? readFileSync(full, 'utf8')
+      : undefined
   }
 
   exists(path: string): boolean {
@@ -75,7 +77,11 @@ export class ProjectFiles {
 
   /** What `commit()` would write, in the order the files were first changed */
   changes(): FileChange[] {
-    return Array.from(this.staged, ([path, after]) => ({ path, before: this.onDisk(path), after }))
+    return Array.from(this.staged, ([path, after]) => ({
+      path,
+      before: this.onDisk(path),
+      after,
+    }))
   }
 
   /** Write every change to disk */

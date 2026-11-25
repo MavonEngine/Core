@@ -6,9 +6,17 @@ import { LIST_MESSAGE, READ_MESSAGE, RESULT_MESSAGE, UNREAD_MESSAGE } from '../s
 
 function fakeGame() {
   const handlers = new Map<string, (data: unknown) => void>()
-  const socket = { on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)), emit: vi.fn() }
-  const game = { trigger: vi.fn(), network: undefined as { socket: typeof socket } | undefined }
-  const logger = { error: vi.fn() }
+  const socket = {
+    on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)),
+    emit: vi.fn(),
+  }
+  const game = {
+    trigger: vi.fn(),
+    network: undefined as { socket: typeof socket } | undefined,
+  }
+  const logger = {
+    error: vi.fn(),
+  }
   const ctx = { game, logger } as unknown as ClientPluginContext
   return {
     game,
@@ -24,7 +32,12 @@ function fakeGame() {
   }
 }
 
-const levelUp: GameNotification = { id: 'n1', type: 'LevelUp', data: { level: 5 }, sentAt: '2026-11-19T12:00:00.000Z' }
+const levelUp: GameNotification = {
+  id: 'n1',
+  type: 'LevelUp',
+  data: { level: 5 },
+  sentAt: '2026-11-19T12:00:00.000Z',
+}
 
 describe('notifications in the browser', () => {
   it('listens once the game connected, and tells the listeners and the game', () => {
@@ -79,30 +92,63 @@ describe('stored notifications in the browser', () => {
     const fake = fakeGame()
     fake.connect()
     plugin.update!(0.016, fake.ctx)
-    return { ...fake, api: notifications(fake.ctx.game) }
+    return {
+      ...fake,
+      api: notifications(fake.ctx.game),
+    }
   }
 
-  const stored = { id: 's1', notificationId: 'n1', type: 'FriendRequest', data: { from: 'carol' }, readAt: null, createdAt: '2026-11-19T12:00:00.000Z' }
+  const stored = {
+    id: 's1',
+    notificationId: 'n1',
+    type: 'FriendRequest',
+    data: { from: 'carol' },
+    readAt: null,
+    createdAt: '2026-11-19T12:00:00.000Z',
+  }
 
   it('asks the server for the account\'s notifications, and marks them read', async () => {
     const { api, server, lastRequest } = connected()
 
     const listing = api.stored({ unread: true, limit: 10 })
     const [event, body, options] = lastRequest()
-    expect([event, body, options]).toEqual([LIST_MESSAGE, { requestId: expect.any(String), unread: true, limit: 10 }, { reliable: true }])
-    server(RESULT_MESSAGE, { requestId: body.requestId, notifications: [stored], unread: 1 })
-    expect(await listing).toEqual({ notifications: [stored], unread: 1 })
+    expect([event, body, options]).toEqual([
+      LIST_MESSAGE,
+      {
+        requestId: expect.any(String),
+        unread: true,
+        limit: 10,
+      },
+      { reliable: true },
+    ])
+    server(RESULT_MESSAGE, {
+      requestId: body.requestId,
+      notifications: [stored],
+      unread: 1,
+    })
+    expect(await listing).toEqual({
+      notifications: [stored],
+      unread: 1,
+    })
 
     const marking = api.markRead(['n1'])
     const [readEvent, readBody] = lastRequest()
-    expect([readEvent, readBody]).toEqual([READ_MESSAGE, { requestId: expect.any(String), ids: ['n1'] }])
+    expect([readEvent, readBody]).toEqual([
+      READ_MESSAGE,
+      {
+        requestId: expect.any(String),
+        ids: ['n1'],
+      },
+    ])
     expect(readBody.requestId).not.toBe(body.requestId)
     server(RESULT_MESSAGE, { requestId: readBody.requestId, marked: 1, unread: 0 })
     expect(await marking).toEqual({ marked: 1, unread: 0 })
 
     // Without ids: all of them
     void api.markRead()
-    expect(lastRequest()[1]).toEqual({ requestId: expect.any(String) })
+    expect(lastRequest()[1]).toEqual({
+      requestId: expect.any(String),
+    })
   })
 
   it('keeps the unread count the server tells, for a badge', async () => {
@@ -145,7 +191,12 @@ describe('stored notifications in the browser', () => {
     }
 
     const pending = api.markRead()
-    game.network = { socket: { on: vi.fn(), emit: vi.fn() } } as never
+    game.network = {
+      socket: {
+        on: vi.fn(),
+        emit: vi.fn(),
+      },
+    } as never
     plugin.update!(0.016, ctx)
     await expect(pending).rejects.toThrow('connection to the game server changed')
 

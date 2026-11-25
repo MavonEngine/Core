@@ -79,7 +79,9 @@ export async function startDevInbox(options: DevInboxOptions, load?: () => Promi
     webIp: '127.0.0.1',
     basePathname: options.basePath || '/',
     silent: true,
-    ...(options.mailDirectory ? { mailDirectory: options.mailDirectory } : {}),
+    ...(options.mailDirectory
+      ? { mailDirectory: options.mailDirectory }
+      : {}),
   })
   const servers = await maildev.start()
   const webPort = servers.api?.getPort()
@@ -87,7 +89,11 @@ export async function startDevInbox(options: DevInboxOptions, load?: () => Promi
     await maildev.stop()
     throw new Error('MailDev started without its web server')
   }
-  return { smtpPort: servers.smtp.getAddress().port, webPort, stop: () => maildev.stop() }
+  return {
+    smtpPort: servers.smtp.getAddress().port,
+    webPort,
+    stop: () => maildev.stop(),
+  }
 }
 
 /**
@@ -104,10 +110,23 @@ export function devInboxTransport(inbox: Promise<DevInbox | undefined>, fallback
       if (!running)
         return fallback.send(message)
       if (!smtp || smtpFor !== running.smtpPort) {
-        smtp = nodemailerTransport({ host: '127.0.0.1', port: running.smtpPort, secure: false, ignoreTLS: true }, 'maildev')
+        smtp = nodemailerTransport({
+          host: '127.0.0.1',
+          port: running.smtpPort,
+          secure: false,
+          ignoreTLS: true,
+        }, 'maildev')
         smtpFor = running.smtpPort
       }
-      return smtp.send(message.from ? message : { ...message, from: { address: defaultFrom(), name: '' } })
+      return smtp.send(message.from
+        ? message
+        : {
+            ...message,
+            from: {
+              address: defaultFrom(),
+              name: '',
+            },
+          })
     },
     close: () => smtp?.close?.(),
   }
@@ -169,7 +188,13 @@ export function proxyToInbox(webPort: () => number | undefined, options: { headS
     // Plain answers, so the page can be changed on the way
     delete headers['accept-encoding']
 
-    const upstream = httpRequest({ host: '127.0.0.1', port, method: req.method, path: req.originalUrl, headers }, (answer) => {
+    const upstream = httpRequest({
+      host: '127.0.0.1',
+      port,
+      method: req.method,
+      path: req.originalUrl,
+      headers,
+    }, (answer) => {
       res.removeHeader('Content-Security-Policy')
       res.removeHeader('X-Frame-Options')
       for (const [name, value] of Object.entries(answer.headers)) {

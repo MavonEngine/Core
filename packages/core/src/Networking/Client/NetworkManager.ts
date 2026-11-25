@@ -80,10 +80,19 @@ export default class NetworkManager extends EventEmitter {
    * The last packets and network events of this client, for the dev tools. Off unless the dev bridge
    * or the editor runs; turn it on with `net.enabled = true`.
    */
-  readonly net = new NetRecorder({ enabled: netDebugDefault() })
+  readonly net = new NetRecorder({
+    enabled: netDebugDefault(),
+  })
 
   /** What the server last sent, untouched by interpolation or prediction */
-  readonly serverView: ServerView = { tick: null, serverTime: null, ack: null, receivedAt: null, missedStates: 0, entities: new Map() }
+  readonly serverView: ServerView = {
+    tick: null,
+    serverTime: null,
+    ack: null,
+    receivedAt: null,
+    missedStates: 0,
+    entities: new Map(),
+  }
 
   /**
    * This command queue is used for replaying packets locally.
@@ -117,7 +126,9 @@ export default class NetworkManager extends EventEmitter {
         const failed = error as ConnectError
         this._connectError = failed
         Game.instance().logger?.error(`Socket error: ${failed.message}`)
-        this.net.event('connect_error', { info: { status: failed.status ?? null, message: failed.message } })
+        this.net.event('connect_error', {
+          info: { status: failed.status ?? null, message: failed.message },
+        })
         clientPlugins()?.run('onConnectError', { message: failed.message, status: failed.status })
         this.onConnectError(failed)
         this.trigger('connectError', failed)
@@ -127,7 +138,9 @@ export default class NetworkManager extends EventEmitter {
       Game.instance().logger?.info(`Socket connection established: ${this._socket.id}`)
       this._connected = true
       this._connectError = null
-      this.net.event('connect', { info: { id: this._socket.id } })
+      this.net.event('connect', {
+        info: { id: this._socket.id },
+      })
       if (this._editorMode)
         this.announceEditor()
       this.onConnect()
@@ -170,11 +183,17 @@ export default class NetworkManager extends EventEmitter {
       if (view.tick !== null && state.tick > view.tick + 1) {
         const missed = state.tick - view.tick - 1
         view.missedStates += missed
-        this.net.event('state_gap', { tick: state.tick, info: { missed, after: view.tick } })
+        this.net.event('state_gap', {
+          tick: state.tick,
+          info: { missed, after: view.tick },
+        })
       }
       else if (view.tick !== null && state.tick <= view.tick) {
         // Arrived after a newer one: the data channel is unordered
-        this.net.event('state_out_of_order', { tick: state.tick, info: { newest: view.tick } })
+        this.net.event('state_out_of_order', {
+          tick: state.tick,
+          info: { newest: view.tick },
+        })
         return
       }
 
@@ -195,7 +214,9 @@ export default class NetworkManager extends EventEmitter {
         type: entity.$typeName ?? null,
         position: vec(entity.position),
         rotation: vec(entity.rotation),
-        scale: entity.scale ? vec(entity.scale) : { x: 1, y: 1, z: 1 },
+        scale: entity.scale
+          ? vec(entity.scale)
+          : { x: 1, y: 1, z: 1 },
         tick: view.tick ?? 0,
         receivedAt: now,
       })

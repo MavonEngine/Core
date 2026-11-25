@@ -78,11 +78,18 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
     if (!Number.isInteger(port) || port < 1 || port > 65535)
       throw new UsageError('--port must be between 1 and 65535')
 
-    const host = values.host!.includes(':') && !values.host!.startsWith('[') ? `[${values.host}]` : values.host
+    const host = values.host!.includes(':') && !values.host!.startsWith('[')
+      ? `[${values.host}]`
+      : values.host
     url = `http://${host}:${port}`
   }
 
-  for (const [flag, value] of [['--url', url], ['--client-url', values['client-url']], ['--docs-url', values['docs-url']], ['--plugins-url', values['plugins-url']]] as const) {
+  for (const [flag, value] of [
+    ['--url', url],
+    ['--client-url', values['client-url']],
+    ['--docs-url', values['docs-url']],
+    ['--plugins-url', values['plugins-url']],
+  ] as const) {
     try {
       if (value !== undefined)
         void new URL(value)
@@ -94,8 +101,12 @@ export function parseMcpArgs(args: string[], env: Record<string, string | undefi
 
   return {
     client: new GameServerClient({ url, clientUrl: values['client-url'], token: values.token ?? env.MAVONENGINE_METRICS_TOKEN ?? env.MAVONENGINE_ADMIN_TOKEN }),
-    docsUrl: values.docs ? (values['docs-url'] ?? DEFAULT_DOCS_URL) : false,
-    pluginsUrl: values['plugin-list'] ? (values['plugins-url'] ?? env[PLUGIN_REGISTRY_ENV] ?? PLUGIN_REGISTRY_URL) : false,
+    docsUrl: values.docs
+      ? (values['docs-url'] ?? DEFAULT_DOCS_URL)
+      : false,
+    pluginsUrl: values['plugin-list']
+      ? (values['plugins-url'] ?? env[PLUGIN_REGISTRY_ENV] ?? PLUGIN_REGISTRY_URL)
+      : false,
   }
 }
 
@@ -110,8 +121,12 @@ export async function runMcpCommand({ client, docsUrl, pluginsUrl }: McpOptions)
     import('../mcp/docs'),
   ])
 
-  const docs = docsUrl ? new DocsClient(docsUrl) : undefined
-  const server = createMcpServer(client, docs, pluginsUrl ? { url: pluginsUrl } : undefined)
+  const docs = docsUrl
+    ? new DocsClient(docsUrl)
+    : undefined
+  const server = createMcpServer(client, docs, pluginsUrl
+    ? { url: pluginsUrl }
+    : undefined)
   const transport = new StdioServerTransport()
 
   const closed = new Promise<void>((resolve) => {

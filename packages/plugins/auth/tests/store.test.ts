@@ -77,31 +77,66 @@ describe('auth store', () => {
 
   it('links several providers to one account, each provider user to one account', async () => {
     const ada = await store.createAccount('Ada')
-    await store.addIdentity({ provider: 'password', externalId: 'ada', accountId: ada.id, secret: 'hash' })
-    await store.addIdentity({ provider: 'discord', externalId: '123', accountId: ada.id, secret: null })
+    await store.addIdentity({
+      provider: 'password',
+      externalId: 'ada',
+      accountId: ada.id,
+      secret: 'hash',
+    })
+    await store.addIdentity({
+      provider: 'discord',
+      externalId: '123',
+      accountId: ada.id,
+      secret: null,
+    })
 
     expect((await store.identity('discord', '123'))?.accountId).toBe(ada.id)
     expect((await store.identityOf(ada.id, 'password'))?.secret).toBe('hash')
     expect(await store.identity('github', '123')).toBeUndefined()
 
     const bob = await store.createAccount('Bob')
-    await expect(store.addIdentity({ provider: 'discord', externalId: '123', accountId: bob.id, secret: null })).rejects.toThrow()
+    await expect(store.addIdentity({
+      provider: 'discord',
+      externalId: '123',
+      accountId: bob.id,
+      secret: null,
+    })).rejects.toThrow()
   })
 
   it('lists accounts with how they log in and their live sessions', async () => {
     const ada = await store.createAccount('Ada')
     now = new Date(now.getTime() + 1000)
     const bob = await store.createAccount('Bob')
-    await store.addIdentity({ provider: 'password', externalId: 'ada', accountId: ada.id, secret: 'x' })
-    await store.addIdentity({ provider: 'discord', externalId: '1', accountId: ada.id, secret: null })
+    await store.addIdentity({
+      provider: 'password',
+      externalId: 'ada',
+      accountId: ada.id,
+      secret: 'x',
+    })
+    await store.addIdentity({
+      provider: 'discord',
+      externalId: '1',
+      accountId: ada.id,
+      secret: null,
+    })
     await store.createSession(ada.id, DAY)
     await store.setDisabled(bob.id, true)
 
     const { accounts, total } = await store.listAccounts(10, 0)
     expect(total).toBe(2)
-    expect(accounts.map(a => [a.name, a.providers, a.sessions, !!a.disabledAt])).toEqual([
+    expect(accounts.map(a => [
+      a.name,
+      a.providers,
+      a.sessions,
+      !!a.disabledAt,
+    ])).toEqual([
       ['Bob', [], 0, true],
-      ['Ada', ['discord', 'password'], 1, false],
+      [
+        'Ada',
+        ['discord', 'password'],
+        1,
+        false,
+      ],
     ])
     expect((await store.listAccounts(1, 1)).accounts.map(a => a.name)).toEqual(['Ada'])
     expect(await store.setDisabled('nobody', true)).toBe(false)
@@ -109,7 +144,12 @@ describe('auth store', () => {
 
   it('searches accounts by name, email, username or id, and filters guests and disabled ones', async () => {
     const ada = await store.createAccount('Ada Lovelace', { email: 'Ada@Example.com' })
-    await store.addIdentity({ provider: 'password', externalId: 'countess_1', accountId: ada.id, secret: 'x' })
+    await store.addIdentity({
+      provider: 'password',
+      externalId: 'countess_1',
+      accountId: ada.id,
+      secret: 'x',
+    })
     const bob = await store.createAccount('Bob')
     await store.setDisabled(bob.id, true)
     const guest = await store.createAccount('Guest-1', { guest: true })
@@ -130,7 +170,12 @@ describe('auth store', () => {
 
     const [listed] = (await store.listAccounts(10, 0, { search: 'ada' })).accounts
     expect(listed.username).toBe('countess_1')
-    expect(await store.stats()).toEqual({ accounts: 3, guests: 1, disabled: 1, sessions: 1 })
+    expect(await store.stats()).toEqual({
+      accounts: 3,
+      guests: 1,
+      disabled: 1,
+      sessions: 1,
+    })
   })
 
   it('makes guest accounts and turns them into full ones with the same id', async () => {
@@ -146,7 +191,9 @@ describe('auth store', () => {
   it('gives a guest session its own lifetime', async () => {
     const guest = await store.createAccount('Guest-1', { guest: true })
     const { token } = await store.createSession(guest.id, DAY)
-    const lifetime = (account: { guest: boolean }) => account.guest ? 2 * DAY : 30 * DAY
+    const lifetime = (account: { guest: boolean }) => account.guest
+      ? 2 * DAY
+      : 30 * DAY
 
     await store.useSession(token, lifetime)
     const [row] = await store.db.selectFrom('auth_sessions').select('expires_at').execute()
@@ -168,7 +215,9 @@ describe('auth store', () => {
     expect(await store.account(expired.id)).toBeUndefined()
     expect(await store.account(loggedOut.id)).toBeUndefined()
     expect(await store.account(ada.id)).toBeDefined()
-    expect(await store.db.selectFrom('auth_sessions').select('account_id').execute()).toEqual([{ account_id: live.id }])
+    expect(await store.db.selectFrom('auth_sessions').select('account_id').execute()).toEqual([
+      { account_id: live.id },
+    ])
   })
 
   it('keeps one email per account regardless of case, and accounts without one', async () => {
@@ -210,7 +259,11 @@ describe('auth store tokens', () => {
     const account = await store.createAccount('Ada', { email: 'ada@example.com' })
     const token = await store.createToken(account.id, 'verify-email', 'ada@example.com', HOUR)
     expect(token).toMatch(/^[\w-]{43}$/)
-    expect(await store.db.selectFrom('auth_tokens').select('token_hash').execute()).toEqual([{ token_hash: hashToken(token) }])
+    expect(await store.db.selectFrom('auth_tokens').select('token_hash').execute()).toEqual([
+      {
+        token_hash: hashToken(token),
+      },
+    ])
 
     // For one purpose only
     expect(await store.token(token, 'reset-password')).toBeUndefined()

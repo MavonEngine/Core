@@ -5,7 +5,13 @@ import type { Response } from 'express'
  * `resetUrl`). Plain HTML without scripts or anything from elsewhere, so they work on any game server.
  */
 
-const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  '\'': '&#39;',
+}
 const HTML_SPECIAL_RE = /[&<>"']/g
 
 export function escapeHtml(text: string): string {
@@ -54,7 +60,9 @@ export function sendPage(res: Response, status: number, title: string, body: str
 
 /** A paragraph of text, escaped */
 export function text(message: string, className?: string): string {
-  return `<p${className ? ` class="${className}"` : ''}>${escapeHtml(message)}</p>`
+  return `<p${className
+    ? ` class="${className}"`
+    : ''}>${escapeHtml(message)}</p>`
 }
 
 /**
@@ -70,7 +78,9 @@ export function verifyEmailPage(action: string, token: string, email: string): s
 }
 
 export function resetPasswordPage(action: string, token: string, minLength: number, error?: string): string {
-  return `${error ? text(error, 'error') : ''}${text('Choose a new password. You will be logged out everywhere else.')}
+  return `${error
+    ? text(error, 'error')
+    : ''}${text('Choose a new password. You will be logged out everywhere else.')}
 <form method="post" action="${escapeHtml(action)}">
 <input type="hidden" name="token" value="${escapeHtml(token)}">
 <label for="password">New password</label>

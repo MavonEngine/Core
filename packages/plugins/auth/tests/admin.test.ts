@@ -20,14 +20,26 @@ afterEach(async () => {
 
 /** The plugin on a server with core's admin panel, the way a server hands it to plugins */
 async function started({ database = true } = {}) {
-  const db = database ? memoryDb() : undefined
+  const db = database
+    ? memoryDb()
+    : undefined
   if (db)
     await runPluginMigrations(db, PKG, plugin.migrations)
 
   const app = express()
-  const panel = new AdminPanel({ adminToken: { configured: true, matches: candidate => candidate === 'admin-token' }, production: () => false })
+  const panel = new AdminPanel({
+    adminToken: {
+      configured: true,
+      matches: candidate => candidate === 'admin-token',
+    },
+    production: () => false,
+  })
   panel.mount(app)
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const ctx = {
     package: PKG,
     options: {},
@@ -60,19 +72,38 @@ async function started({ database = true } = {}) {
 
   /** A game connection of `id`, as core hands it to the plugin */
   function connect(id: string) {
-    const channel = { id: Math.random().toString(36), userData: { id, name: 'x' }, close: vi.fn(async () => {}) }
+    const channel = {
+      id: Math.random().toString(36),
+      userData: { id, name: 'x' },
+      close: vi.fn(async () => {}),
+    }
     plugin.onConnection(channel as any, {}, ctx)
     return channel
   }
 
-  return { ctx, panel, get, post, connect, logger, hooks: auth(ctx.server), db: db! }
+  return {
+    ctx,
+    panel,
+    get,
+    post,
+    connect,
+    logger,
+    hooks: auth(ctx.server),
+    db: db!,
+  }
 }
 
 async function register(get: Awaited<ReturnType<typeof started>>['get'], username: string, email?: string) {
   const res = await fetch(new URL('/api/auth/register', (await get('/admin/')).url), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: 'correct horse battery', ...(email ? { email } : {}) }),
+    body: JSON.stringify({
+      username,
+      password: 'correct horse battery',
+      ...(email
+        ? { email }
+        : {}),
+    }),
   })
   return (await res.json()).account as { id: string }
 }
@@ -156,7 +187,12 @@ describe('admin pages', () => {
     const { get, post } = await started()
     const ada = await register(get, 'ada')
 
-    for (const back of ['https://evil.example/', '//evil.example/admin/accounts/', '/admin/other/', '/admin/accounts/\\evil'])
+    for (const back of [
+      'https://evil.example/',
+      '//evil.example/admin/accounts/',
+      '/admin/other/',
+      '/admin/accounts/\\evil',
+    ])
       expect((await post(`/admin/accounts/actions/${ada.id}/disable`, { back })).headers.get('location')).toBe('/admin/accounts/?notice=disabled')
   })
 

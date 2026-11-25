@@ -73,7 +73,13 @@ export const APP_NAME_PLACEHOLDER = '%MAVONENGINE_APP_NAME%'
 /** What the placeholder becomes without an `appName` */
 export const DEFAULT_APP_NAME = 'MavonEngine'
 
-const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  '\'': '&#39;',
+}
 const HTML_SPECIAL_RE = /[&<>"']/g
 
 /** `html` with every placeholder of the game's name filled in, escaped */
@@ -104,7 +110,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
   const clientPlugins = (root: string) => {
     const result = enabledPlugins(root, 'client')
-    return { ...result, signature: JSON.stringify(result.plugins.map(p => [p.package, p.entry, p.options])) }
+    return {
+      ...result,
+      signature: JSON.stringify(result.plugins.map(p => [p.package, p.entry, p.options])),
+    }
   }
 
   const warn = (message: string) => config.logger.warn(`[mavonengine] ${message}`)
@@ -154,7 +163,9 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       incompatible.forEach(warning => warn(`Plugin loaded anyway: ${warning}`))
 
       // In a release, tell the game which plugin assets exist so it doesn't request the ones left out
-      const shipped = config.command === 'build' ? shippedAssetsByPackage(root) : undefined
+      const shipped = config.command === 'build'
+        ? shippedAssetsByPackage(root)
+        : undefined
 
       return generatePluginsModule(plugins, shipped)
     },
@@ -169,7 +180,9 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         if (root) {
           try {
             const configured = readConfig(root).appName
-            appName = typeof configured === 'string' ? configured : undefined
+            appName = typeof configured === 'string'
+              ? configured
+              : undefined
           }
           catch (err) {
             warn(`Could not read the game's name: ${(err as Error).message}`)
@@ -178,9 +191,18 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
         const tags = devBridge && config.command === 'serve'
           // First in <head> so it also catches errors thrown while the game starts
-          ? [{ tag: 'script', attrs: { type: 'module', src: `${config.base}@id/__x00__${VIRTUAL_DEV_BRIDGE_ID}` }, injectTo: 'head-prepend' as const }]
+          ? [
+              {
+                tag: 'script',
+                attrs: { type: 'module', src: `${config.base}@id/__x00__${VIRTUAL_DEV_BRIDGE_ID}` },
+                injectTo: 'head-prepend' as const,
+              },
+            ]
           : []
-        return { html: fillAppName(html, appName), tags }
+        return {
+          html: fillAppName(html, appName),
+          tags,
+        }
       },
     },
 
@@ -236,10 +258,18 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       const scenes = scenesDir()
       if (existsSync(scenes)) {
         const files = readdirSync(scenes).filter(file => file.endsWith('.json') && SCENE_NAME_RE.test(file.slice(0, -'.json'.length)))
-        for (const file of files)
-          this.emitFile({ type: 'asset', fileName: `${SCENES_DIR}/${file}`, source: readFileSync(join(scenes, file)) })
-        if (files.length)
-          config.logger.info(`[mavonengine] Shipping ${files.length} scene${files.length === 1 ? '' : 's'}`)
+        for (const file of files) {
+          this.emitFile({
+            type: 'asset',
+            fileName: `${SCENES_DIR}/${file}`,
+            source: readFileSync(join(scenes, file)),
+          })
+        }
+        if (files.length) {
+          config.logger.info(`[mavonengine] Shipping ${files.length} scene${files.length === 1
+            ? ''
+            : 's'}`)
+        }
       }
 
       const root = projectRoot()
@@ -249,11 +279,19 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       const { assets, warnings } = releaseAssets(root)
       warnings.forEach(warning => this.warn(warning))
 
-      for (const asset of assets)
-        this.emitFile({ type: 'asset', fileName: asset.to, source: readFileSync(asset.from) })
+      for (const asset of assets) {
+        this.emitFile({
+          type: 'asset',
+          fileName: asset.to,
+          source: readFileSync(asset.from),
+        })
+      }
 
-      if (assets.length)
-        config.logger.info(`[mavonengine] Shipping ${assets.length} plugin asset${assets.length === 1 ? '' : 's'}`)
+      if (assets.length) {
+        config.logger.info(`[mavonengine] Shipping ${assets.length} plugin asset${assets.length === 1
+          ? ''
+          : 's'}`)
+      }
     },
   }
 
@@ -447,7 +485,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         const status = await fetch(`${controlUrl}/status`, { headers })
         if (!status.ok)
           throw new Error(`it answered ${status.status}`)
-        reply(200, { available: true, ...await status.json() as object })
+        reply(200, {
+          available: true,
+          ...await status.json() as object,
+        })
       }
       catch (err) {
         reply(200, { available: false, reason: `mavonengine dev can't be reached: ${(err as Error).message}`, job: null })
@@ -519,7 +560,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     }
 
     try {
-      reply(200, { root, plugins: pluginInfos(root) })
+      reply(200, {
+        root,
+        plugins: pluginInfos(root),
+      })
     }
     catch (err) {
       reply(500, { error: (err as Error).message })
@@ -655,7 +699,14 @@ export function generatePluginsModule(plugins: Pick<EnabledPlugin, 'package' | '
     return `  { ${fields.join(', ')} },`
   })
 
-  return [...imports, '', 'export default [', ...entries, ']', ''].join('\n')
+  return [
+    ...imports,
+    '',
+    'export default [',
+    ...entries,
+    ']',
+    '',
+  ].join('\n')
 }
 
 function contentType(file: string): string {

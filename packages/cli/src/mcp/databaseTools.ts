@@ -29,7 +29,12 @@ export function redactRows(columns: Column[], rows: Record<string, unknown>[]) {
     redacted: [...secret],
     rows: secret.size === 0
       ? rows
-      : rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, secret.has(key) && value !== null ? '[redacted]' : value]))),
+      : rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [
+          key,
+          secret.has(key) && value !== null
+            ? '[redacted]'
+            : value,
+        ]))),
   }
 }
 
@@ -84,7 +89,9 @@ export function registerDatabaseTools(server: McpServer, client: GameServerClien
       offset: page.offset,
       limit: page.limit,
       columns: page.columns ?? [],
-      ...(redacted.length ? { redacted } : {}),
+      ...(redacted.length
+        ? { redacted }
+        : {}),
       rows,
     }
   }))

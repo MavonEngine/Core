@@ -3,13 +3,22 @@ import { useEffect, useRef } from 'react'
 import styles from './NetworkPanel.module.css'
 
 const LANES = ['out', 'in', 'event'] as const
-const COLORS = { out: '#007ACC', in: '#4EC9B0', event: '#DCDCAA', selected: '#FFFFFF', grid: '#333333', label: '#666666' }
+const COLORS = {
+  out: '#007ACC',
+  in: '#4EC9B0',
+  event: '#DCDCAA',
+  selected: '#FFFFFF',
+  grid: '#333333',
+  label: '#666666',
+}
 const LANE_HEIGHT = 16
 const LABEL_WIDTH = 40
 const HEIGHT = LANES.length * LANE_HEIGHT
 
 export function laneOf(record: NetRecord): typeof LANES[number] {
-  return record.kind === 'event' ? 'event' : record.direction ?? 'out'
+  return record.kind === 'event'
+    ? 'event'
+    : record.direction ?? 'out'
 }
 
 /**
@@ -35,7 +44,9 @@ export default function Timeline({ records, selectedId, live, windowMs = 10000 }
       context.setTransform(ratio, 0, 0, ratio, 0, 0)
       context.clearRect(0, 0, width, HEIGHT)
 
-      const end = live ? Date.now() : records.at(-1)?.timestamp ?? Date.now()
+      const end = live
+        ? Date.now()
+        : records.at(-1)?.timestamp ?? Date.now()
       const start = end - windowMs
       const span = width - LABEL_WIDTH
 
@@ -58,10 +69,16 @@ export default function Timeline({ records, selectedId, live, windowMs = 10000 }
         const lane = laneOf(record)
         const x = LABEL_WIDTH + ((record.timestamp - start) / windowMs) * span
         // 4px for an empty packet up to the full lane from 2 kB on
-        const height = lane === 'event' ? LANE_HEIGHT - 4 : 4 + Math.min(1, (record.bytes ?? 0) / 2048) * (LANE_HEIGHT - 8)
+        const height = lane === 'event'
+          ? LANE_HEIGHT - 4
+          : 4 + Math.min(1, (record.bytes ?? 0) / 2048) * (LANE_HEIGHT - 8)
         const selected = record.id === selectedId
         context.fillStyle = selected ? COLORS.selected : COLORS[lane]
-        context.fillRect(x - (selected ? 1 : 0), (LANES.indexOf(lane) + 1) * LANE_HEIGHT - 2 - height, selected ? 3 : lane === 'event' ? 2 : 1, height)
+        context.fillRect(x - (selected ? 1 : 0), (LANES.indexOf(lane) + 1) * LANE_HEIGHT - 2 - height, selected
+          ? 3
+          : lane === 'event'
+            ? 2
+            : 1, height)
       }
     }
 

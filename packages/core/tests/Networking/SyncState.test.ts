@@ -44,7 +44,9 @@ describe('syncState test', () => {
       stateOne: (_entity: TestActor) => stateOne,
     }
 
-    syncStateStack(testActor, [{ stateName: 'stateOne' }], factories)
+    syncStateStack(testActor, [
+      { stateName: 'stateOne' },
+    ], factories)
 
     expect(testActor.state).lengthOf(1)
   })
@@ -118,7 +120,9 @@ describe('syncState test', () => {
     }
 
     // Server sends [shootState] - aimingState was left/popped on server
-    syncStateStack(testActor, [{ stateName: 'shootState' }], factories)
+    syncStateStack(testActor, [
+      { stateName: 'shootState' },
+    ], factories)
 
     // Client should now have [shootState], not [aimingState]
     expect(testActor.state).lengthOf(1)
@@ -126,7 +130,9 @@ describe('syncState test', () => {
     expect(shootStateCreationCount).toBe(1)
 
     // Calling sync again should NOT create another shootState
-    syncStateStack(testActor, [{ stateName: 'shootState' }], factories)
+    syncStateStack(testActor, [
+      { stateName: 'shootState' },
+    ], factories)
     expect(shootStateCreationCount).toBe(1)
   })
 
@@ -153,7 +159,9 @@ describe('syncState test', () => {
     }
 
     // Server has [shootState] after aimingState.leave() was called
-    syncStateStack(testActor, [{ stateName: 'shootState' }], factories)
+    syncStateStack(testActor, [
+      { stateName: 'shootState' },
+    ], factories)
 
     // aimingState should have been removed (leave called)
     expect(leaveSpy).toHaveBeenCalled()

@@ -61,7 +61,20 @@ export interface DashboardInstaller {
 }
 
 export function initialViewState(): ViewState {
-  return { tab: 0, playerOffset: 0, logFromEnd: 0, requestTopId: null, selectedPlayerId: null, followSelectedPlayer: true, packetTopId: null, showPings: false, eventsOnly: false, selectedPacketId: null, followSelectedPacket: true, payloadOffset: 0 }
+  return {
+    tab: 0,
+    playerOffset: 0,
+    logFromEnd: 0,
+    requestTopId: null,
+    selectedPlayerId: null,
+    followSelectedPlayer: true,
+    packetTopId: null,
+    showPings: false,
+    eventsOnly: false,
+    selectedPacketId: null,
+    followSelectedPacket: true,
+    payloadOffset: 0,
+  }
 }
 
 export interface RenderOptions {
@@ -98,10 +111,21 @@ export function accountLabel(account: PlayerAccount | null | undefined): string 
   if (!account)
     return '—'
   const name = account.name ?? account.id
-  return account.guest ? `${name} (guest)` : name
+  return account.guest
+    ? `${name} (guest)`
+    : name
 }
 
-export const DASHBOARD_TABS = ['Overview', 'Players', 'Logs', 'HTTP', 'Network', 'Routes', 'Plugins', 'Database'] as const
+export const DASHBOARD_TABS = [
+  'Overview',
+  'Players',
+  'Logs',
+  'HTTP',
+  'Network',
+  'Routes',
+  'Plugins',
+  'Database',
+] as const
 
 /** What left and right page by before the rows were drawn */
 const DEFAULT_VISIBLE_ROWS = 20
@@ -130,7 +154,11 @@ export function handleDatabaseKey(view: ViewState, database: DatabaseInfo | null
   if (!shown)
     return false
 
-  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  const delta = key === 'down' || key === 'j'
+    ? 1
+    : key === 'up' || key === 'k'
+      ? -1
+      : 0
   if (delta !== 0) {
     const next = tables[Math.max(0, Math.min(tables.length - 1, tables.indexOf(shown) + delta))]
     if (next.name === shown.name)
@@ -140,13 +168,19 @@ export function handleDatabaseKey(view: ViewState, database: DatabaseInfo | null
     return true
   }
 
-  const page = key === 'right' || key === 'pagedown' ? 1 : key === 'left' || key === 'pageup' ? -1 : 0
+  const page = key === 'right' || key === 'pagedown'
+    ? 1
+    : key === 'left' || key === 'pageup'
+      ? -1
+      : 0
   if (page === 0)
     return false
 
   const offset = view.tableOffset ?? 0
   // The last page shows the last rows, as many as fit
-  const last = shown.rows === null ? Infinity : Math.max(0, shown.rows - pageRows)
+  const last = shown.rows === null
+    ? Infinity
+    : Math.max(0, shown.rows - pageRows)
   const next = Math.max(0, Math.min(last, offset + page * pageRows))
   if (next === offset)
     return false
@@ -180,7 +214,9 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
  * It is the last tab, so the others keep their number keys either way.
  */
 export function dashboardTabs(state: Pick<DashboardState, 'plugins'>): readonly (typeof DASHBOARD_TABS)[number][] {
-  return state.plugins.some(plugin => plugin.database) ? DASHBOARD_TABS : DASHBOARD_TABS.filter(tab => tab !== 'Database')
+  return state.plugins.some(plugin => plugin.database)
+    ? DASHBOARD_TABS
+    : DASHBOARD_TABS.filter(tab => tab !== 'Database')
 }
 
 /**
@@ -188,7 +224,9 @@ export function dashboardTabs(state: Pick<DashboardState, 'plugins'>): readonly 
  */
 export function tabForKey(key: string, tabCount: number = DASHBOARD_TABS.length): number | null {
   const index = Number(key) - 1
-  return Number.isInteger(index) && index >= 0 && index < Math.min(tabCount, DASHBOARD_TABS.length) ? index : null
+  return Number.isInteger(index) && index >= 0 && index < Math.min(tabCount, DASHBOARD_TABS.length)
+    ? index
+    : null
 }
 
 function sortedPlayers(players: ServerMetricsSnapshot['players']) {
@@ -209,14 +247,20 @@ export function handlePlayersKey(view: ViewState, snapshot: ServerMetricsSnapsho
     return had
   }
 
-  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  const delta = key === 'down' || key === 'j'
+    ? 1
+    : key === 'up' || key === 'k'
+      ? -1
+      : 0
   const rows = sortedPlayers(snapshot.players)
   if (delta === 0 || rows.length === 0)
     return false
 
   const current = rows.findIndex(p => p.id === view.selectedPlayerId)
   const next = current === -1
-    ? (delta > 0 ? 0 : rows.length - 1)
+    ? (delta > 0
+        ? 0
+        : rows.length - 1)
     : Math.max(0, Math.min(rows.length - 1, current + delta))
 
   view.selectedPlayerId = rows[next].id
@@ -246,7 +290,11 @@ export function handleNetworkKey(view: ViewState, key: string, packets: PacketLi
     return had
   }
 
-  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
+  const delta = key === 'down' || key === 'j'
+    ? 1
+    : key === 'up' || key === 'k'
+      ? -1
+      : 0
   if (delta !== 0) {
     // Newest first, as the table lists them
     const rows = visiblePackets(packets, view).reverse()
@@ -255,7 +303,9 @@ export function handleNetworkKey(view: ViewState, key: string, packets: PacketLi
 
     const current = rows.findIndex(p => p.id === view.selectedPacketId)
     const next = current === -1
-      ? (delta > 0 ? 0 : rows.length - 1)
+      ? (delta > 0
+          ? 0
+          : rows.length - 1)
       : Math.max(0, Math.min(rows.length - 1, current + delta))
     selectPacket(view, rows[next].id)
     return true
@@ -298,13 +348,24 @@ export function messageStats(packets: PacketLine[], windowMs = MESSAGE_STATS_WIN
   const groups = new Map<string, { direction: 'in' | 'out', type: string, count: number, bytes: number }>()
   for (const packet of recent) {
     const key = `${packet.direction} ${packet.type}`
-    const group = groups.get(key) ?? { direction: packet.direction!, type: packet.type, count: 0, bytes: 0 }
+    const group = groups.get(key) ?? {
+      direction: packet.direction!,
+      type: packet.type,
+      count: 0,
+      bytes: 0,
+    }
     group.count++
     group.bytes += packet.bytes
     groups.set(key, group)
   }
 
-  return Array.from(groups.values(), ({ direction, type, count, bytes }) => ({ direction, type, rate: count / seconds, bytesPerSecond: bytes / seconds, avgBytes: bytes / count }))
+  return Array.from(groups.values(), ({ direction, type, count, bytes }) => ({
+    direction,
+    type,
+    rate: count / seconds,
+    bytesPerSecond: bytes / seconds,
+    avgBytes: bytes / count,
+  }))
     .sort((a, b) => b.bytesPerSecond - a.bytesPerSecond || b.rate - a.rate || a.type.localeCompare(b.type))
 }
 
@@ -321,7 +382,11 @@ export function describePacket(packet: PacketLine): string {
   for (const [key, value] of Object.entries(packet.info)) {
     if (value === undefined || value === null)
       continue
-    parts.push(`${key} ${Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
+    parts.push(`${key} ${Array.isArray(value)
+      ? value.join(', ')
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value)}`)
   }
 
   return parts.join(' · ')
@@ -329,7 +394,9 @@ export function describePacket(packet: PacketLine): string {
 
 /** The plugins of the public list the project doesn't have, once the list was read */
 function installable(plugins: PluginLine[], available?: AvailablePlugins): AvailablePlugin[] {
-  return available ? notInProject(available.state.plugins, plugins.map(p => p.package)) : []
+  return available
+    ? notInProject(available.state.plugins, plugins.map(p => p.package))
+    : []
 }
 
 /**
@@ -345,7 +412,9 @@ export function selectedPlugin(view: ViewState, plugins: PluginLine[], rest: Ava
   if (available)
     return { available }
 
-  return plugins.length ? { installed: plugins[0] } : { available: rest[0] }
+  return plugins.length
+    ? { installed: plugins[0] }
+    : { available: rest[0] }
 }
 
 /**
@@ -356,8 +425,15 @@ export function handlePluginsKey(view: ViewState, plugins: PluginLine[], key: st
   if (DASHBOARD_TABS[view.tab] !== 'Plugins' || view.confirmInstall)
     return false
 
-  const delta = key === 'down' || key === 'j' ? 1 : key === 'up' || key === 'k' ? -1 : 0
-  const packages = [...plugins, ...rest].map(p => p.package)
+  const delta = key === 'down' || key === 'j'
+    ? 1
+    : key === 'up' || key === 'k'
+      ? -1
+      : 0
+  const packages = [
+    ...plugins,
+    ...rest,
+  ].map(p => p.package)
   if (delta === 0 || packages.length === 0)
     return false
 
@@ -398,13 +474,25 @@ export function handleInstallKey(view: ViewState, plugins: PluginLine[], key: st
 }
 
 function pluginKeys(state: DashboardState, view: ViewState, available?: AvailablePlugins, installer?: DashboardInstaller) {
-  if (view.confirmInstall)
-    return [{ key: 'y', label: 'Install' }, { key: 'n', label: 'Cancel' }]
+  if (view.confirmInstall) {
+    return [
+      { key: 'y', label: 'Install' },
+      { key: 'n', label: 'Cancel' },
+    ]
+  }
 
   const rest = installable(state.plugins, available)
   return [
-    ...(state.plugins.length + rest.length > 1 ? [{ key: '↑↓', label: 'Select plugin' }] : []),
-    ...(installer && !installer.busy && selectedPlugin(view, state.plugins, rest).available ? [{ key: 'i', label: 'Install' }] : []),
+    ...(state.plugins.length + rest.length > 1
+      ? [
+          { key: '↑↓', label: 'Select plugin' },
+        ]
+      : []),
+    ...(installer && !installer.busy && selectedPlugin(view, state.plugins, rest).available
+      ? [
+          { key: 'i', label: 'Install' },
+        ]
+      : []),
   ]
 }
 
@@ -430,8 +518,11 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
     if (snapshot?.latencySimulation)
       latencyBanner(root, theme, snapshot.latencySimulation)
 
-    if (state.error && snapshot)
-      root.text([{ text: ` ${state.error} — showing last known values`, fg: theme.danger }], { size: 1 })
+    if (state.error && snapshot) {
+      root.text([
+        { text: ` ${state.error} — showing last known values`, fg: theme.danger },
+      ], { size: 1 })
+    }
 
     if (starting) {
       startupScreen(root, theme, startup!)
@@ -491,26 +582,65 @@ export function renderDashboard(ui: Container, theme: Theme, state: DashboardSta
         { key: 'q', label: 'Quit' },
         { key: 'r', label: 'Refresh' },
         { key: `1-${tabs.length}`, label: 'Tabs' },
-        ...(openKey && snapshot ? [{ key: 'o', label: 'Open game' }] : []),
+        ...(openKey && snapshot
+          ? [
+              { key: 'o', label: 'Open game' },
+            ]
+          : []),
         ...(snapshot && DASHBOARD_TABS[view.tab] === 'Players'
-          ? [{ key: '↑↓', label: 'Select player' }, ...(view.selectedPlayerId ? [{ key: 'esc', label: 'Close' }] : [])]
+          ? [
+              { key: '↑↓', label: 'Select player' },
+              ...(view.selectedPlayerId
+                ? [
+                    { key: 'esc', label: 'Close' },
+                  ]
+                : []),
+            ]
           : []),
         ...(snapshot && showsNetwork(view)
           ? [
-              { key: 'p', label: view.showPings ? 'Hide pings' : 'Show pings' },
-              { key: 'e', label: view.eventsOnly ? 'All records' : 'Events only' },
+              {
+                key: 'p',
+                label: view.showPings ? 'Hide pings' : 'Show pings',
+              },
+              {
+                key: 'e',
+                label: view.eventsOnly ? 'All records' : 'Events only',
+              },
               { key: '↑↓', label: 'Open packet' },
-              ...(view.selectedPacketId !== null ? [{ key: 'esc', label: 'Close' }] : []),
+              ...(view.selectedPacketId !== null
+                ? [
+                    { key: 'esc', label: 'Close' },
+                  ]
+                : []),
             ]
           : []),
-        ...(snapshot && DASHBOARD_TABS[view.tab] === 'Plugins' ? pluginKeys(state, view, available, installer) : []),
+        ...(snapshot && DASHBOARD_TABS[view.tab] === 'Plugins'
+          ? pluginKeys(state, view, available, installer)
+          : []),
         ...(snapshot && showsDatabase(view) && state.database?.tables.length
-          ? [...(state.database.tables.length > 1 ? [{ key: '↑↓', label: 'Select table' }] : []), { key: '←→', label: 'Page rows' }]
+          ? [
+              ...(state.database.tables.length > 1
+                ? [
+                    { key: '↑↓', label: 'Select table' },
+                  ]
+                : []),
+              { key: '←→', label: 'Page rows' },
+            ]
           : []),
       ],
-      right: [starting
-        ? { label: 'STARTING', color: statusColor('connecting', theme) }
-        : { label: STATUS_LABELS[state.status], color: statusColor(state.status, theme), active: state.status === 'live' }],
+      right: [
+        starting
+          ? {
+              label: 'STARTING',
+              color: statusColor('connecting', theme),
+            }
+          : {
+              label: STATUS_LABELS[state.status],
+              color: statusColor(state.status, theme),
+              active: state.status === 'live',
+            },
+      ],
     })
   })
 }
@@ -524,7 +654,9 @@ function header(ui: Container, theme: Theme, state: DashboardState) {
   if (state.snapshot) {
     spans.push(
       { text: '  uptime ', fg: theme.muted },
-      { text: formatDuration(state.snapshot.uptime) },
+      {
+        text: formatDuration(state.snapshot.uptime),
+      },
       { text: '  engine ', fg: theme.muted },
       { text: state.snapshot.engineVersion },
     )
@@ -537,12 +669,14 @@ function header(ui: Container, theme: Theme, state: DashboardState) {
 }
 
 function latencyBanner(ui: Container, theme: Theme, latency: NonNullable<ServerMetricsSnapshot['latencySimulation']>) {
-  ui.text([{
-    text: ` LATENCY SIMULATION ON  ${latency.fixedLatency}ms ± ${latency.jitter / 2}ms, ${formatPercent(latency.packetLoss * 100)} packet loss `,
-    fg: theme.background,
-    bg: theme.warning,
-    bold: true,
-  }], { size: 1 })
+  ui.text([
+    {
+      text: ` LATENCY SIMULATION ON  ${latency.fixedLatency}ms ± ${latency.jitter / 2}ms, ${formatPercent(latency.packetLoss * 100)} packet loss `,
+      fg: theme.background,
+      bg: theme.warning,
+      bold: true,
+    },
+  ], { size: 1 })
 }
 
 /** Dev script output lines shown under the banner while the server starts */
@@ -555,7 +689,9 @@ const STARTUP_OUTPUT_LINES = 8
 function logoLines(pixels: string[]): Span[][] {
   const pixel = (row: string | undefined, x: number) => {
     const value = row?.slice(x * 6, x * 6 + 6)
-    return value && value !== '------' ? hex(Number.parseInt(value, 16)) : null
+    return value && value !== '------'
+      ? hex(Number.parseInt(value, 16))
+      : null
   }
 
   const lines: Span[][] = []
@@ -597,8 +733,11 @@ function startupScreen(ui: Container, theme: Theme, { engineVersion, output, lab
         column.text(line, { align: 'center', size: 1 })
       column.spacer(1)
     }
-    for (const line of banner)
-      column.text([{ text: line, fg: theme.primary }], { align: 'center', size: 1 })
+    for (const line of banner) {
+      column.text([
+        { text: line, fg: theme.primary },
+      ], { align: 'center', size: 1 })
+    }
     column.spacer(1)
     column.row({ size: 1 }, (row) => {
       row.spacer('1fr')
@@ -615,7 +754,10 @@ function startupScreen(ui: Container, theme: Theme, { engineVersion, output, lab
       return
     }
 
-    panel.log({ entries: lines.slice(-STARTUP_OUTPUT_LINES).map(message => ({ message })), size: '1fr' })
+    panel.log({
+      entries: lines.slice(-STARTUP_OUTPUT_LINES).map(message => ({ message })),
+      size: '1fr',
+    })
   })
 }
 
@@ -626,7 +768,13 @@ function waiting(ui: Container, theme: Theme, state: DashboardState) {
       return
     }
 
-    panel.text([{ text: STATUS_LABELS[state.status], fg: statusColor(state.status, theme), bold: true }])
+    panel.text([
+      {
+        text: STATUS_LABELS[state.status],
+        fg: statusColor(state.status, theme),
+        bold: true,
+      },
+    ])
     panel.text(state.error ?? '', { wrap: true })
     panel.label(`Retrying (attempt ${state.failures})…`)
   })
@@ -634,16 +782,27 @@ function waiting(ui: Container, theme: Theme, state: DashboardState) {
 
 function wideLayout(ui: Container, theme: Theme, state: DashboardState, snapshot: ServerMetricsSnapshot, view: ViewState, transparent: boolean) {
   if (snapshot.queue) {
-    ui.grid({ columns: ['1fr', '1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
+    ui.grid({
+      columns: ['1fr', '1fr', '1fr'],
+      rows: [11, 11],
+      size: 22,
+    }, (grid) => {
       grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
       grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
       grid.panel({ title: 'Tick' }, p => tickPanel(p, theme, snapshot))
-      grid.panel({ title: queueTitle(snapshot.queue!), colSpan: 2 }, p => queuePanel(p, theme, snapshot.queue!))
+      grid.panel({
+        title: queueTitle(snapshot.queue!),
+        colSpan: 2,
+      }, p => queuePanel(p, theme, snapshot.queue!))
       grid.panel({ title: 'World' }, p => worldPanel(p, theme, snapshot))
     })
   }
   else {
-    ui.grid({ columns: ['1fr', '1fr'], rows: [11, 11], size: 22 }, (grid) => {
+    ui.grid({
+      columns: ['1fr', '1fr'],
+      rows: [11, 11],
+      size: 22,
+    }, (grid) => {
       grid.panel({ title: 'CPU' }, p => cpuPanel(p, theme, snapshot))
       grid.panel({ title: 'Network' }, p => networkPanel(p, theme, snapshot))
       grid.panel({ title: 'Tick' }, p => tickPanel(p, theme, snapshot))
@@ -661,8 +820,12 @@ function narrowLayout(ui: Container, theme: Theme, state: DashboardState, snapsh
   ui.panel({ title: 'CPU', size: 9 }, p => cpuPanel(p, theme, snapshot))
   ui.panel({ title: 'Network', size: 9 }, p => networkPanel(p, theme, snapshot))
   ui.panel({ title: 'Tick', size: 9 }, p => tickPanel(p, theme, snapshot))
-  if (snapshot.queue)
-    ui.panel({ title: queueTitle(snapshot.queue), size: 9 }, p => queuePanel(p, theme, snapshot.queue!))
+  if (snapshot.queue) {
+    ui.panel({
+      title: queueTitle(snapshot.queue),
+      size: 9,
+    }, p => queuePanel(p, theme, snapshot.queue!))
+  }
   ui.panel({ title: 'World', size: 11 }, p => worldPanel(p, theme, snapshot))
   playersPanel(ui, theme, snapshot, view, transparent)
   logsPanel(ui, theme, state, view)
@@ -683,9 +846,24 @@ function cpuPanel(ui: Container, theme: Theme, { cpu }: ServerMetricsSnapshot) {
   })
 
   ui.meters([
-    { label: '1s', value: cpu.avg1s, max: 100, text: formatPercent(cpu.avg1s) },
-    { label: '10s', value: cpu.avg10s, max: 100, text: formatPercent(cpu.avg10s) },
-    { label: '1m', value: cpu.avg60s, max: 100, text: formatPercent(cpu.avg60s) },
+    {
+      label: '1s',
+      value: cpu.avg1s,
+      max: 100,
+      text: formatPercent(cpu.avg1s),
+    },
+    {
+      label: '10s',
+      value: cpu.avg10s,
+      max: 100,
+      text: formatPercent(cpu.avg10s),
+    },
+    {
+      label: '1m',
+      value: cpu.avg60s,
+      max: 100,
+      text: formatPercent(cpu.avg60s),
+    },
   ], { columns: 3 })
 }
 
@@ -693,8 +871,16 @@ function networkPanel(ui: Container, theme: Theme, { bandwidth, sampleIntervalMs
   const perSecond = 1000 / sampleIntervalMs
 
   ui.multiGraph([
-    { label: 'sent', values: bandwidth.history.map(b => b.sent * perSecond), color: theme.graph[0] },
-    { label: 'received', values: bandwidth.history.map(b => b.received * perSecond), color: theme.graph[1] },
+    {
+      label: 'sent',
+      values: bandwidth.history.map(b => b.sent * perSecond),
+      color: theme.graph[0],
+    },
+    {
+      label: 'received',
+      values: bandwidth.history.map(b => b.received * perSecond),
+      color: theme.graph[1],
+    },
   ], {
     min: 0,
     axis: true,
@@ -705,8 +891,16 @@ function networkPanel(ui: Container, theme: Theme, { bandwidth, sampleIntervalMs
   })
 
   ui.keyValues([
-    { label: 'Sent', value: formatRate(bandwidth.sentPerSecond), color: theme.graph[0] },
-    { label: 'Received', value: formatRate(bandwidth.receivedPerSecond), color: theme.graph[1] },
+    {
+      label: 'Sent',
+      value: formatRate(bandwidth.sentPerSecond),
+      color: theme.graph[0],
+    },
+    {
+      label: 'Received',
+      value: formatRate(bandwidth.receivedPerSecond),
+      color: theme.graph[1],
+    },
   ], { spread: true })
 }
 
@@ -736,7 +930,13 @@ function tickPanel(ui: Container, theme: Theme, { tick, tickRate }: ServerMetric
   })
 
   ui.keyValues([
-    { label: 'Ticks/s', value: `${latest?.ticksPerSecond ?? 0} / ${tickRate}`, color: (latest?.ticksPerSecond ?? 0) < tickRate * 0.9 ? theme.danger : undefined },
+    {
+      label: 'Ticks/s',
+      value: `${latest?.ticksPerSecond ?? 0} / ${tickRate}`,
+      color: (latest?.ticksPerSecond ?? 0) < tickRate * 0.9
+        ? theme.danger
+        : undefined,
+    },
     { label: 'Commands/s', value: `${latest?.commandsPerSecond ?? 0} (max ${latest?.maxCommandsPerTick ?? 0}/tick)` },
   ], { spread: true })
 }
@@ -756,13 +956,29 @@ export function queueTotals(queue: QueueMetrics): { processed: number, failed: n
 function queuePanel(ui: Container, theme: Theme, queue: QueueMetrics) {
   const latest = queue.latest
   const totals = queueTotals(queue)
-  const seconds = Math.round(queue.history.length > 1 ? (queue.history.at(-1)!.timestamp - queue.history[0].timestamp) / 1000 : 0)
-  const window = seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`
+  const seconds = Math.round(queue.history.length > 1
+    ? (queue.history.at(-1)!.timestamp - queue.history[0].timestamp) / 1000
+    : 0)
+  const window = seconds >= 60
+    ? `${Math.round(seconds / 60)}m`
+    : `${seconds}s`
 
   ui.multiGraph([
-    { label: 'queued', values: queue.history.map(s => s.size), color: theme.graph[0] },
-    { label: 'processed', values: queue.history.map(s => s.processed), color: theme.graph[1] },
-    { label: 'failed', values: queue.history.map(s => s.failed), color: theme.danger },
+    {
+      label: 'queued',
+      values: queue.history.map(s => s.size),
+      color: theme.graph[0],
+    },
+    {
+      label: 'processed',
+      values: queue.history.map(s => s.processed),
+      color: theme.graph[1],
+    },
+    {
+      label: 'failed',
+      values: queue.history.map(s => s.failed),
+      color: theme.danger,
+    },
   ], {
     min: 0,
     max: Math.max(4, ...queue.history.map(s => Math.max(s.size, s.processed, s.failed))),
@@ -774,22 +990,64 @@ function queuePanel(ui: Container, theme: Theme, queue: QueueMetrics) {
   })
 
   ui.keyValues([
-    { label: 'Queued', value: String(latest?.size ?? 0), color: theme.graph[0] },
-    { label: 'Running', value: String(latest?.running ?? 0) },
-    { label: `Processed ${window}`, value: String(totals.processed), color: theme.graph[1] },
-    { label: `Retried ${window}`, value: String(totals.retried), color: totals.retried ? theme.warning : undefined },
-    { label: `Failed ${window}`, value: String(totals.failed), color: totals.failed ? theme.danger : undefined },
+    {
+      label: 'Queued',
+      value: String(latest?.size ?? 0),
+      color: theme.graph[0],
+    },
+    {
+      label: 'Running',
+      value: String(latest?.running ?? 0),
+    },
+    {
+      label: `Processed ${window}`,
+      value: String(totals.processed),
+      color: theme.graph[1],
+    },
+    {
+      label: `Retried ${window}`,
+      value: String(totals.retried),
+      color: totals.retried ? theme.warning : undefined,
+    },
+    {
+      label: `Failed ${window}`,
+      value: String(totals.failed),
+      color: totals.failed ? theme.danger : undefined,
+    },
   ], { spread: true })
 }
 
 function worldPanel(ui: Container, theme: Theme, { players, world, physics, memory }: ServerMetricsSnapshot) {
   ui.keyValues([
-    { label: 'Players', value: String(players.length), color: theme.primary },
-    { label: 'Entities', value: String(world.entities) },
-    { label: 'Physics bodies', value: physics ? String(physics.bodies) : '—' },
-    { label: 'Colliders', value: physics ? String(physics.colliders) : '—' },
-    { label: 'RSS', value: formatBytes(memory.rss) },
-    { label: 'External', value: formatBytes(memory.external) },
+    {
+      label: 'Players',
+      value: String(players.length),
+      color: theme.primary,
+    },
+    {
+      label: 'Entities',
+      value: String(world.entities),
+    },
+    {
+      label: 'Physics bodies',
+      value: physics
+        ? String(physics.bodies)
+        : '—',
+    },
+    {
+      label: 'Colliders',
+      value: physics
+        ? String(physics.colliders)
+        : '—',
+    },
+    {
+      label: 'RSS',
+      value: formatBytes(memory.rss),
+    },
+    {
+      label: 'External',
+      value: formatBytes(memory.external),
+    },
   ], { spread: true })
 
   ui.spacer('1fr')
@@ -829,15 +1087,54 @@ function playerDetails(ui: Container, theme: Theme, player: PlayerRow, size: num
   ui.panel({ title: player.displayName, size }, (panel) => {
     panel.keyValues([
       { label: 'ID', value: player.id },
-      { label: 'Account', value: player.account ? `${accountLabel(player.account)} · ${player.account.id}` : 'none', color: player.account?.guest ? theme.warning : undefined },
-      { label: 'Connected', value: formatDuration(player.connectedFor) },
-      { label: 'IP', value: connection ? connection.address ?? 'pending' : '—', color: theme.primary },
-      { label: 'RTT', value: connection?.rttMs != null ? formatMs(connection.rttMs) : '—' },
-      { label: 'Sent', value: connection ? formatBytes(connection.bytesSent) : '—' },
-      { label: 'Received', value: connection ? formatBytes(connection.bytesReceived) : '—' },
-      { label: 'Position', value: [position.x, position.y, position.z].map(n => n.toFixed(2)).join(', ') },
-      { label: 'Last seq', value: String(player.lastProcessedSequenceId) },
-      { label: 'Tracked', value: String(player.trackedEntities) },
+      {
+        label: 'Account',
+        value: player.account
+          ? `${accountLabel(player.account)} · ${player.account.id}`
+          : 'none',
+        color: player.account?.guest ? theme.warning : undefined,
+      },
+      {
+        label: 'Connected',
+        value: formatDuration(player.connectedFor),
+      },
+      {
+        label: 'IP',
+        value: connection
+          ? connection.address ?? 'pending'
+          : '—',
+        color: theme.primary,
+      },
+      {
+        label: 'RTT',
+        value: connection?.rttMs != null
+          ? formatMs(connection.rttMs)
+          : '—',
+      },
+      {
+        label: 'Sent',
+        value: connection
+          ? formatBytes(connection.bytesSent)
+          : '—',
+      },
+      {
+        label: 'Received',
+        value: connection
+          ? formatBytes(connection.bytesReceived)
+          : '—',
+      },
+      {
+        label: 'Position',
+        value: [position.x, position.y, position.z].map(n => n.toFixed(2)).join(', '),
+      },
+      {
+        label: 'Last seq',
+        value: String(player.lastProcessedSequenceId),
+      },
+      {
+        label: 'Tracked',
+        value: String(player.trackedEntities),
+      },
     ], { spread: true })
 
     if (!connection)
@@ -863,7 +1160,9 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
     panel.table<PlayerRow>({
       rows,
       offset: view.playerOffset,
-      selected: selectable ? rows.findIndex(p => p.id === view.selectedPlayerId) : -1,
+      selected: selectable
+        ? rows.findIndex(p => p.id === view.selectedPlayerId)
+        : -1,
       followSelection: selectable && view.followSelectedPlayer,
       // Following the selection can move the window, so keep our offset in step with what is drawn
       onRow: (_row, index, y) => {
@@ -875,7 +1174,9 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
             const row = rows[view.playerOffset + visibleRow]
             if (!row)
               return
-            view.selectedPlayerId = row.id === view.selectedPlayerId ? null : row.id
+            view.selectedPlayerId = row.id === view.selectedPlayerId
+              ? null
+              : row.id
             ui.ctx.invalidate()
           }
         : undefined,
@@ -889,14 +1190,55 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
         ui.ctx.invalidate()
       },
       columns: [
-        ...(showNames ? [{ key: 'displayName', title: 'Name' }] : []),
-        ...(showAccounts ? [{ key: 'account', title: 'Account', render: (p: PlayerRow) => accountLabel(p.account), color: (p: PlayerRow) => p.account?.guest ? theme.warning : undefined }] : []),
+        ...(showNames
+          ? [
+              { key: 'displayName', title: 'Name' },
+            ]
+          : []),
+        ...(showAccounts
+          ? [
+              {
+                key: 'account',
+                title: 'Account',
+                render: (p: PlayerRow) => accountLabel(p.account),
+                color: (p: PlayerRow) => p.account?.guest ? theme.warning : undefined,
+              },
+            ]
+          : []),
         { key: 'id', title: 'ID' },
-        { key: 'x', title: 'X', width: 9, align: 'right', render: p => p.position.x.toFixed(2) },
-        { key: 'y', title: 'Y', width: 9, align: 'right', render: p => p.position.y.toFixed(2) },
-        { key: 'z', title: 'Z', width: 9, align: 'right', render: p => p.position.z.toFixed(2) },
-        { key: 'lastProcessedSequenceId', title: 'Seq', width: 10, align: 'right' },
-        { key: 'trackedEntities', title: 'Tracked', width: 8, align: 'right' },
+        {
+          key: 'x',
+          title: 'X',
+          width: 9,
+          align: 'right',
+          render: p => p.position.x.toFixed(2),
+        },
+        {
+          key: 'y',
+          title: 'Y',
+          width: 9,
+          align: 'right',
+          render: p => p.position.y.toFixed(2),
+        },
+        {
+          key: 'z',
+          title: 'Z',
+          width: 9,
+          align: 'right',
+          render: p => p.position.z.toFixed(2),
+        },
+        {
+          key: 'lastProcessedSequenceId',
+          title: 'Seq',
+          width: 10,
+          align: 'right',
+        },
+        {
+          key: 'trackedEntities',
+          title: 'Tracked',
+          width: 8,
+          align: 'right',
+        },
       ],
     })
   })
@@ -904,7 +1246,11 @@ function playersPanel(ui: Container, theme: Theme, { players }: ServerMetricsSna
 
 function formatTime(timestamp: number) {
   const date = new Date(timestamp)
-  return [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => n.toString().padStart(2, '0')).join(':')
+  return [
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+  ].map(n => n.toString().padStart(2, '0')).join(':')
 }
 
 /**
@@ -920,7 +1266,11 @@ export function toLogRows(lines: LogLine[]) {
       parts.pop()
 
     return parts.map((part, i) => i === 0
-      ? { time: formatTime(timestamp), level, message: part }
+      ? {
+          time: formatTime(timestamp),
+          level,
+          message: part,
+        }
       : { message: `${' '.repeat(15)}${part}` })
   })
 }
@@ -929,7 +1279,9 @@ function logsPanel(ui: Container, theme: Theme, state: DashboardState, view: Vie
   const rows = toLogRows(state.logs)
   view.logFromEnd = Math.min(view.logFromEnd, Math.max(0, rows.length - 1))
 
-  const title = view.logFromEnd > 0 ? `Logs (scrolled back ${view.logFromEnd}, scroll down to follow)` : 'Logs'
+  const title = view.logFromEnd > 0
+    ? `Logs (scrolled back ${view.logFromEnd}, scroll down to follow)`
+    : 'Logs'
 
   ui.panel({ title, size: '1fr' }, (panel) => {
     if (state.logsAvailable === false) {
@@ -974,11 +1326,19 @@ function requestsPanel(ui: Container, theme: Theme, state: DashboardState, view:
   // Newest first, so new requests appear at the top without scrolling
   const rows = [...state.requests].reverse()
   // Anchored to a request rather than a row number, so arriving requests don't move a scrolled table
-  const anchor = view.requestTopId === null ? 0 : rows.findIndex(r => r.id <= view.requestTopId!)
+  const anchor = view.requestTopId === null
+    ? 0
+    : rows.findIndex(r => r.id <= view.requestTopId!)
   const offset = Math.max(0, anchor)
   const errors = rows.filter(r => r.status === null || r.status >= 400).length
 
-  const title = `HTTP requests (${rows.length}${errors ? `, ${errors} error${errors === 1 ? '' : 's'}` : ''})${offset > 0 ? ', scroll up to follow' : ''}`
+  const title = `HTTP requests (${rows.length}${errors
+    ? `, ${errors} error${errors === 1
+      ? ''
+      : 's'}`
+    : ''})${offset > 0
+    ? ', scroll up to follow'
+    : ''}`
 
   ui.panel({ title, size: '1fr' }, (panel) => {
     if (state.requestsAvailable === false) {
@@ -1000,21 +1360,66 @@ function requestsPanel(ui: Container, theme: Theme, state: DashboardState, view:
       size: '1fr',
       // The table won't scroll past the last full page, so keep the anchor on the row it actually drew
       onRow: (_row, index, y) => {
-        if (y === 1)
-          view.requestTopId = index === 0 ? null : rows[index].id
+        if (y === 1) {
+          view.requestTopId = index === 0
+            ? null
+            : rows[index].id
+        }
       },
       onScroll: (delta) => {
         const next = Math.max(0, Math.min(rows.length - 1, offset + delta))
-        view.requestTopId = next === 0 ? null : rows[next].id
+        view.requestTopId = next === 0
+          ? null
+          : rows[next].id
         ui.ctx.invalidate()
       },
       columns: [
-        { key: 'time', title: 'Time', width: 8, color: theme.muted, render: r => formatTime(r.timestamp) },
-        { key: 'method', title: 'Method', width: 7, color: r => r.method === 'WS' ? theme.primary : undefined },
-        { key: 'status', title: 'Status', width: 6, align: 'right', color: r => statusCodeColor(r.status, theme), render: r => r.status === null ? '—' : String(r.status) },
-        { key: 'durationMs', title: 'Duration', width: 10, align: 'right', render: r => formatMs(r.durationMs) },
-        { key: 'bytes', title: 'Size', width: 10, align: 'right', render: r => formatBytes(r.bytes) },
-        { key: 'address', title: 'Client', width: 18, color: theme.muted, render: r => r.address ?? '—' },
+        {
+          key: 'time',
+          title: 'Time',
+          width: 8,
+          color: theme.muted,
+          render: r => formatTime(r.timestamp),
+        },
+        {
+          key: 'method',
+          title: 'Method',
+          width: 7,
+          color: r => r.method === 'WS'
+            ? theme.primary
+            : undefined,
+        },
+        {
+          key: 'status',
+          title: 'Status',
+          width: 6,
+          align: 'right',
+          color: r => statusCodeColor(r.status, theme),
+          render: r => r.status === null
+            ? '—'
+            : String(r.status),
+        },
+        {
+          key: 'durationMs',
+          title: 'Duration',
+          width: 10,
+          align: 'right',
+          render: r => formatMs(r.durationMs),
+        },
+        {
+          key: 'bytes',
+          title: 'Size',
+          width: 10,
+          align: 'right',
+          render: r => formatBytes(r.bytes),
+        },
+        {
+          key: 'address',
+          title: 'Client',
+          width: 18,
+          color: theme.muted,
+          render: r => r.address ?? '—',
+        },
         { key: 'path', title: 'Path' },
       ],
     })
@@ -1074,18 +1479,37 @@ function packetDetails(ui: Container, theme: Theme, state: DashboardState, view:
   const id = view.selectedPacketId!
   const packet = state.packets.find(p => p.id === id)
   // The details are loaded after the selection changed, so they can still be the previous packet's
-  const detail: PacketDetail | null = state.packetDetail?.id === id ? state.packetDetail : null
+  const detail: PacketDetail | null = state.packetDetail?.id === id
+    ? state.packetDetail
+    : null
 
-  const name = packet ? `${packet.type}${packet.direction ? ` ${packet.direction}` : ''}` : `#${id}`
-  const title = packet?.kind === 'packet' ? `${name} · ${formatBytes(packet.bytes)}` : name
+  const name = packet
+    ? `${packet.type}${packet.direction
+      ? ` ${packet.direction}`
+      : ''}`
+    : `#${id}`
+  const title = packet?.kind === 'packet'
+    ? `${name} · ${formatBytes(packet.bytes)}`
+    : name
 
   ui.panel({ title, size }, (panel) => {
     if (packet) {
       const facts = describePacket({ ...packet, info: {} })
       panel.text([
-        { text: formatTimeMs(packet.timestamp), fg: theme.muted },
-        ...(packet.peer ? [{ text: `  ${packet.peer}` }] : []),
-        ...(facts ? [{ text: `  ${facts}`, fg: theme.muted }] : []),
+        {
+          text: formatTimeMs(packet.timestamp),
+          fg: theme.muted,
+        },
+        ...(packet.peer
+          ? [
+              { text: `  ${packet.peer}` },
+            ]
+          : []),
+        ...(facts
+          ? [
+              { text: `  ${facts}`, fg: theme.muted },
+            ]
+          : []),
       ], { size: 1 })
     }
 
@@ -1094,7 +1518,9 @@ function packetDetails(ui: Container, theme: Theme, state: DashboardState, view:
       return
     }
     if (detail.status === 'error') {
-      panel.text([{ text: detail.error ?? 'Could not load it', fg: theme.danger }], { wrap: true })
+      panel.text([
+        { text: detail.error ?? 'Could not load it', fg: theme.danger },
+      ], { wrap: true })
       return
     }
     if (detail.status === 'gone') {
@@ -1124,7 +1550,12 @@ function packetDetails(ui: Container, theme: Theme, state: DashboardState, view:
 }
 
 function syncPanel(ui: Container, theme: Theme, { sync }: DashboardState, transparent: boolean, size: number | string = '1fr') {
-  ui.panel({ title: sync ? `State sync (tick ${sync.tick})` : 'State sync', size }, (panel) => {
+  ui.panel({
+    title: sync
+      ? `State sync (tick ${sync.tick})`
+      : 'State sync',
+    size,
+  }, (panel) => {
     if (!sync) {
       panel.label('Waiting for the server…')
       return
@@ -1132,11 +1563,30 @@ function syncPanel(ui: Container, theme: Theme, { sync }: DashboardState, transp
 
     panel.text([
       { text: `${sync.entities}`, bold: true },
-      { text: sync.entities === 1 ? ' synced entity' : ' synced entities', fg: theme.muted },
-      ...(sync.untracked > 0 ? [{ text: `, ${sync.untracked} out of every player's range`, fg: theme.warning }] : []),
+      {
+        text: sync.entities === 1
+          ? ' synced entity'
+          : ' synced entities',
+        fg: theme.muted,
+      },
+      ...(sync.untracked > 0
+        ? [
+            { text: `, ${sync.untracked} out of every player's range`, fg: theme.warning },
+          ]
+        : []),
       { text: '  distance ', fg: theme.muted },
-      { text: sync.syncDistance === null ? 'unknown' : String(sync.syncDistance) },
-      ...(sync.editors > 0 ? [{ text: `  ${sync.editors} editor${sync.editors === 1 ? '' : 's'}`, fg: theme.info }] : []),
+      {
+        text: sync.syncDistance === null
+          ? 'unknown'
+          : String(sync.syncDistance),
+      },
+      ...(sync.editors > 0
+        ? [
+            { text: `  ${sync.editors} editor${sync.editors === 1
+              ? ''
+              : 's'}`, fg: theme.info },
+          ]
+        : []),
     ], { size: 1 })
 
     if (sync.players.length === 0) {
@@ -1154,17 +1604,47 @@ function syncPanel(ui: Container, theme: Theme, { sync }: DashboardState, transp
       size: '1fr',
       columns: [
         { key: 'displayName', title: 'Player' },
-        ...(sync.players.some(p => p.account) ? [{ key: 'account', title: 'Account', render: (p: SyncPlayerLine) => accountLabel(p.account) }] : []),
-        { key: 'tracked', title: 'Tracked', width: 8, align: 'right' },
-        { key: 'ack', title: 'Ack', width: 9, align: 'right' },
-        { key: 'bytes', title: 'State', width: 10, align: 'right', render: p => p.lastState ? formatBytes(p.lastState.bytes) : '—' },
+        ...(sync.players.some(p => p.account)
+          ? [
+              {
+                key: 'account',
+                title: 'Account',
+                render: (p: SyncPlayerLine) => accountLabel(p.account),
+              },
+            ]
+          : []),
+        {
+          key: 'tracked',
+          title: 'Tracked',
+          width: 8,
+          align: 'right',
+        },
+        {
+          key: 'ack',
+          title: 'Ack',
+          width: 9,
+          align: 'right',
+        },
+        {
+          key: 'bytes',
+          title: 'State',
+          width: 10,
+          align: 'right',
+          render: p => p.lastState
+            ? formatBytes(p.lastState.bytes)
+            : '—',
+        },
         {
           key: 'tick',
           title: 'Tick',
           width: 9,
           align: 'right',
-          color: p => !p.lastState || newest - p.lastState.tick > sync.tickRate ? theme.danger : undefined,
-          render: p => p.lastState ? String(p.lastState.tick) : 'none',
+          color: p => !p.lastState || newest - p.lastState.tick > sync.tickRate
+            ? theme.danger
+            : undefined,
+          render: p => p.lastState
+            ? String(p.lastState.tick)
+            : 'none',
         },
       ],
     })
@@ -1176,7 +1656,9 @@ function messagesPanel(ui: Container, theme: Theme, state: DashboardState, trans
 
   ui.panel({ title: `By message (last ${MESSAGE_STATS_WINDOW_MS / 1000} s)`, size }, (panel) => {
     if (stats.length === 0) {
-      panel.label(state.packetsAvailable === null ? 'Waiting for the server…' : 'No packets yet')
+      panel.label(state.packetsAvailable === null
+        ? 'Waiting for the server…'
+        : 'No packets yet')
       return
     }
 
@@ -1186,11 +1668,39 @@ function messagesPanel(ui: Container, theme: Theme, state: DashboardState, trans
       zebra: !transparent,
       size: '1fr',
       columns: [
-        { key: 'direction', title: '', width: 3, color: s => s.direction === 'out' ? theme.graph[0] : theme.graph[1], render: s => s.direction === 'out' ? 'out' : 'in' },
+        {
+          key: 'direction',
+          title: '',
+          width: 3,
+          color: s => s.direction === 'out'
+            ? theme.graph[0]
+            : theme.graph[1],
+          render: s => s.direction === 'out'
+            ? 'out'
+            : 'in',
+        },
         { key: 'type', title: 'Message' },
-        { key: 'rate', title: 'Per s', width: 8, align: 'right', render: s => s.rate.toFixed(1) },
-        { key: 'avgBytes', title: 'Avg size', width: 10, align: 'right', render: s => formatBytes(Math.round(s.avgBytes)) },
-        { key: 'bytesPerSecond', title: 'Rate', width: 12, align: 'right', render: s => formatRate(Math.round(s.bytesPerSecond)) },
+        {
+          key: 'rate',
+          title: 'Per s',
+          width: 8,
+          align: 'right',
+          render: s => s.rate.toFixed(1),
+        },
+        {
+          key: 'avgBytes',
+          title: 'Avg size',
+          width: 10,
+          align: 'right',
+          render: s => formatBytes(Math.round(s.avgBytes)),
+        },
+        {
+          key: 'bytesPerSecond',
+          title: 'Rate',
+          width: 12,
+          align: 'right',
+          render: s => formatRate(Math.round(s.bytesPerSecond)),
+        },
       ],
     })
   })
@@ -1210,15 +1720,23 @@ export function visiblePackets(packets: PacketLine[], view: Pick<ViewState, 'sho
 function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, transparent: boolean) {
   // Newest first, like the HTTP requests
   const rows = visiblePackets(state.packets, view).reverse()
-  const anchor = view.packetTopId === null ? 0 : rows.findIndex(r => r.id <= view.packetTopId!)
+  const anchor = view.packetTopId === null
+    ? 0
+    : rows.findIndex(r => r.id <= view.packetTopId!)
   const offset = Math.max(0, anchor)
 
   const what = view.eventsOnly ? 'Events' : 'Packets and events'
-  const title = `${what} (${rows.length}${view.showPings || view.eventsOnly ? '' : ', pings hidden'})${offset > 0 ? ', scroll up to follow' : ''}`
+  const title = `${what} (${rows.length}${view.showPings || view.eventsOnly
+    ? ''
+    : ', pings hidden'})${offset > 0
+    ? ', scroll up to follow'
+    : ''}`
 
   ui.panel({ title, size: '1fr' }, (panel) => {
     if (rows.length === 0) {
-      panel.label(state.packetsAvailable === null ? 'Waiting for the server…' : view.eventsOnly ? 'No events yet' : 'No packets yet')
+      panel.label(state.packetsAvailable === null
+        ? 'Waiting for the server…'
+        : view.eventsOnly ? 'No events yet' : 'No packets yet')
       return
     }
 
@@ -1226,7 +1744,11 @@ function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: 
     let top = offset
     // A narrow terminal, or the details panel next to the table, keeps the details and cuts the client id short
     const narrow = panel.width < WIDE_LAYOUT
-    const directionColor = (p: PacketLine) => p.kind === 'event' ? theme.warning : p.direction === 'out' ? theme.graph[0] : theme.graph[1]
+    const directionColor = (p: PacketLine) => p.kind === 'event'
+      ? theme.warning
+      : p.direction === 'out'
+        ? theme.graph[0]
+        : theme.graph[1]
 
     panel.table<PacketLine>({
       rows,
@@ -1240,7 +1762,9 @@ function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: 
       onRow: (_row, index, y) => {
         if (y === 1) {
           top = index
-          view.packetTopId = index === 0 ? null : rows[index].id
+          view.packetTopId = index === 0
+            ? null
+            : rows[index].id
         }
       },
       // A click opens the packet, a second one on it closes it again
@@ -1248,21 +1772,62 @@ function packetsPanel(ui: Container, theme: Theme, state: DashboardState, view: 
         const row = rows[top + visibleRow]
         if (!row)
           return
-        selectPacket(view, row.id === view.selectedPacketId ? null : row.id)
+        selectPacket(view, row.id === view.selectedPacketId
+          ? null
+          : row.id)
         ui.ctx.invalidate()
       },
       onScroll: (delta) => {
         const next = Math.max(0, Math.min(rows.length - 1, top + delta))
-        view.packetTopId = next === 0 ? null : rows[next].id
+        view.packetTopId = next === 0
+          ? null
+          : rows[next].id
         view.followSelectedPacket = false
         ui.ctx.invalidate()
       },
       columns: [
-        { key: 'time', title: 'Time', width: 12, color: theme.muted, render: p => formatTimeMs(p.timestamp) },
-        { key: 'direction', title: '', width: 3, color: directionColor, render: p => p.kind === 'event' ? '•' : p.direction === 'out' ? 'out' : 'in' },
-        { key: 'type', title: 'Message', width: narrow ? 12 : 18, color: p => p.kind === 'event' ? theme.warning : undefined },
-        { key: 'peer', title: 'Client', width: narrow ? 8 : 26, color: theme.muted, render: p => p.peer ?? '—' },
-        { key: 'bytes', title: 'Size', width: narrow ? 9 : 10, align: 'right', render: p => p.kind === 'packet' ? formatBytes(p.bytes) : '' },
+        {
+          key: 'time',
+          title: 'Time',
+          width: 12,
+          color: theme.muted,
+          render: p => formatTimeMs(p.timestamp),
+        },
+        {
+          key: 'direction',
+          title: '',
+          width: 3,
+          color: directionColor,
+          render: p => p.kind === 'event'
+            ? '•'
+            : p.direction === 'out'
+              ? 'out'
+              : 'in',
+        },
+        {
+          key: 'type',
+          title: 'Message',
+          width: narrow ? 12 : 18,
+          color: p => p.kind === 'event'
+            ? theme.warning
+            : undefined,
+        },
+        {
+          key: 'peer',
+          title: 'Client',
+          width: narrow ? 8 : 26,
+          color: theme.muted,
+          render: p => p.peer ?? '—',
+        },
+        {
+          key: 'bytes',
+          title: 'Size',
+          width: narrow ? 9 : 10,
+          align: 'right',
+          render: p => p.kind === 'packet'
+            ? formatBytes(p.bytes)
+            : '',
+        },
         { key: 'info', title: 'Details', render: describePacket },
       ],
     })
@@ -1281,7 +1846,9 @@ function methodColor(method: string, theme: Theme): Color | undefined {
 
 /** Who registered a route: the engine, the game's own server, or the plugin's package */
 export function routeSource(route: RouteLine): string {
-  return route.source === 'plugin' ? route.plugin ?? 'plugin' : route.source
+  return route.source === 'plugin'
+    ? route.plugin ?? 'plugin'
+    : route.source
 }
 
 /** Whether a route only exists in development or is served in production too */
@@ -1301,7 +1868,9 @@ function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: V
   const counts = [
     `${rows.filter(r => r.source === 'engine').length} engine`,
     `${rows.filter(r => r.source === 'game').length} game`,
-    `${fromPlugins.length} from ${plugins} plugin${plugins === 1 ? '' : 's'}`,
+    `${fromPlugins.length} from ${plugins} plugin${plugins === 1
+      ? ''
+      : 's'}`,
     `${devOnly} dev only`,
   ]
 
@@ -1312,7 +1881,9 @@ function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: V
     }
 
     if (rows.length === 0) {
-      panel.label(state.routesAvailable === null ? 'Asking the server for its endpoints…' : 'The server has no endpoints')
+      panel.label(state.routesAvailable === null
+        ? 'Asking the server for its endpoints…'
+        : 'The server has no endpoints')
       return
     }
 
@@ -1333,11 +1904,37 @@ function routesPanel(ui: Container, theme: Theme, state: DashboardState, view: V
         ui.ctx.invalidate()
       },
       columns: [
-        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        {
+          key: 'method',
+          title: 'Method',
+          width: 7,
+          color: r => methodColor(r.method, theme),
+        },
         { key: 'path', title: 'Path' },
-        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
-        { key: 'source', title: 'From', width: 30, color: r => r.source === 'engine' ? theme.muted : r.source === 'plugin' ? theme.primary : undefined, render: routeSource },
-        { key: 'summary', title: 'What it does', color: theme.muted, render: r => r.summary ?? '' },
+        {
+          key: 'devOnly',
+          title: 'Served in',
+          width: 10,
+          color: r => r.devOnly ? theme.warning : theme.success,
+          render: routeEnvironment,
+        },
+        {
+          key: 'source',
+          title: 'From',
+          width: 30,
+          color: r => r.source === 'engine'
+            ? theme.muted
+            : r.source === 'plugin'
+              ? theme.primary
+              : undefined,
+          render: routeSource,
+        },
+        {
+          key: 'summary',
+          title: 'What it does',
+          color: theme.muted,
+          render: r => r.summary ?? '',
+        },
       ],
     })
   })
@@ -1372,11 +1969,18 @@ function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: Vi
     view.confirmInstall = null
 
   if (state.pluginsAvailable === false || plugins.length === 0) {
-    ui.panel({ title: 'Plugins', size: available ? 3 : '1fr' }, (panel) => {
-      if (state.pluginsAvailable === false)
+    ui.panel({
+      title: 'Plugins',
+      size: available ? 3 : '1fr',
+    }, (panel) => {
+      if (state.pluginsAvailable === false) {
         panel.label('Not available: the server runs a @mavonengine/core release without GET /api/game/plugins')
-      else
-        panel.label(state.pluginsAvailable === null ? 'Asking the server for its plugins…' : 'The project has no plugins. Add one with: mavonengine install <package>')
+      }
+      else {
+        panel.label(state.pluginsAvailable === null
+          ? 'Asking the server for its plugins…'
+          : 'The project has no plugins. Add one with: mavonengine install <package>')
+      }
     })
   }
   else {
@@ -1386,7 +1990,9 @@ function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: Vi
     ui.panel({ title: `Plugins (${plugins.length})`, size: Math.min(plugins.length, 8) + 3 }, (panel) => {
       panel.table<PluginLine>({
         rows: plugins,
-        selected: shown.installed ? plugins.indexOf(shown.installed) : -1,
+        selected: shown.installed
+          ? plugins.indexOf(shown.installed)
+          : -1,
         followSelection: true,
         // With more plugins than rows the table scrolls to the selection, so a click counts from the row drawn first
         onRow: (_row, index, y) => {
@@ -1406,11 +2012,44 @@ function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: Vi
         size: '1fr',
         columns: [
           { key: 'package', title: 'Package' },
-          { key: 'version', title: 'Version', width: 8, render: p => p.version ?? '—' },
-          { key: 'status', title: 'Status', width: 10, color: p => pluginStatus(p, theme).color, render: p => pluginStatus(p, theme).label },
-          { key: 'target', title: 'Runs on', width: 7, render: p => p.target ?? '—' },
-          { key: 'endpoints', title: 'Routes', width: 6, align: 'right', render: p => state.routesAvailable ? String(endpoints(p).length) : '—' },
-          { key: 'prefabs', title: 'Prefabs', width: 7, align: 'right', render: p => String(new Set([...p.declaredPrefabs, ...p.usedPrefabs]).size) },
+          {
+            key: 'version',
+            title: 'Version',
+            width: 8,
+            render: p => p.version ?? '—',
+          },
+          {
+            key: 'status',
+            title: 'Status',
+            width: 10,
+            color: p => pluginStatus(p, theme).color,
+            render: p => pluginStatus(p, theme).label,
+          },
+          {
+            key: 'target',
+            title: 'Runs on',
+            width: 7,
+            render: p => p.target ?? '—',
+          },
+          {
+            key: 'endpoints',
+            title: 'Routes',
+            width: 6,
+            align: 'right',
+            render: p => state.routesAvailable
+              ? String(endpoints(p).length)
+              : '—',
+          },
+          {
+            key: 'prefabs',
+            title: 'Prefabs',
+            width: 7,
+            align: 'right',
+            render: p => String(new Set([
+              ...p.declaredPrefabs,
+              ...p.usedPrefabs,
+            ]).size),
+          },
         ],
       })
     })
@@ -1426,8 +2065,11 @@ function pluginsTab(ui: Container, theme: Theme, state: DashboardState, view: Vi
   else if (shown.available)
     availableDetails(ui, theme, shown.available, installer)
 
-  if (available)
-    availablePanel(ui, theme, available, rest, shown.available, view, shown.installed || confirm || shown.available ? Math.min(Math.max(1, rest.length), 6) + 3 : '1fr', transparent)
+  if (available) {
+    availablePanel(ui, theme, available, rest, shown.available, view, shown.installed || confirm || shown.available
+      ? Math.min(Math.max(1, rest.length), 6) + 3
+      : '1fr', transparent)
+  }
 }
 
 /** Lines of an install's output kept on screen */
@@ -1442,17 +2084,36 @@ const INSTALL_STATUS: Record<InstallJob['status'], string> = {
 
 function installPanel(ui: Container, theme: Theme, job: InstallJob) {
   const lines = stripVTControlCharacters(job.output).split(NEWLINE_RE).filter(line => line.trim() !== '')
-  const color = job.status === 'failed' ? theme.danger : job.status === 'done' ? theme.success : theme.warning
+  const color = job.status === 'failed'
+    ? theme.danger
+    : job.status === 'done'
+      ? theme.success
+      : theme.warning
 
   ui.panel({ title: `${INSTALL_STATUS[job.status]} ${job.packages.join(', ')}`, size: INSTALL_OUTPUT_LINES + 3 }, (panel) => {
-    if (job.status === 'failed')
-      panel.text([{ text: job.error ?? 'The install failed', fg: color }], { size: 1 })
-    else if (job.status === 'done')
-      panel.text([{ text: 'The dev servers were restarted with it', fg: color }], { size: 1 })
-    else
-      panel.spinner({ label: job.status === 'restarting' ? 'Stopping and starting the dev script' : 'Running the package manager', size: 1 })
+    if (job.status === 'failed') {
+      panel.text([
+        { text: job.error ?? 'The install failed', fg: color },
+      ], { size: 1 })
+    }
+    else if (job.status === 'done') {
+      panel.text([
+        { text: 'The dev servers were restarted with it', fg: color },
+      ], { size: 1 })
+    }
+    else {
+      panel.spinner({
+        label: job.status === 'restarting'
+          ? 'Stopping and starting the dev script'
+          : 'Running the package manager',
+        size: 1,
+      })
+    }
 
-    panel.log({ entries: lines.slice(-INSTALL_OUTPUT_LINES).map(message => ({ message })), size: '1fr' })
+    panel.log({
+      entries: lines.slice(-INSTALL_OUTPUT_LINES).map(message => ({ message })),
+      size: '1fr',
+    })
   })
 }
 
@@ -1462,43 +2123,77 @@ function installPanel(ui: Container, theme: Theme, job: InstallJob) {
  */
 function confirmInstallPanel(ui: Container, theme: Theme, plugin: AvailablePlugin) {
   ui.panel({ title: `Install ${plugin.package}?`, size: '1fr' }, (panel) => {
-    panel.text([{ text: 'Installing a package runs its code on this machine.', fg: theme.warning, bold: true }], { wrap: true })
+    panel.text([
+      { text: 'Installing a package runs its code on this machine.', fg: theme.warning, bold: true },
+    ], { wrap: true })
     panel.text('Its install scripts run right away, and the plugin runs inside your game and game server from then on, with everything they can reach. The list of plugins is not a review of what is on it.', { wrap: true })
     panel.spacer(1)
     panel.text('Check the source before you install it:', { wrap: true })
-    panel.text([{ text: `  ${plugin.homepage ?? `https://www.npmjs.com/package/${plugin.package}`}`, fg: theme.primary }], { wrap: true })
+    panel.text([
+      { text: `  ${plugin.homepage ?? `https://www.npmjs.com/package/${plugin.package}`}`, fg: theme.primary },
+    ], { wrap: true })
     panel.spacer(1)
     panel.text(`It is installed with the project's package manager, added to mavonengine.json, and the dev servers are restarted.`, { wrap: true })
     panel.spacer(1)
     panel.text([
-      { text: ' y ', fg: theme.background, bg: theme.warning, bold: true },
+      {
+        text: ' y ',
+        fg: theme.background,
+        bg: theme.warning,
+        bold: true,
+      },
       { text: ' I checked the source, install it    ' },
-      { text: ' n ', fg: theme.background, bg: theme.muted, bold: true },
+      {
+        text: ' n ',
+        fg: theme.background,
+        bg: theme.muted,
+        bold: true,
+      },
       { text: ' Cancel' },
     ], { size: 1 })
   })
 }
 
 function availableDetails(ui: Container, theme: Theme, plugin: AvailablePlugin, installer?: DashboardInstaller) {
-  ui.panel({ title: plugin.name === plugin.package ? plugin.package : `${plugin.name} (${plugin.package})`, size: '1fr' }, (panel) => {
+  ui.panel({
+    title: plugin.name === plugin.package
+      ? plugin.package
+      : `${plugin.name} (${plugin.package})`,
+    size: '1fr',
+  }, (panel) => {
     if (plugin.description)
       panel.text(plugin.description, { wrap: true })
 
     panel.keyValues([
       { label: 'Status', value: 'not installed', color: theme.muted },
-      { label: 'Runs on', value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—' },
-      { label: 'Engine', value: plugin.engine ? `@mavonengine/core ${plugin.engine}` : '—' },
+      {
+        label: 'Runs on',
+        value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—',
+      },
+      {
+        label: 'Engine',
+        value: plugin.engine
+          ? `@mavonengine/core ${plugin.engine}`
+          : '—',
+      },
       { label: 'Source', value: plugin.homepage ?? `https://www.npmjs.com/package/${plugin.package}`, color: theme.primary },
     ], { spread: true })
 
     panel.spacer(1)
 
-    if (!installer)
+    if (!installer) {
       panel.label(`Install it with: mavonengine install ${plugin.package}`)
-    else if (installer.busy)
+    }
+    else if (installer.busy) {
       panel.label('Another install is running')
-    else
-      panel.text([{ text: 'Press ' }, { text: 'i', fg: theme.primary, bold: true }, { text: ' to install it and restart the dev servers' }], { size: 1 })
+    }
+    else {
+      panel.text([
+        { text: 'Press ' },
+        { text: 'i', fg: theme.primary, bold: true },
+        { text: ' to install it and restart the dev servers' },
+      ], { size: 1 })
+    }
   })
 }
 
@@ -1510,9 +2205,16 @@ function availablePanel(ui: Container, theme: Theme, available: AvailablePlugins
   const loaded = status === 'ready' || plugins.length > 0
   let top = 0
 
-  ui.panel({ title: loaded ? `Available to install (${rows.length})` : 'Available to install', size }, (panel) => {
+  ui.panel({
+    title: loaded
+      ? `Available to install (${rows.length})`
+      : 'Available to install',
+    size,
+  }, (panel) => {
     if (error) {
-      panel.text([{ text: `Could not read the list of plugins: ${error}`, fg: theme.danger }], { wrap: true })
+      panel.text([
+        { text: `Could not read the list of plugins: ${error}`, fg: theme.danger },
+      ], { wrap: true })
       return
     }
 
@@ -1528,7 +2230,9 @@ function availablePanel(ui: Container, theme: Theme, available: AvailablePlugins
 
     panel.table<AvailablePlugin>({
       rows,
-      selected: selected ? rows.indexOf(selected) : -1,
+      selected: selected
+        ? rows.indexOf(selected)
+        : -1,
       followSelection: true,
       onRow: (_row, index, y) => {
         if (y === 1)
@@ -1546,8 +2250,20 @@ function availablePanel(ui: Container, theme: Theme, available: AvailablePlugins
       size: '1fr',
       columns: [
         { key: 'package', title: 'Package', color: theme.primary },
-        { key: 'target', title: 'Runs on', width: 7, render: p => p.target ?? '—' },
-        { key: 'description', title: 'What it is', color: theme.muted, render: p => p.description ?? (p.name === p.package ? '' : p.name) },
+        {
+          key: 'target',
+          title: 'Runs on',
+          width: 7,
+          render: p => p.target ?? '—',
+        },
+        {
+          key: 'description',
+          title: 'What it is',
+          color: theme.muted,
+          render: p => p.description ?? (p.name === p.package
+            ? ''
+            : p.name),
+        },
       ],
     })
   })
@@ -1555,26 +2271,53 @@ function availablePanel(ui: Container, theme: Theme, available: AvailablePlugins
 
 function pluginDetails(ui: Container, theme: Theme, state: DashboardState, plugin: PluginLine, endpoints: RouteLine[], size: number | string, transparent: boolean) {
   const status = pluginStatus(plugin, theme)
-  const prefabs = [...new Set([...plugin.declaredPrefabs, ...plugin.usedPrefabs])]
+  const prefabs = [
+    ...new Set([
+      ...plugin.declaredPrefabs,
+      ...plugin.usedPrefabs,
+    ]),
+  ]
 
   ui.panel({ title: plugin.package, size }, (panel) => {
     if (plugin.description)
       panel.text(plugin.description, { wrap: true })
-    if (plugin.problem)
-      panel.text([{ text: plugin.problem, fg: theme.danger }], { wrap: true })
+    if (plugin.problem) {
+      panel.text([
+        { text: plugin.problem, fg: theme.danger },
+      ], { wrap: true })
+    }
 
     panel.keyValues([
       { label: 'Version', value: plugin.version ?? '—' },
       { label: 'Status', value: status.label, color: status.color },
-      { label: 'Runs on', value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—' },
+      {
+        label: 'Runs on',
+        value: plugin.target ? PLUGIN_TARGETS[plugin.target] : '—',
+      },
       // A client plugin has nothing to run here
       plugin.target === 'client'
         ? { label: 'On this server', value: 'nothing to run', color: theme.muted }
-        : { label: 'On this server', value: plugin.runningOnServer ? 'running' : 'not running', color: plugin.runningOnServer ? theme.success : theme.warning },
-      { label: 'Engine', value: plugin.engine ? `@mavonengine/core ${plugin.engine}` : '—' },
+        : {
+            label: 'On this server',
+            value: plugin.runningOnServer ? 'running' : 'not running',
+            color: plugin.runningOnServer ? theme.success : theme.warning,
+          },
+      {
+        label: 'Engine',
+        value: plugin.engine
+          ? `@mavonengine/core ${plugin.engine}`
+          : '—',
+      },
       { label: 'License', value: plugin.license ?? '—' },
       // Used ones ship their assets in a release
-      { label: 'Prefabs', value: prefabs.length ? prefabs.map(name => plugin.usedPrefabs.includes(name) ? `${name} (used)` : name).join(', ') : 'none' },
+      {
+        label: 'Prefabs',
+        value: prefabs.length
+          ? prefabs.map(name => plugin.usedPrefabs.includes(name)
+              ? `${name} (used)`
+              : name).join(', ')
+          : 'none',
+      },
     ], { spread: true })
 
     panel.spacer(1)
@@ -1595,9 +2338,20 @@ function pluginDetails(ui: Container, theme: Theme, state: DashboardState, plugi
       zebra: !transparent,
       size: '1fr',
       columns: [
-        { key: 'method', title: 'Method', width: 7, color: r => methodColor(r.method, theme) },
+        {
+          key: 'method',
+          title: 'Method',
+          width: 7,
+          color: r => methodColor(r.method, theme),
+        },
         { key: 'path', title: 'Path' },
-        { key: 'devOnly', title: 'Served in', width: 10, color: r => r.devOnly ? theme.warning : theme.success, render: routeEnvironment },
+        {
+          key: 'devOnly',
+          title: 'Served in',
+          width: 10,
+          color: r => r.devOnly ? theme.warning : theme.success,
+          render: routeEnvironment,
+        },
       ],
     })
   })
@@ -1616,7 +2370,9 @@ export function formatCell(value: unknown): string {
   else
     text = String(value).replace(LINE_BREAKS_RE, ' ⏎ ')
 
-  return text.length > MAX_CELL_CHARS ? `${text.slice(0, MAX_CELL_CHARS - 1)}…` : text
+  return text.length > MAX_CELL_CHARS
+    ? `${text.slice(0, MAX_CELL_CHARS - 1)}…`
+    : text
 }
 
 function tableOwner(table: { plugin: string | null }): string {
@@ -1638,7 +2394,14 @@ function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: V
 
   if (notice) {
     ui.panel({ title: 'Database', size: '1fr' }, (panel) => {
-      panel.text([{ text: notice, fg: state.databaseError && !database ? theme.danger : theme.muted }])
+      panel.text([
+        {
+          text: notice,
+          fg: state.databaseError && !database
+            ? theme.danger
+            : theme.muted,
+        },
+      ])
     })
     return
   }
@@ -1647,8 +2410,11 @@ function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: V
   const shown = selectedTable(view, database)!
   let top = 0
 
-  if (state.databaseError)
-    ui.text([{ text: ` ${state.databaseError} — showing what was read last`, fg: theme.danger }], { size: 1 })
+  if (state.databaseError) {
+    ui.text([
+      { text: ` ${state.databaseError} — showing what was read last`, fg: theme.danger },
+    ], { size: 1 })
+  }
 
   ui.panel({ title: `Tables in ${database!.provider} (${tables.length})`, size: Math.min(tables.length, 8) + 3 }, (panel) => {
     panel.table<DatabaseTableLine>({
@@ -1673,9 +2439,28 @@ function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: V
       size: '1fr',
       columns: [
         { key: 'name', title: 'Table' },
-        { key: 'plugin', title: 'Plugin', color: t => t.plugin ? theme.primary : theme.muted, render: tableOwner },
-        { key: 'rows', title: 'Rows', width: 10, align: 'right', render: t => t.rows === null ? '?' : t.rows.toLocaleString('en-US') },
-        { key: 'columns', title: 'Columns', width: 7, align: 'right', render: t => String(t.columns.length) },
+        {
+          key: 'plugin',
+          title: 'Plugin',
+          color: t => t.plugin ? theme.primary : theme.muted,
+          render: tableOwner,
+        },
+        {
+          key: 'rows',
+          title: 'Rows',
+          width: 10,
+          align: 'right',
+          render: t => t.rows === null
+            ? '?'
+            : t.rows.toLocaleString('en-US'),
+        },
+        {
+          key: 'columns',
+          title: 'Columns',
+          width: 7,
+          align: 'right',
+          render: t => String(t.columns.length),
+        },
       ],
     })
   })
@@ -1687,7 +2472,10 @@ function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: V
       for (const m of migrations.slice(0, 4)) {
         const names = m.applied.map(a => a.name).join(', ') || 'none'
         panel.text([
-          { text: `${m.plugin ?? m.table}  `, fg: m.plugin ? theme.primary : theme.muted },
+          {
+            text: `${m.plugin ?? m.table}  `,
+            fg: m.plugin ? theme.primary : theme.muted,
+          },
           { text: `${m.applied.length} ran: `, fg: theme.muted },
           { text: names },
         ])
@@ -1697,17 +2485,26 @@ function databaseTab(ui: Container, theme: Theme, state: DashboardState, view: V
 }
 
 function tableRowsPanel(ui: Container, theme: Theme, state: DashboardState, view: ViewState, table: DatabaseTableLine, transparent: boolean) {
-  const detail = state.tableDetail?.table === table.name ? state.tableDetail : null
+  const detail = state.tableDetail?.table === table.name
+    ? state.tableDetail
+    : null
   const page = detail?.page
   const total = page?.total ?? table.rows ?? 0
-  const shownRows = page ? Math.min(page.rows.length, view.tableVisibleRows || page.rows.length) : 0
+  const shownRows = page
+    ? Math.min(page.rows.length, view.tableVisibleRows || page.rows.length)
+    : 0
   const range = page && shownRows
     ? `rows ${(page.offset + 1).toLocaleString('en-US')}–${(page.offset + shownRows).toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`
     : `${total.toLocaleString('en-US')} rows`
 
-  ui.panel({ title: `${table.name} · ${range}${detail?.status === 'loading' ? ' · loading…' : ''}`, size: '1fr' }, (panel) => {
-    if (detail?.status === 'error')
-      panel.text([{ text: detail.error ?? 'Could not load the rows', fg: theme.danger }], { size: 1 })
+  ui.panel({ title: `${table.name} · ${range}${detail?.status === 'loading'
+    ? ' · loading…'
+    : ''}`, size: '1fr' }, (panel) => {
+    if (detail?.status === 'error') {
+      panel.text([
+        { text: detail.error ?? 'Could not load the rows', fg: theme.danger },
+      ], { size: 1 })
+    }
 
     if (!page) {
       if (detail?.status !== 'error')
@@ -1720,7 +2517,9 @@ function tableRowsPanel(ui: Container, theme: Theme, state: DashboardState, view
       return
     }
 
-    const columns = page.columns.length ? page.columns.map(c => c.name) : Object.keys(page.rows[0])
+    const columns = page.columns.length
+      ? page.columns.map(c => c.name)
+      : Object.keys(page.rows[0])
     let visible = 0
     panel.table<Record<string, unknown>>({
       rows: page.rows,
@@ -1735,7 +2534,9 @@ function tableRowsPanel(ui: Container, theme: Theme, state: DashboardState, view
       columns: columns.map(name => ({
         key: name,
         title: name,
-        color: (row: Record<string, unknown>) => row[name] === null || row[name] === undefined ? theme.muted : undefined,
+        color: (row: Record<string, unknown>) => row[name] === null || row[name] === undefined
+          ? theme.muted
+          : undefined,
         render: (row: Record<string, unknown>) => formatCell(row[name]),
       })),
     })

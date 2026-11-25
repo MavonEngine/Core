@@ -26,7 +26,10 @@ function useOverlayOptions(): [NetworkOverlayOptions | undefined, (options: Part
     return () => target.off('changed', setOptions)
   }, [target])
 
-  return [options, changes => target?.setOptions(changes)]
+  return [
+    options,
+    changes => target?.setOptions(changes),
+  ]
 }
 
 /** Connection of this tab, read a few times a second */
@@ -40,9 +43,13 @@ function useConnection() {
       connected: network.connected,
       ping: network.ping,
       tick,
-      stateAge: receivedAt === null ? null : Math.round(performance.now() - receivedAt),
+      stateAge: receivedAt === null
+        ? null
+        : Math.round(performance.now() - receivedAt),
       missedStates,
-      refused: network.connectError ? describeConnectError(network.connectError) : undefined,
+      refused: network.connectError
+        ? describeConnectError(network.connectError)
+        : undefined,
     }
   }
 
@@ -72,7 +79,9 @@ function Status() {
   return (
     <span className={styles.status}>
       <span className={connection.connected ? styles.dotOn : styles.dotOff} />
-      {connection.connected ? `${connection.ping} ms` : 'disconnected'}
+      {connection.connected
+        ? `${connection.ping} ms`
+        : 'disconnected'}
       {connection.tick !== null && ` · tick ${connection.tick}`}
       {connection.stateAge !== null && ` · state ${connection.stateAge} ms ago`}
       {connection.missedStates > 0 && ` · ${connection.missedStates} missed`}
@@ -96,7 +105,9 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
       <div className={styles.syncSummary}>
         {`Tick ${sync.tick} · ${sync.tickRate} Hz · sync distance ${sync.syncDistance ?? 'unknown'} · ${sync.entities.length} synced entities`}
         {untracked > 0 && sync.players.length > 0 && `, ${untracked} out of every player's range`}
-        {sync.editors.length > 0 && ` · ${sync.editors.length} editor${sync.editors.length > 1 ? 's' : ''}`}
+        {sync.editors.length > 0 && ` · ${sync.editors.length} editor${sync.editors.length > 1
+          ? 's'
+          : ''}`}
       </div>
 
       {sync.players.length === 0
@@ -116,20 +127,33 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
                 {sync.players.map(player => (
                   <tr
                     key={player.id}
-                    className={player.id === viewAs ? styles.selected : undefined}
+                    className={player.id === viewAs
+                      ? styles.selected
+                      : undefined}
                     title="Colour the ghosts by what this player is sent"
-                    onClick={() => onViewAs(player.id === viewAs ? null : player.id)}
+                    onClick={() => onViewAs(player.id === viewAs
+                      ? null
+                      : player.id)}
                   >
                     <td>{player.displayName}</td>
                     {showAccounts && (
-                      <td title={player.account ? `Account ${player.account.id}` : 'Connected without an account'}>
-                        {player.account ? (player.account.name ?? player.account.id) : '—'}
+                      <td title={player.account
+                        ? `Account ${player.account.id}`
+                        : 'Connected without an account'}
+                      >
+                        {player.account
+                          ? (player.account.name ?? player.account.id)
+                          : '—'}
                         {player.account?.guest && <span className={styles.guest}>guest</span>}
                       </td>
                     )}
                     <td>{player.tracked.length}</td>
                     <td>{player.ack}</td>
-                    <td>{player.lastState ? `${formatBytes(player.lastState.bytes)} · tick ${player.lastState.tick}` : 'none'}</td>
+                    <td>
+                      {player.lastState
+                        ? `${formatBytes(player.lastState.bytes)} · tick ${player.lastState.tick}`
+                        : 'none'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -142,12 +166,30 @@ function SyncTable({ viewAs, onViewAs }: { viewAs: string | null, onViewAs(id: s
 function RecordRow({ record, selected, onSelect }: { record: NetRecord, selected: boolean, onSelect(): void }) {
   const lane = laneOf(record)
   return (
-    <tr className={`${styles[lane]}${selected ? ` ${styles.selected}` : ''}`} onClick={onSelect}>
+    <tr
+      className={`${styles[lane]}${selected
+        ? ` ${styles.selected}`
+        : ''}`}
+      onClick={onSelect}
+    >
       <td className={styles.time}>{formatTime(record.timestamp)}</td>
-      <td className={styles.arrow} title={lane === 'event' ? 'event' : lane === 'out' ? 'sent' : 'received'}>{ARROWS[lane]}</td>
+      <td
+        className={styles.arrow}
+        title={lane === 'event'
+          ? 'event'
+          : lane === 'out'
+            ? 'sent'
+            : 'received'}
+      >
+        {ARROWS[lane]}
+      </td>
       <td className={styles.type}>{record.type}</td>
       <td className={styles.peer} title={record.peer}>{record.peer}</td>
-      <td className={styles.bytes}>{record.kind === 'packet' ? formatBytes(record.bytes) : ''}</td>
+      <td className={styles.bytes}>
+        {record.kind === 'packet'
+          ? formatBytes(record.bytes)
+          : ''}
+      </td>
       <td className={styles.info}>{describeRecord(record)}</td>
     </tr>
   )
@@ -226,7 +268,9 @@ export default function NetworkPanel() {
                   key={record.id}
                   record={record}
                   selected={record.id === selectedId}
-                  onSelect={() => setSelectedId(record.id === selectedId ? undefined : record.id)}
+                  onSelect={() => setSelectedId(record.id === selectedId
+                    ? undefined
+                    : record.id)}
                 />
               ))}
             </tbody>
@@ -240,7 +284,13 @@ export default function NetworkPanel() {
                   <div className={styles.sectionTitle}>{`Record ${selectedId}`}</div>
                   {detail === undefined && <div className={styles.note}>Loading…</div>}
                   {detail === null && <div className={styles.note}>This record is no longer kept</div>}
-                  {detail && !detail.hasPayload && <div className={styles.note}>{detail.kind === 'event' ? describeRecord(detail) || 'No details' : 'The payload is no longer kept'}</div>}
+                  {detail && !detail.hasPayload && (
+                    <div className={styles.note}>
+                      {detail.kind === 'event'
+                        ? describeRecord(detail) || 'No details'
+                        : 'The payload is no longer kept'}
+                    </div>
+                  )}
                   {detail?.hasPayload && <pre className={styles.payload}>{JSON.stringify(detail.payload, null, 2)}</pre>}
                 </>
               )

@@ -29,26 +29,35 @@ describe('syncStateStack', () => {
   bench('no-op (states already match)', () => {
     const actor = new TestActor()
     actor.state.push(new StateA(actor))
-    syncStateStack(actor, [{ stateName: 'stateA' }], factories)
+    syncStateStack(actor, [
+      { stateName: 'stateA' },
+    ], factories)
   })
 
   bench('full replacement (stateB → stateA)', () => {
     const actor = new TestActor()
     actor.state.push(new StateB(actor))
-    syncStateStack(actor, [{ stateName: 'stateA' }], factories)
+    syncStateStack(actor, [
+      { stateName: 'stateA' },
+    ], factories)
   })
 
   bench('add to stack (1 → 2 states)', () => {
     const actor = new TestActor()
     actor.state.push(new StateA(actor))
-    syncStateStack(actor, [{ stateName: 'stateA' }, { stateName: 'stateB' }], factories)
+    syncStateStack(actor, [
+      { stateName: 'stateA' },
+      { stateName: 'stateB' },
+    ], factories)
   })
 
   bench('remove from stack (2 → 1 states)', () => {
     const actor = new TestActor()
     actor.state.push(new StateA(actor))
     actor.state.push(new StateB(actor))
-    syncStateStack(actor, [{ stateName: 'stateA' }], factories)
+    syncStateStack(actor, [
+      { stateName: 'stateA' },
+    ], factories)
   })
 
   bench('clear all states (2 → 0)', () => {

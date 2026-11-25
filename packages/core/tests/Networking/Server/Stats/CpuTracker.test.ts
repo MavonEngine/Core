@@ -3,7 +3,9 @@ import CpuTracker from '../../../../src/Networking/Server/Stats/CpuTracker'
 
 describe('cpuTracker', () => {
   it('logs cpu stats using provided logger', () => {
-    const logger = { info: vi.fn() } as any
+    const logger = {
+      info: vi.fn(),
+    } as any
     const tracker = new CpuTracker(logger)
 
     vi.spyOn(tracker, 'sample').mockReturnValue({
@@ -24,7 +26,9 @@ describe('cpuTracker', () => {
   })
 
   it('logs the latest sample instead of taking a new one', () => {
-    const logger = { info: vi.fn() } as any
+    const logger = {
+      info: vi.fn(),
+    } as any
     const tracker = new CpuTracker(logger)
 
     const latest = tracker.sample()
@@ -37,7 +41,9 @@ describe('cpuTracker', () => {
   })
 
   it('records each sample in the history', () => {
-    const tracker = new CpuTracker({ info: vi.fn() } as any)
+    const tracker = new CpuTracker({
+      info: vi.fn(),
+    } as any)
 
     tracker.sample()
     tracker.sample()

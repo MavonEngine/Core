@@ -18,8 +18,15 @@ export default function StatusBar() {
   return (
     <div className={styles.statusBar}>
       <div className={styles.section}>
-        <span className={styles.branch} title={scene ? `scenes/${scene.file}.json` : 'No scene loaded'}>
-          {scene ? `${scene.name}${scene.dirty ? ' ●' : ''}` : 'no scene'}
+        <span
+          className={styles.branch}
+          title={scene
+            ? `scenes/${scene.file}.json`
+            : 'No scene loaded'}
+        >
+          {scene
+            ? `${scene.name}${scene.dirty ? ' ●' : ''}`
+            : 'no scene'}
         </span>
         {refused && (
           <span className={styles.warning} title={refused.detail} role="status">
@@ -95,7 +102,13 @@ function useActiveScene() {
   useEffect(() => {
     const read = () => {
       const scene = window.Game.activeScene
-      setState(scene ? { name: scene.name, file: scene.source ?? 'main', dirty: scene.isDirty() } : undefined)
+      setState(scene
+        ? {
+            name: scene.name,
+            file: scene.source ?? 'main',
+            dirty: scene.isDirty(),
+          }
+        : undefined)
     }
     read()
     const timer = setInterval(read, 1000)
@@ -118,10 +131,16 @@ function useConnectionRefused() {
   useEffect(() => {
     const read = () => {
       const network = window.Game.network
-      const error = network && !network.connected ? network.connectError : null
-      const next = error ? describeConnectError(error) : undefined
+      const error = network && !network.connected
+        ? network.connectError
+        : null
+      const next = error
+        ? describeConnectError(error)
+        : undefined
       // Same object while nothing changed, so the bar doesn't render every second
-      setRefused(previous => previous?.short === next?.short ? previous : next)
+      setRefused(previous => previous?.short === next?.short
+        ? previous
+        : next)
     }
     read()
     const timer = setInterval(read, 1000)

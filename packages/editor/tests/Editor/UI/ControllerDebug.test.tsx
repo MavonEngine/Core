@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ControllerDebug from '../../../src/Editor/UI/Controllers/ControllerDebug'
 
 vi.mock('../../../src/Editor/UI/Controllers/ControllerDebug.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 function makePad(pressed: number[] = [], id = 'DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)') {
@@ -16,8 +18,16 @@ function makePad(pressed: number[] = [], id = 'DualSense Wireless Controller (ST
     connected: true,
     mapping: 'standard',
     axes: [0.5, 0, 0, 0],
-    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i), touched: false, value: pressed.includes(i) ? 1 : 0 })),
-    vibrationActuator: { playEffect: vi.fn().mockResolvedValue('complete') },
+    buttons: Array.from({ length: 17 }, (_, i) => ({
+      pressed: pressed.includes(i),
+      touched: false,
+      value: pressed.includes(i)
+        ? 1
+        : 0,
+    })),
+    vibrationActuator: {
+      playEffect: vi.fn().mockResolvedValue('complete'),
+    },
   } as unknown as Gamepad
 }
 
@@ -26,9 +36,13 @@ let manager: GamepadManager
 
 beforeEach(() => {
   pads = []
-  vi.stubGlobal('navigator', { getGamepads: () => pads })
+  vi.stubGlobal('navigator', {
+    getGamepads: () => pads,
+  })
   manager = new GamepadManager()
-  ;(window as any).Game = { input: { gamepads: manager } }
+  ;(window as any).Game = {
+    input: { gamepads: manager },
+  }
 })
 
 afterEach(() => {
@@ -46,7 +60,9 @@ describe('controllerDebug', () => {
     render(<ControllerDebug />)
 
     act(() => {
-      pads = [makePad()]
+      pads = [
+        makePad(),
+      ]
       manager.poll()
     })
 
@@ -61,11 +77,15 @@ describe('controllerDebug', () => {
     render(<ControllerDebug />)
 
     act(() => {
-      pads = [makePad()]
+      pads = [
+        makePad(),
+      ]
       manager.poll()
     })
     act(() => {
-      pads = [makePad([1])]
+      pads = [
+        makePad([1]),
+      ]
       manager.poll()
     })
 

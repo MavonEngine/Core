@@ -16,7 +16,9 @@ afterEach(() => {
 
 describe('parseBuildArgs', () => {
   it('resolves --cwd', () => {
-    expect(parseBuildArgs(['--cwd', 'game'], '/home')).toEqual({ cwd: resolve('/home', 'game') })
+    expect(parseBuildArgs(['--cwd', 'game'], '/home')).toEqual({
+      cwd: resolve('/home', 'game'),
+    })
   })
 
   it('returns help', () => {
@@ -27,11 +29,25 @@ describe('parseBuildArgs', () => {
 describe('summarizeReleaseAssets', () => {
   it('lists what each enabled plugin ships, and the warnings', () => {
     writeFileSync(join(dir, 'mavonengine.json'), JSON.stringify({
-      plugins: { forest: { prefabs: ['Tree'] }, hud: {}, off: { enabled: false } },
+      plugins: {
+        forest: {
+          prefabs: ['Tree'],
+        },
+        hud: {},
+        off: { enabled: false },
+      },
     }))
-    const asset = { package: 'forest', from: '/x', to: 'plugins/forest/tree.glb', path: 'tree.glb' }
+    const asset = {
+      package: 'forest',
+      from: '/x',
+      to: 'plugins/forest/tree.glb',
+      path: 'tree.glb',
+    }
 
-    expect(summarizeReleaseAssets(dir, [asset, { ...asset, path: 'bark.png' }], ['hud: asset gone.png not found'])).toBe([
+    expect(summarizeReleaseAssets(dir, [
+      asset,
+      { ...asset, path: 'bark.png' },
+    ], ['hud: asset gone.png not found'])).toBe([
       '',
       'Plugins in mavonengine.json:',
       '  forest: 2 assets, prefabs: Tree',

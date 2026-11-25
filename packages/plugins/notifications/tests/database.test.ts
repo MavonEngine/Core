@@ -12,7 +12,14 @@ import plugin, { MAX_DATA_CHARS, Notification, NOTIFICATION_MESSAGE, notificatio
 import { memoryDb } from './memoryDb'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestServer extends Server<GameObject> {
@@ -53,11 +60,22 @@ afterEach(async () => {
 })
 
 async function start({ database = true, db: given, options = {} as Record<string, unknown> }: { database?: boolean, db?: Kysely<any>, options?: Record<string, unknown> } = {}) {
-  const db = database ? given ?? memoryDb() : undefined
+  const db = database
+    ? given ?? memoryDb()
+    : undefined
   const logger = winston.createLogger({ transports: [], silent: true })
-  const loaded: LoadedPlugin<ServerPlugin>[] = [{ package: '@mavonengine/notifications', options, plugin }]
-  if (db)
-    loaded.push({ package: '@mavonengine/sqlite', options: {}, plugin: { database: () => db } })
+  const loaded: LoadedPlugin<ServerPlugin>[] = [
+    { package: '@mavonengine/notifications', options, plugin },
+  ]
+  if (db) {
+    loaded.push({
+      package: '@mavonengine/sqlite',
+      options: {},
+      plugin: {
+        database: () => db,
+      },
+    })
+  }
 
   const server = new TestServer(logger, undefined, { stopOnSignals: false, plugins: loaded })
   vi.spyOn(server.http, 'start').mockImplementation(() => {})
@@ -83,7 +101,13 @@ async function start({ database = true, db: given, options = {} as Record<string
     return channel
   }
 
-  return { server, db, logger, connect, api: notifications(server)! }
+  return {
+    server,
+    db,
+    logger,
+    connect,
+    api: notifications(server)!,
+  }
 }
 
 describe('database channel', () => {
@@ -91,14 +115,27 @@ describe('database channel', () => {
     const { db, api } = await start()
     expect((await db!.introspection.getTables()).map(t => t.name)).toContain(TABLE)
 
-    await notify([account('ada'), account('bob')], new FriendRequest('carol', ['database']))
+    await notify([
+      account('ada'),
+      account('bob'),
+    ], new FriendRequest('carol', ['database']))
     await new Promise(resolve => setTimeout(resolve, 2))
     await notify(account('ada'), new FriendRequest('dave', ['database']))
 
     const stored = await api.stored(account('ada'))
     expect(stored).toEqual([
-      { id: expect.any(String), notificationId: expect.any(String), type: 'FriendRequest', data: { from: 'dave' }, readAt: null, createdAt: expect.any(String) },
-      expect.objectContaining({ data: { from: 'carol' }, readAt: null }),
+      {
+        id: expect.any(String),
+        notificationId: expect.any(String),
+        type: 'FriendRequest',
+        data: { from: 'dave' },
+        readAt: null,
+        createdAt: expect.any(String),
+      },
+      expect.objectContaining({
+        data: { from: 'carol' },
+        readAt: null,
+      }),
     ])
     const [bobs] = await api.stored(account('bob'))
     // One notify(), one notification id for every recipient, a row of its own each
@@ -144,7 +181,10 @@ describe('database channel', () => {
     expect(await api.stored(guild)).toHaveLength(1)
     // Same id, other type: not the account's
     expect(await api.stored(account('ada'))).toEqual([])
-    await expect(api.stored({ notifiableType: 'account', notifiableId: () => undefined })).rejects.toThrow('has no id')
+    await expect(api.stored({
+      notifiableType: 'account',
+      notifiableId: () => undefined,
+    })).rejects.toThrow('has no id')
   })
 
   it('pages through what it kept', async () => {
@@ -173,7 +213,9 @@ describe('database channel', () => {
     const tab = connect('ada')
     class Huge extends FriendRequest {
       toDatabase() {
-        return { from: 'x'.repeat(MAX_DATA_CHARS) }
+        return {
+          from: 'x'.repeat(MAX_DATA_CHARS),
+        }
       }
     }
     await expect(notify(account('ada'), new Huge('x'))).rejects.toThrow('more than the')
@@ -190,8 +232,13 @@ describe('database channel', () => {
     await db.updateTable(TABLE).set({ read_at: '2020-01-01T00:00:00.000Z' }).where('id', '=', old.id).execute()
     await first.server.stop()
 
-    const second = await start({ db, options: { keepReadDays: 30 } })
-    await vi.waitFor(async () => expect((await second.api.stored(account('ada'))).map(n => n.data)).toEqual([{ from: 'new' }]))
+    const second = await start({
+      db,
+      options: { keepReadDays: 30 },
+    })
+    await vi.waitFor(async () => expect((await second.api.stored(account('ada'))).map(n => n.data)).toEqual([
+      { from: 'new' },
+    ]))
   })
 
   it('without a database, keeps nothing and says so once', async () => {
@@ -207,7 +254,13 @@ describe('database channel', () => {
     expect(await api.stored(account('ada'))).toEqual([])
 
     tab.send(LIST_MESSAGE, { requestId: 'r1' })
-    expect(tab.results()).toEqual([{ requestId: 'r1', unread: 0, error: expect.stringContaining('no database') }])
+    expect(tab.results()).toEqual([
+      {
+        requestId: 'r1',
+        unread: 0,
+        error: expect.stringContaining('no database'),
+      },
+    ])
   })
 })
 
@@ -223,9 +276,20 @@ describe('the player\'s game reading its notifications', () => {
     tab.send(LIST_MESSAGE, { requestId: 'r1', unread: true })
     await vi.waitFor(() => expect(tab.results()).toHaveLength(1))
     const [list] = tab.results()
-    expect(list).toEqual({ requestId: 'r1', notifications: [expect.objectContaining({ data: { from: 'carol' } })], unread: 1 })
+    expect(list).toEqual({
+      requestId: 'r1',
+      notifications: [
+        expect.objectContaining({
+          data: { from: 'carol' },
+        }),
+      ],
+      unread: 1,
+    })
 
-    tab.send(READ_MESSAGE, { requestId: 'r2', ids: [list.notifications![0].notificationId] })
+    tab.send(READ_MESSAGE, {
+      requestId: 'r2',
+      ids: [list.notifications![0].notificationId],
+    })
     await vi.waitFor(() => expect(tab.results()).toHaveLength(2))
     expect(tab.results()[1]).toEqual({ requestId: 'r2', marked: 1, unread: 0 })
     await vi.waitFor(() => expect(otherTab.unreadPushes().at(-1)).toBe(0))
@@ -233,23 +297,45 @@ describe('the player\'s game reading its notifications', () => {
     // bob's games only ever see bob's
     stranger.send(LIST_MESSAGE, { requestId: 'r3' })
     await vi.waitFor(() => expect(stranger.results()).toHaveLength(1))
-    expect(stranger.results()[0].notifications!.map(n => n.data)).toEqual([{ from: 'dave' }])
+    expect(stranger.results()[0].notifications!.map(n => n.data)).toEqual([
+      { from: 'dave' },
+    ])
   })
 
   it('answers only requests that are asked for well', async () => {
     const { connect } = await start()
     const tab = connect('ada')
 
-    for (const bad of [null, 'x', {}, { requestId: '' }, { requestId: 'x'.repeat(65) }, { requestId: 5 }])
+    for (const bad of [
+      null,
+      'x',
+      {},
+      { requestId: '' },
+      {
+        requestId: 'x'.repeat(65),
+      },
+      { requestId: 5 },
+    ])
       tab.send(LIST_MESSAGE, bad)
     tab.send(READ_MESSAGE, { requestId: 'r1', ids: 'all' })
-    tab.send(READ_MESSAGE, { requestId: 'r2', ids: Array.from({ length: 101 }, (_, i) => `id-${i}`) })
+    tab.send(READ_MESSAGE, {
+      requestId: 'r2',
+      ids: Array.from({ length: 101 }, (_, i) => `id-${i}`),
+    })
     tab.send(LIST_MESSAGE, { requestId: 'r3', limit: 10_000 })
 
     await vi.waitFor(() => expect(tab.results()).toHaveLength(3))
     expect(tab.results()).toEqual([
-      { requestId: 'r1', unread: 0, error: expect.stringContaining('ids must be') },
-      { requestId: 'r2', unread: 0, error: expect.stringContaining('ids must be') },
+      {
+        requestId: 'r1',
+        unread: 0,
+        error: expect.stringContaining('ids must be'),
+      },
+      {
+        requestId: 'r2',
+        unread: 0,
+        error: expect.stringContaining('ids must be'),
+      },
       { requestId: 'r3', notifications: [], unread: 0 },
     ])
   })

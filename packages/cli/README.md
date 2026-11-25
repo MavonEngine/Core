@@ -460,11 +460,19 @@ Each entry default-exports the plugin. Every hook gets the plugin's context last
 import { defineClientPlugin } from '@mavonengine/core/Plugins/types'
 
 export default defineClientPlugin({
-  assets: ctx => [{ name: 'tree', type: 'gltfModel', path: ctx.assetUrl('models/tree.glb') }],
+  assets: ctx => [
+    {
+      name: 'tree',
+      type: 'gltfModel',
+      path: ctx.assetUrl('models/tree.glb')
+    }
+  ],
   setup(ctx) {
     ctx.registerPrefab({
       name: 'Tree',
-      spawn: position => ({ object: new Tree(position) }),
+      spawn: position => ({
+        object: new Tree(position)
+      }),
     })
   },
   update(delta, ctx) {},
@@ -519,12 +527,20 @@ export default defineServerPlugin({
       icon: 'chat', // dashboard, activity, routes, plugin, database, users, logs, settings, chart, mail, chat, bell or lock
       children: [
         { label: 'Live', href: '#live' }, // an anchor on the page
-        { label: 'Mutes', href: 'mutes', render: () => '<p>…</p>' }, // a sub page, /admin/chat/mutes/
+        {
+          label: 'Mutes',
+          href: 'mutes',
+          render: () => '<p>…</p>'
+        }, // a sub page, /admin/chat/mutes/
       ],
       render: req => ({
         html: '<div class="adm-page">…</div>',
-        styles: [ctx.admin.url('chat/style.css')],
-        scripts: [ctx.admin.url('chat/app.js')],
+        styles: [
+          ctx.admin.url('chat/style.css')
+        ],
+        scripts: [
+          ctx.admin.url('chat/app.js')
+        ],
       }),
     })
 
@@ -547,7 +563,9 @@ An auth plugin decides who may connect, before a client gets a player. [`@mavone
 export default defineClientPlugin({
   authorization: () => {
     const token = localStorage.getItem('session')
-    return token ? `Bearer ${token}` : undefined
+    return token
+      ? `Bearer ${token}`
+      : undefined
   },
 })
 ```
@@ -586,7 +604,9 @@ Game.usePlugins(plugins)
 
 ```ts
 // server: the directory with mavonengine.json
-const server = new MyServer(logger, physicsWorld, { plugins: { root: projectRoot } })
+const server = new MyServer(logger, physicsWorld, {
+  plugins: { root: projectRoot }
+})
 await server.start()
 ```
 

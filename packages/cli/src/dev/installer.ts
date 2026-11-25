@@ -22,8 +22,18 @@ export interface PluginInstallerOptions {
 }
 
 function installWithCli(root: string, packages: string[], write: (text: string) => void): Promise<number> {
-  return runInstallCommand({ cwd: root, packages, yes: true, register: true }, {
-    run: (command, args, cwd) => runCommand(command, args, cwd, { report: { step: () => {}, output: write } }),
+  return runInstallCommand({
+    cwd: root,
+    packages,
+    yes: true,
+    register: true,
+  }, {
+    run: (command, args, cwd) => runCommand(command, args, cwd, {
+      report: {
+        step: () => {},
+        output: write,
+      },
+    }),
     // Whoever asked for the install already agreed to it
     confirm: async () => true,
     interactive: false,
@@ -65,7 +75,12 @@ export default class PluginInstaller {
     if (this.busy)
       throw new InstallRefused(`Still installing ${this.job!.packages.join(', ')}`, 'busy')
 
-    const job: InstallJob = { id: this.nextId++, packages: [...packages as string[]], status: 'installing', output: '' }
+    const job: InstallJob = {
+      id: this.nextId++,
+      packages: [...packages as string[]],
+      status: 'installing',
+      output: '',
+    }
     this.job = job
     this.finished = this.run(job)
     return job

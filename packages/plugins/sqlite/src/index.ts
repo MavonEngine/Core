@@ -58,7 +58,9 @@ export function adaptDatabase(db: DatabaseSync): SqliteDatabase {
 
 /** A Kysely dialect on a node:sqlite database */
 export function sqliteDialect(db: DatabaseSync): Dialect {
-  return new SqliteDialect({ database: adaptDatabase(db) })
+  return new SqliteDialect({
+    database: adaptDatabase(db),
+  })
 }
 
 /**
@@ -78,7 +80,9 @@ export function openSqlite(path: string, { busyTimeoutMs = 5000 }: Pick<SqliteOp
     db.exec('PRAGMA synchronous = NORMAL')
   }
 
-  return new Kysely({ dialect: sqliteDialect(db) })
+  return new Kysely({
+    dialect: sqliteDialect(db),
+  })
 }
 
 /** The database file a server uses: the option or the environment, relative to the project root */
@@ -86,7 +90,9 @@ export function databasePath(options: SqliteOptions, root: string = process.cwd(
   const path = env[PATH_ENV] || options.path || DEFAULT_PATH
   if (path === MEMORY)
     return path
-  return isAbsolute(path) ? path : resolve(root, path)
+  return isAbsolute(path)
+    ? path
+    : resolve(root, path)
 }
 
 const plugin: ServerPlugin = {

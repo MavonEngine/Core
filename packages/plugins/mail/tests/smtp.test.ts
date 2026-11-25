@@ -104,10 +104,17 @@ describe('mail over SMTP', () => {
     servers.push(smtp.server)
     vi.stubEnv(SMTP_PASSWORD_ENV, 'hunter22')
 
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
     const queue = new Queue(logger)
     const ctx = {
-      options: { from: 'Game <game@example.com>', smtp: { host: '127.0.0.1', port: smtp.port, user: 'game' } },
+      options: {
+        from: 'Game <game@example.com>',
+        smtp: { host: '127.0.0.1', port: smtp.port, user: 'game' },
+      },
       logger,
       server: {},
       queue,
@@ -118,7 +125,11 @@ describe('mail over SMTP', () => {
     expect(api.transport).toBe('smtp')
     const result = await api.to('Player <player@example.com>').sendNow(new Reset())
 
-    expect(result).toMatchObject({ queued: false, transport: 'smtp', messageId: expect.stringContaining('@example.com>') })
+    expect(result).toMatchObject({
+      queued: false,
+      transport: 'smtp',
+      messageId: expect.stringContaining('@example.com>'),
+    })
     expect(smtp.received).toHaveLength(1)
     const [mail] = smtp.received
     expect(mail.auth).toBe('\0game\0hunter22')

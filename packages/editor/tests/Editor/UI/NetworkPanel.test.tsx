@@ -8,7 +8,9 @@ import { describeConnectError, describeRecord, filterRecords, formatBytes, forma
 import NetworkPanel from '../../../src/Editor/UI/Network/NetworkPanel'
 
 vi.mock('../../../src/Editor/UI/Network/NetworkPanel.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 
 const sync = {
@@ -16,11 +18,30 @@ const sync = {
   serverTime: 0,
   tickRate: 30,
   syncDistance: 100,
-  players: [{ id: 'p1', displayName: 'Ada', position: { x: 0, y: 0, z: 0 }, ack: 7, tracked: ['p1', 'rock'], lastState: { tick: 40, bytes: 2048, entities: 2 } }],
+  players: [
+    {
+      id: 'p1',
+      displayName: 'Ada',
+      position: { x: 0, y: 0, z: 0 },
+      ack: 7,
+      tracked: ['p1', 'rock'],
+      lastState: { tick: 40, bytes: 2048, entities: 2 },
+    },
+  ],
   editors: ['e1'],
   entities: [
-    { id: 'rock', type: 'rock', player: false, trackedBy: 1 },
-    { id: 'tree', type: 'tree', player: false, trackedBy: 0 },
+    {
+      id: 'rock',
+      type: 'rock',
+      player: false,
+      trackedBy: 1,
+    },
+    {
+      id: 'tree',
+      type: 'tree',
+      player: false,
+      trackedBy: 0,
+    },
   ],
 }
 
@@ -39,9 +60,18 @@ beforeEach(() => {
   vi.useFakeTimers()
   net = new NetRecorder({ enabled: true })
   net.packet('out', 'command', { type: 'cl_move', sequenceId: 3 })
-  net.packet('in', 'sv_state', { tick: 40, ack: 3, entities: [{ id: 'rock' }] })
+  net.packet('in', 'sv_state', {
+    tick: 40,
+    ack: 3,
+    entities: [
+      { id: 'rock' },
+    ],
+  })
   net.packet('out', 'ping', null)
-  net.event('state_gap', { tick: 42, info: { missed: 1 } })
+  net.event('state_gap', {
+    tick: 42,
+    info: { missed: 1 },
+  })
 
   overlay = {
     options: { ghosts: false, rings: false, viewAs: null },
@@ -55,7 +85,16 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   ;(window as any).Game = {
     editor: { networkOverlay: overlay },
-    network: { connected: true, ping: 23, net, serverView: { tick: 40, receivedAt: performance.now(), missedStates: 1 } },
+    network: {
+      connected: true,
+      ping: 23,
+      net,
+      serverView: {
+        tick: 40,
+        receivedAt: performance.now(),
+        missedStates: 1,
+      },
+    },
   }
 })
 
@@ -80,8 +119,30 @@ describe('networkPanel', () => {
       latestId: 2,
       matched: 2,
       records: [
-        { id: 1, timestamp: 0, kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', bytes: 2048, tick: 40, info: { entities: 2, ack: 7 }, hasPayload: true },
-        { id: 2, timestamp: 1, kind: 'event', type: 'sync_leave', peer: 'p1', info: { count: 1, entities: ['rock'] }, hasPayload: false },
+        {
+          id: 1,
+          timestamp: 0,
+          kind: 'packet',
+          direction: 'out',
+          type: 'sv_state',
+          peer: 'p1',
+          bytes: 2048,
+          tick: 40,
+          info: { entities: 2, ack: 7 },
+          hasPayload: true,
+        },
+        {
+          id: 2,
+          timestamp: 1,
+          kind: 'event',
+          type: 'sync_leave',
+          peer: 'p1',
+          info: {
+            count: 1,
+            entities: ['rock'],
+          },
+          hasPayload: false,
+        },
       ],
     }))
     render(<NetworkPanel />)
@@ -97,7 +158,9 @@ describe('networkPanel', () => {
 
   it('shows this tab\'s own records, without pings unless asked, and a payload on click', async () => {
     render(<NetworkPanel />)
-    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'client' } })
+    fireEvent.change(screen.getByLabelText('Source'), {
+      target: { value: 'client' },
+    })
     await settle()
 
     expect(screen.queryByText('ping')).toBeNull()
@@ -107,7 +170,9 @@ describe('networkPanel', () => {
     fireEvent.click(screen.getByLabelText('Pings'))
     screen.getByText('ping')
 
-    fireEvent.change(screen.getByPlaceholderText('Filter by message or client'), { target: { value: 'sv_' } })
+    fireEvent.change(screen.getByPlaceholderText('Filter by message or client'), {
+      target: { value: 'sv_' },
+    })
     expect(screen.queryByText('state_gap')).toBeNull()
     expect(screen.queryByText('ping')).toBeNull()
 
@@ -118,7 +183,9 @@ describe('networkPanel', () => {
 
   it('stops reading while paused', async () => {
     render(<NetworkPanel />)
-    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'client' } })
+    fireEvent.change(screen.getByLabelText('Source'), {
+      target: { value: 'client' },
+    })
     await settle()
 
     fireEvent.click(screen.getByText('Pause'))
@@ -154,7 +221,9 @@ describe('networkPanel', () => {
   it('says when the tab has no game connection', async () => {
     delete (window as any).Game.network
     render(<NetworkPanel />)
-    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'client' } })
+    fireEvent.change(screen.getByLabelText('Source'), {
+      target: { value: 'client' },
+    })
     await settle()
 
     screen.getByText('This tab has no game connection')
@@ -165,8 +234,16 @@ describe('networkPanel', () => {
     overlay.sync = new SyncStore(250, async () => ({
       ...sync,
       players: [
-        { ...sync.players[0], account: { id: 'acc-1', name: 'ada_account', guest: false } },
-        { ...sync.players[0], id: 'p2', displayName: 'Visitor', account: { id: 'acc-2', name: 'Guest-4821', guest: true } },
+        {
+          ...sync.players[0],
+          account: { id: 'acc-1', name: 'ada_account', guest: false },
+        },
+        {
+          ...sync.players[0],
+          id: 'p2',
+          displayName: 'Visitor',
+          account: { id: 'acc-2', name: 'Guest-4821', guest: true },
+        },
       ],
     }) as any)
     render(<NetworkPanel />)
@@ -187,7 +264,10 @@ describe('networkPanel', () => {
   })
 
   it('says why the server turned the tab away', async () => {
-    Object.assign((window as any).Game.network, { connected: false, connectError: { message: 'Connection failed with status code 401.', status: 401 } })
+    Object.assign((window as any).Game.network, {
+      connected: false,
+      connectError: { message: 'Connection failed with status code 401.', status: 401 },
+    })
     render(<NetworkPanel />)
     await settle()
 
@@ -213,15 +293,49 @@ describe('format', () => {
   })
 
   it('describes a record in one line', () => {
-    expect(describeRecord({ id: 1, timestamp: 0, kind: 'packet', type: 'cl_init', reliable: true, hasPayload: true })).toBe('reliable')
-    expect(describeRecord({ id: 1, timestamp: 0, kind: 'event', type: 'connect', hasPayload: false })).toBe('')
+    expect(describeRecord({
+      id: 1,
+      timestamp: 0,
+      kind: 'packet',
+      type: 'cl_init',
+      reliable: true,
+      hasPayload: true,
+    })).toBe('reliable')
+    expect(describeRecord({
+      id: 1,
+      timestamp: 0,
+      kind: 'event',
+      type: 'connect',
+      hasPayload: false,
+    })).toBe('')
   })
 
   it('filters records', () => {
     const records = [
-      { id: 1, timestamp: 0, kind: 'packet' as const, type: 'ping', peer: 'abc', hasPayload: false },
-      { id: 2, timestamp: 0, kind: 'packet' as const, type: 'sv_state', peer: 'abc', hasPayload: true },
-      { id: 3, timestamp: 0, kind: 'event' as const, type: 'connect', peer: 'xyz', hasPayload: false },
+      {
+        id: 1,
+        timestamp: 0,
+        kind: 'packet' as const,
+        type: 'ping',
+        peer: 'abc',
+        hasPayload: false,
+      },
+      {
+        id: 2,
+        timestamp: 0,
+        kind: 'packet' as const,
+        type: 'sv_state',
+        peer: 'abc',
+        hasPayload: true,
+      },
+      {
+        id: 3,
+        timestamp: 0,
+        kind: 'event' as const,
+        type: 'connect',
+        peer: 'xyz',
+        hasPayload: false,
+      },
     ]
     const ids = (filter: Parameters<typeof filterRecords>[1]) => filterRecords(records, filter).map(record => record.id)
 

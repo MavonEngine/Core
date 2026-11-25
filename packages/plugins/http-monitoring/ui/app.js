@@ -57,18 +57,27 @@ function el(tag, attrs = {}, ...children) {
   for (const [key, value] of Object.entries(attrs)) {
     if (value === undefined || value === null || value === false)
       continue
-    if (key === 'class')
+    if (key === 'class') {
       node.className = value
-    else if (key === 'style')
+    }
+    else if (key === 'style') {
       setStyle(node, value)
-    else if (key.startsWith('on'))
+    }
+    else if (key.startsWith('on')) {
       node.addEventListener(key.slice(2), value)
-    else
-      node.setAttribute(key, value === true ? '' : String(value))
+    }
+    else {
+      node.setAttribute(key, value === true
+        ? ''
+        : String(value))
+    }
   }
   for (const child of children.flat()) {
-    if (child !== undefined && child !== null && child !== false)
-      node.append(child instanceof Node ? child : String(child))
+    if (child !== undefined && child !== null && child !== false) {
+      node.append(child instanceof Node
+        ? child
+        : String(child))
+    }
   }
   return node
 }
@@ -103,13 +112,24 @@ function values(container, entries) {
 }
 
 function meter(label, value, max, text) {
-  const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0
-  const level = ratio >= 0.9 ? 'danger' : ratio >= 0.7 ? 'warning' : ''
-  return el('div', { class: 'meter' }, el('span', { class: 'muted' }, label), el('div', { class: 'meter-bar' }, el('div', { class: `meter-fill ${level}`, style: { width: `${ratio * 100}%` } })), el('span', {}, text))
+  const ratio = max > 0
+    ? Math.min(1, Math.max(0, value / max))
+    : 0
+  const level = ratio >= 0.9
+    ? 'danger'
+    : ratio >= 0.7
+      ? 'warning'
+      : ''
+  return el('div', { class: 'meter' }, el('span', { class: 'muted' }, label), el('div', { class: 'meter-bar' }, el('div', {
+    class: `meter-fill ${level}`,
+    style: { width: `${ratio * 100}%` },
+  })), el('span', {}, text))
 }
 
 function legend(container, series) {
-  container.replaceChildren(...series.map(s => el('span', { style: { '--swatch': s.color } }, s.label)))
+  container.replaceChildren(...series.map(s => el('span', {
+    style: { '--swatch': s.color },
+  }, s.label)))
 }
 
 /**
@@ -119,29 +139,49 @@ function chart(container, series, { min = 0, max, format, budget, heat = false }
   const length = Math.max(2, ...series.map(s => s.values.length))
   const highest = Math.max(max ?? 0, ...series.flatMap(s => s.values))
   // Nothing measured yet: a scale of 1 rather than a sliver above 0
-  const top = highest > min ? highest : min + 1
+  const top = highest > min
+    ? highest
+    : min + 1
   const width = 100
   const height = 100
   const x = i => (i / (length - 1)) * width
   const y = v => height - ((v - min) / (top - min)) * height
 
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none' })
-  for (const fraction of [0, 0.5, 1])
-    root.append(svg('line', { class: 'grid-line', x1: 0, x2: width, y1: height * fraction, y2: height * fraction }))
+  for (const fraction of [0, 0.5, 1]) {
+    root.append(svg('line', {
+      class: 'grid-line',
+      x1: 0,
+      x2: width,
+      y1: height * fraction,
+      y2: height * fraction,
+    }))
+  }
 
   if (heat) {
     // Greener at the bottom of the scale, redder at the top, like the CLI's CPU graph
     const id = `heat-${container.id}`
     const gradient = svg('linearGradient', { id, x1: 0, x2: 0, y1: 1, y2: 0 })
-    for (let i = 0; i < 5; i++)
-      gradient.append(svg('stop', { offset: `${i * 25}%`, style: { stopColor: `var(--heat-${i})` } }))
+    for (let i = 0; i < 5; i++) {
+      gradient.append(svg('stop', {
+        offset: `${i * 25}%`,
+        style: { stopColor: `var(--heat-${i})` },
+      }))
+    }
     const defs = svg('defs')
     defs.append(gradient)
     root.append(defs)
   }
 
-  if (budget !== undefined && budget > 0)
-    root.append(svg('line', { class: 'budget', x1: 0, x2: width, y1: y(budget), y2: y(budget) }))
+  if (budget !== undefined && budget > 0) {
+    root.append(svg('line', {
+      class: 'budget',
+      x1: 0,
+      x2: width,
+      y1: y(budget),
+      y2: y(budget),
+    }))
+  }
 
   for (const s of series) {
     // Right-aligned, so a short history grows in from the right like the CLI
@@ -153,10 +193,22 @@ function chart(container, series, { min = 0, max, format, budget, heat = false }
     if (s.fill) {
       root.append(svg('polygon', {
         points: `${x(offset).toFixed(2)},${height} ${points.join(' ')} ${x(length - 1).toFixed(2)},${height}`,
-        style: { fill: heat ? `url(#heat-${container.id})` : s.color, fillOpacity: heat ? 0.35 : 0.15 },
+        style: {
+          fill: heat
+            ? `url(#heat-${container.id})`
+            : s.color,
+          fillOpacity: heat ? 0.35 : 0.15,
+        },
       }))
     }
-    root.append(svg('polyline', { points: points.join(' '), style: { stroke: heat ? `url(#heat-${container.id})` : s.color } }))
+    root.append(svg('polyline', {
+      points: points.join(' '),
+      style: {
+        stroke: heat
+          ? `url(#heat-${container.id})`
+          : s.color,
+      },
+    }))
   }
 
   container.replaceChildren(
@@ -167,7 +219,12 @@ function chart(container, series, { min = 0, max, format, budget, heat = false }
 }
 
 function table(columns, rows, { rowAttrs } = {}) {
-  return el('table', {}, el('thead', {}, el('tr', {}, columns.map(c => el('th', { class: c.num ? 'num' : undefined }, c.title)))), el('tbody', {}, rows.map(row => el('tr', rowAttrs?.(row) ?? {}, columns.map(c => el('td', { class: [c.num ? 'num' : '', c.cls?.(row) ?? ''].join(' ').trim() || undefined }, c.render(row)))))))
+  return el('table', {}, el('thead', {}, el('tr', {}, columns.map(c => el('th', {
+    class: c.num ? 'num' : undefined,
+  }, c.title)))), el('tbody', {}, rows.map(row => el('tr', rowAttrs?.(row) ?? {}, columns.map(c => el('td', { class: [
+    c.num ? 'num' : '',
+    c.cls?.(row) ?? '',
+  ].join(' ').trim() || undefined }, c.render(row)))))))
 }
 
 // ---------------------------------------------------------------- Data
@@ -227,8 +284,12 @@ async function poll() {
   try {
     const [snapshot, logs, requests] = await Promise.all([
       getJson('api/metrics'),
-      state.logsAvailable === false ? [] : pollFeed('logs'),
-      state.requestsAvailable === false ? [] : pollFeed('requests'),
+      state.logsAvailable === false
+        ? []
+        : pollFeed('logs'),
+      state.requestsAvailable === false
+        ? []
+        : pollFeed('requests'),
     ])
     if (!snapshot)
       throw Object.assign(new Error('The metrics endpoint was not found'), { status: 'unreachable' })
@@ -243,7 +304,9 @@ async function poll() {
   catch (err) {
     state.failures++
     state.status = err.status ?? 'unreachable'
-    state.error = err.status ? err.message : `Can't reach the game server: ${err.message}`
+    state.error = err.status
+      ? err.message
+      : `Can't reach the game server: ${err.message}`
     renderStatus()
   }
   finally {
@@ -259,7 +322,9 @@ async function poll() {
 
 function currentTab() {
   const tab = location.hash.slice(1)
-  return TABS.includes(tab) ? tab : 'overview'
+  return TABS.includes(tab)
+    ? tab
+    : 'overview'
 }
 
 function renderTabs() {
@@ -281,15 +346,25 @@ function renderTabs() {
 function renderStatus() {
   const status = $('status')
   status.className = `status ${state.status}`
-  status.textContent = { live: 'LIVE', connecting: 'CONNECTING', unreachable: 'UNREACHABLE', unauthorized: 'UNAUTHORIZED', forbidden: 'FORBIDDEN' }[state.status] ?? state.status.toUpperCase()
+  status.textContent = {
+    live: 'LIVE',
+    connecting: 'CONNECTING',
+    unreachable: 'UNREACHABLE',
+    unauthorized: 'UNAUTHORIZED',
+    forbidden: 'FORBIDDEN',
+  }[state.status] ?? state.status.toUpperCase()
 
   const notice = $('notice')
   notice.hidden = !state.error
   notice.textContent = state.error
-    ? `${state.error}${state.status === 'unreachable' ? ` Retrying (attempt ${state.failures})…` : ''}`
+    ? `${state.error}${state.status === 'unreachable'
+      ? ` Retrying (attempt ${state.failures})…`
+      : ''}`
     : ''
 
-  $('updated').textContent = state.lastUpdate ? `updated ${formatTime(state.lastUpdate)}` : ''
+  $('updated').textContent = state.lastUpdate
+    ? `updated ${formatTime(state.lastUpdate)}`
+    : ''
 }
 
 function renderHeader(snapshot) {
@@ -309,7 +384,13 @@ function renderOverview(snapshot) {
 
   // CPU
   const cpuValues = cpu.history.map(h => h.cpuPercentage)
-  chart($('cpu-chart'), [{ values: cpuValues, color: 'var(--heat-0)', fill: true }], { max: Math.max(100, ...cpuValues), format: v => `${Math.round(v)}%`, heat: true })
+  chart($('cpu-chart'), [
+    { values: cpuValues, color: 'var(--heat-0)', fill: true },
+  ], {
+    max: Math.max(100, ...cpuValues),
+    format: v => `${Math.round(v)}%`,
+    heat: true,
+  })
   $('cpu-meters').replaceChildren(
     meter('1s', cpu.avg1s, 100, formatPercent(cpu.avg1s)),
     meter('10s', cpu.avg10s, 100, formatPercent(cpu.avg10s)),
@@ -319,29 +400,62 @@ function renderOverview(snapshot) {
   // Network
   const perSecond = 1000 / (sampleIntervalMs || 1000)
   const net = [
-    { label: 'sent', values: bandwidth.history.map(b => b.sent * perSecond), color: 'var(--graph-0)' },
-    { label: 'received', values: bandwidth.history.map(b => b.received * perSecond), color: 'var(--graph-1)' },
+    {
+      label: 'sent',
+      values: bandwidth.history.map(b => b.sent * perSecond),
+      color: 'var(--graph-0)',
+    },
+    {
+      label: 'received',
+      values: bandwidth.history.map(b => b.received * perSecond),
+      color: 'var(--graph-1)',
+    },
   ]
   legend($('net-legend'), net)
   chart($('net-chart'), net, { format: formatRate })
   values($('net-values'), [
-    { label: 'Sent', value: formatRate(bandwidth.sentPerSecond), cls: 'primary' },
-    { label: 'Received', value: formatRate(bandwidth.receivedPerSecond), cls: 'success' },
+    {
+      label: 'Sent',
+      value: formatRate(bandwidth.sentPerSecond),
+      cls: 'primary',
+    },
+    {
+      label: 'Received',
+      value: formatRate(bandwidth.receivedPerSecond),
+      cls: 'success',
+    },
   ])
 
   // Tick
   const latest = tick.latest
   const max = tick.history.map(t => t.maxMs)
   const tickSeries = [
-    { label: 'avg', values: tick.history.map(t => t.avgMs), color: 'var(--graph-0)' },
+    {
+      label: 'avg',
+      values: tick.history.map(t => t.avgMs),
+      color: 'var(--graph-0)',
+    },
     { label: 'max', values: max, color: 'var(--graph-2)' },
   ]
-  legend($('tick-legend'), [...tickSeries, { label: 'budget', color: 'var(--warning)' }])
-  chart($('tick-chart'), tickSeries, { max: Math.max(tick.budgetMs * 1.25, ...max, 1), format: v => `${v.toFixed(0)}ms`, budget: tick.budgetMs })
+  legend($('tick-legend'), [
+    ...tickSeries,
+    { label: 'budget', color: 'var(--warning)' },
+  ])
+  chart($('tick-chart'), tickSeries, {
+    max: Math.max(tick.budgetMs * 1.25, ...max, 1),
+    format: v => `${v.toFixed(0)}ms`,
+    budget: tick.budgetMs,
+  })
   $('tick-meter').replaceChildren(meter('Budget', latest?.avgMs ?? 0, tick.budgetMs || 1, `${formatMs(latest?.avgMs ?? 0)} / ${formatMs(tick.budgetMs)}`))
   const ticksPerSecond = latest?.ticksPerSecond ?? 0
   values($('tick-values'), [
-    { label: 'Ticks/s', value: `${ticksPerSecond} / ${tickRate}`, cls: ticksPerSecond < tickRate * 0.9 ? 'danger' : undefined },
+    {
+      label: 'Ticks/s',
+      value: `${ticksPerSecond} / ${tickRate}`,
+      cls: ticksPerSecond < tickRate * 0.9
+        ? 'danger'
+        : undefined,
+    },
     { label: 'Commands/s', value: `${latest?.commandsPerSecond ?? 0} (max ${latest?.maxCommandsPerTick ?? 0}/tick)` },
   ])
 
@@ -349,12 +463,35 @@ function renderOverview(snapshot) {
 
   // World
   values($('world-values'), [
-    { label: 'Players', value: String(players.length), cls: 'primary' },
-    { label: 'Entities', value: String(world.entities) },
-    { label: 'Physics bodies', value: physics ? String(physics.bodies) : '—' },
-    { label: 'Colliders', value: physics ? String(physics.colliders) : '—' },
-    { label: 'RSS', value: formatBytes(memory.rss) },
-    { label: 'External', value: formatBytes(memory.external) },
+    {
+      label: 'Players',
+      value: String(players.length),
+      cls: 'primary',
+    },
+    {
+      label: 'Entities',
+      value: String(world.entities),
+    },
+    {
+      label: 'Physics bodies',
+      value: physics
+        ? String(physics.bodies)
+        : '—',
+    },
+    {
+      label: 'Colliders',
+      value: physics
+        ? String(physics.colliders)
+        : '—',
+    },
+    {
+      label: 'RSS',
+      value: formatBytes(memory.rss),
+    },
+    {
+      label: 'External',
+      value: formatBytes(memory.external),
+    },
   ])
   $('heap-meter').replaceChildren(meter('Heap', memory.heapUsed, memory.heapTotal || 1, `${formatBytes(memory.heapUsed)} / ${formatBytes(memory.heapTotal)}`))
 
@@ -374,9 +511,21 @@ function renderQueue(queue) {
 
   $('queue-title').textContent = queueTitle(queue)
   const series = [
-    { label: 'queued', values: queue.history.map(s => s.size), color: 'var(--graph-0)' },
-    { label: 'processed', values: queue.history.map(s => s.processed), color: 'var(--graph-1)' },
-    { label: 'failed', values: queue.history.map(s => s.failed), color: 'var(--danger)' },
+    {
+      label: 'queued',
+      values: queue.history.map(s => s.size),
+      color: 'var(--graph-0)',
+    },
+    {
+      label: 'processed',
+      values: queue.history.map(s => s.processed),
+      color: 'var(--graph-1)',
+    },
+    {
+      label: 'failed',
+      values: queue.history.map(s => s.failed),
+      color: 'var(--danger)',
+    },
   ]
   legend($('queue-legend'), series)
   chart($('queue-chart'), series, {
@@ -387,11 +536,30 @@ function renderQueue(queue) {
   const totals = queueTotals(queue)
   const window = queueWindow(queue)
   values($('queue-values'), [
-    { label: 'Queued', value: String(queue.latest?.size ?? 0), cls: 'primary' },
-    { label: 'Running', value: String(queue.latest?.running ?? 0) },
-    { label: `Processed ${window}`, value: String(totals.processed), cls: 'success' },
-    { label: `Retried ${window}`, value: String(totals.retried), cls: totals.retried ? 'warning' : undefined },
-    { label: `Failed ${window}`, value: String(totals.failed), cls: totals.failed ? 'danger' : undefined },
+    {
+      label: 'Queued',
+      value: String(queue.latest?.size ?? 0),
+      cls: 'primary',
+    },
+    {
+      label: 'Running',
+      value: String(queue.latest?.running ?? 0),
+    },
+    {
+      label: `Processed ${window}`,
+      value: String(totals.processed),
+      cls: 'success',
+    },
+    {
+      label: `Retried ${window}`,
+      value: String(totals.retried),
+      cls: totals.retried ? 'warning' : undefined,
+    },
+    {
+      label: `Failed ${window}`,
+      value: String(totals.failed),
+      cls: totals.failed ? 'danger' : undefined,
+    },
   ])
 }
 
@@ -401,22 +569,64 @@ function playersTable(players, selectable) {
     return el('p', { class: 'empty' }, 'No players connected')
 
   const columns = [
-    ...(showNames(rows) ? [{ title: 'Name', render: p => p.displayName }] : []),
-    { title: 'ID', render: p => p.id },
-    ...(showAccounts(rows) ? [{ title: 'Account', render: p => accountLabel(p.account), cls: p => p.account?.guest ? 'warning' : '' }] : []),
-    { title: 'X', num: true, render: p => p.position.x.toFixed(2) },
-    { title: 'Y', num: true, render: p => p.position.y.toFixed(2) },
-    { title: 'Z', num: true, render: p => p.position.z.toFixed(2) },
-    { title: 'Seq', num: true, render: p => String(p.lastProcessedSequenceId) },
-    { title: 'Tracked', num: true, render: p => String(p.trackedEntities) },
+    ...(showNames(rows)
+      ? [
+          {
+            title: 'Name',
+            render: p => p.displayName,
+          },
+        ]
+      : []),
+    {
+      title: 'ID',
+      render: p => p.id,
+    },
+    ...(showAccounts(rows)
+      ? [
+          {
+            title: 'Account',
+            render: p => accountLabel(p.account),
+            cls: p => p.account?.guest ? 'warning' : '',
+          },
+        ]
+      : []),
+    {
+      title: 'X',
+      num: true,
+      render: p => p.position.x.toFixed(2),
+    },
+    {
+      title: 'Y',
+      num: true,
+      render: p => p.position.y.toFixed(2),
+    },
+    {
+      title: 'Z',
+      num: true,
+      render: p => p.position.z.toFixed(2),
+    },
+    {
+      title: 'Seq',
+      num: true,
+      render: p => String(p.lastProcessedSequenceId),
+    },
+    {
+      title: 'Tracked',
+      num: true,
+      render: p => String(p.trackedEntities),
+    },
   ]
 
   return table(columns, rows, {
     rowAttrs: selectable
       ? p => ({
-        'class': `selectable${p.id === state.selectedPlayerId ? ' selected' : ''}`,
+        'class': `selectable${p.id === state.selectedPlayerId
+          ? ' selected'
+          : ''}`,
         'data-player': p.id,
-        'onclick': () => selectPlayer(p.id === state.selectedPlayerId ? null : p.id),
+        'onclick': () => selectPlayer(p.id === state.selectedPlayerId
+          ? null
+          : p.id),
       })
       : undefined,
   })
@@ -441,15 +651,54 @@ function renderPlayers(snapshot) {
   $('player-details-title').textContent = selected.displayName
   values($('player-details-values'), [
     { label: 'ID', value: selected.id },
-    { label: 'Account', value: selected.account ? `${accountLabel(selected.account)} · ${selected.account.id}` : 'none', cls: selected.account?.guest ? 'warning' : undefined },
-    { label: 'Connected', value: formatDuration(selected.connectedFor) },
-    { label: 'IP', value: connection ? connection.address ?? 'pending' : '—', cls: 'primary' },
-    { label: 'RTT', value: connection?.rttMs != null ? formatMs(connection.rttMs) : '—' },
-    { label: 'Sent', value: connection ? formatBytes(connection.bytesSent) : '—' },
-    { label: 'Received', value: connection ? formatBytes(connection.bytesReceived) : '—' },
-    { label: 'Position', value: [position.x, position.y, position.z].map(n => n.toFixed(2)).join(', ') },
-    { label: 'Last seq', value: String(selected.lastProcessedSequenceId) },
-    { label: 'Tracked', value: String(selected.trackedEntities) },
+    {
+      label: 'Account',
+      value: selected.account
+        ? `${accountLabel(selected.account)} · ${selected.account.id}`
+        : 'none',
+      cls: selected.account?.guest ? 'warning' : undefined,
+    },
+    {
+      label: 'Connected',
+      value: formatDuration(selected.connectedFor),
+    },
+    {
+      label: 'IP',
+      value: connection
+        ? connection.address ?? 'pending'
+        : '—',
+      cls: 'primary',
+    },
+    {
+      label: 'RTT',
+      value: connection?.rttMs != null
+        ? formatMs(connection.rttMs)
+        : '—',
+    },
+    {
+      label: 'Sent',
+      value: connection
+        ? formatBytes(connection.bytesSent)
+        : '—',
+    },
+    {
+      label: 'Received',
+      value: connection
+        ? formatBytes(connection.bytesReceived)
+        : '—',
+    },
+    {
+      label: 'Position',
+      value: [position.x, position.y, position.z].map(n => n.toFixed(2)).join(', '),
+    },
+    {
+      label: 'Last seq',
+      value: String(selected.lastProcessedSequenceId),
+    },
+    {
+      label: 'Tracked',
+      value: String(selected.trackedEntities),
+    },
   ])
   $('player-details-note').hidden = !!connection
 }
@@ -460,7 +709,15 @@ function selectPlayer(id) {
     renderPlayers(state.snapshot)
 }
 
-const LEVEL_CLASSES = { error: 'danger', warn: 'warning', info: 'primary', http: 'info', verbose: 'muted', debug: 'muted', silly: 'muted' }
+const LEVEL_CLASSES = {
+  error: 'danger',
+  warn: 'warning',
+  info: 'primary',
+  http: 'info',
+  verbose: 'muted',
+  debug: 'muted',
+  silly: 'muted',
+}
 
 function logLine(entry) {
   return el('div', { class: 'log-line' }, el('span', { class: 'muted' }, formatTime(entry.timestamp)), el('span', { class: LEVEL_CLASSES[entry.level.toLowerCase()] ?? '' }, entry.level.toUpperCase()), el('span', { class: 'log-message' }, trimMessage(entry.message)))
@@ -499,7 +756,11 @@ function renderRequests(added) {
   const container = $('requests')
   const rows = state.requests
   const errors = rows.filter(r => r.status === null || r.status >= 400).length
-  $('requests-title').textContent = `HTTP requests (${rows.length}${errors ? `, ${errors} error${errors === 1 ? '' : 's'}` : ''})`
+  $('requests-title').textContent = `HTTP requests (${rows.length}${errors
+    ? `, ${errors} error${errors === 1
+      ? ''
+      : 's'}`
+    : ''})`
 
   if (state.requestsAvailable === false) {
     container.replaceChildren(el('p', { class: 'empty' }, 'Not available: the server records no requests (metrics.requestLogSize is 0)'))
@@ -516,13 +777,46 @@ function renderRequests(added) {
   const scrolledFromTop = container.scrollTop
   const heightBefore = container.scrollHeight
   container.replaceChildren(table([
-    { title: 'Time', cls: () => 'muted', render: r => formatTime(r.timestamp) },
-    { title: 'Method', cls: r => (r.method === 'WS' ? 'primary' : ''), render: r => r.method },
-    { title: 'Status', num: true, cls: r => statusClass(r.status), render: r => (r.status === null ? '—' : String(r.status)) },
-    { title: 'Duration', num: true, render: r => formatMs(r.durationMs) },
-    { title: 'Size', num: true, render: r => formatBytes(r.bytes) },
-    { title: 'Client', cls: () => 'muted', render: r => r.address ?? '—' },
-    { title: 'Path', cls: () => 'path', render: r => r.path },
+    {
+      title: 'Time',
+      cls: () => 'muted',
+      render: r => formatTime(r.timestamp),
+    },
+    {
+      title: 'Method',
+      cls: r => (r.method === 'WS'
+        ? 'primary'
+        : ''),
+      render: r => r.method,
+    },
+    {
+      title: 'Status',
+      num: true,
+      cls: r => statusClass(r.status),
+      render: r => (r.status === null
+        ? '—'
+        : String(r.status)),
+    },
+    {
+      title: 'Duration',
+      num: true,
+      render: r => formatMs(r.durationMs),
+    },
+    {
+      title: 'Size',
+      num: true,
+      render: r => formatBytes(r.bytes),
+    },
+    {
+      title: 'Client',
+      cls: () => 'muted',
+      render: r => r.address ?? '—',
+    },
+    {
+      title: 'Path',
+      cls: () => 'path',
+      render: r => r.path,
+    },
   ], [...rows].reverse()))
   if (scrolledFromTop > 0)
     container.scrollTop = scrolledFromTop + (container.scrollHeight - heightBefore)

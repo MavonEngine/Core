@@ -22,7 +22,9 @@ interface Props {
 export default ({ title, children, defaultX, defaultY, defaultWidth = 400, defaultHeight = 300, minWidth = 280, minHeight = 200, storageKey, onClose }: Props) => {
   const [zIndex, setZIndex] = useState(() => ++topZ)
 
-  const storedSize = storageKey ? JSON.parse(localStorage.getItem(`window:${storageKey}`) ?? 'null') : null
+  const storedSize = storageKey
+    ? JSON.parse(localStorage.getItem(`window:${storageKey}`) ?? 'null')
+    : null
   const initWidth = storedSize?.width ?? defaultWidth
   const initHeight = storedSize?.height ?? defaultHeight
 

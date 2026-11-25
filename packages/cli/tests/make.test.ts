@@ -31,11 +31,25 @@ function io({ fail = false } = {}) {
   }
 }
 
-const options = (overrides = {}) => ({ cwd: dir, name: 'forest', target: 'both' as const, register: true, install: true, ...overrides })
+function options(overrides = {}) {
+  return {
+    cwd: dir,
+    name: 'forest',
+    target: 'both' as const,
+    register: true,
+    install: true,
+    ...overrides,
+  }
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'mavonengine-make-'))
-  write(join(dir, 'package.json'), `${JSON.stringify({ name: 'game', workspaces: ['client', 'server'], dependencies: { '@mavonengine/core': '0.0.25' }, scripts: { dev: 'mavonengine dev' } }, null, 2)}\n`)
+  write(join(dir, 'package.json'), `${JSON.stringify({
+    name: 'game',
+    workspaces: ['client', 'server'],
+    dependencies: { '@mavonengine/core': '0.0.25' },
+    scripts: { dev: 'mavonengine dev' },
+  }, null, 2)}\n`)
   write(join(dir, 'mavonengine.json'), '{ "plugins": {} }\n')
   write(join(dir, 'node_modules', '@mavonengine', 'core', 'package.json'), JSON.stringify({ name: '@mavonengine/core', version: '0.0.25' }))
 })
@@ -70,7 +84,12 @@ describe('writeScaffold', () => {
 describe('pluginFiles', () => {
   it('only has the entries of its target', () => {
     const server = pluginFiles({ name: 'forest', target: 'server' })
-    expect(Object.keys(server).sort()).toEqual(['README.md', 'package.json', 'src/server.ts', 'tsconfig.json'])
+    expect(Object.keys(server).sort()).toEqual([
+      'README.md',
+      'package.json',
+      'src/server.ts',
+      'tsconfig.json',
+    ])
     expect(JSON.parse(server['package.json']).mavonengine).toEqual({ target: 'server', server: './src/server.ts' })
 
     const both = pluginFiles({ name: '@acme/forest', target: 'both', engine: '>=0.0.25' })
@@ -78,7 +97,12 @@ describe('pluginFiles', () => {
       name: '@acme/forest',
       private: true,
       peerDependencies: { '@mavonengine/core': '>=0.0.25' },
-      mavonengine: { target: 'both', client: './src/client.ts', server: './src/server.ts', engine: '>=0.0.25' },
+      mavonengine: {
+        target: 'both',
+        client: './src/client.ts',
+        server: './src/server.ts',
+        engine: '>=0.0.25',
+      },
     })
     expect(both['src/server.ts']).toContain('\'/api/forest/status\'')
     expect(both['src/client.ts']).toContain('name: "Forest"')
@@ -114,9 +138,17 @@ describe('linkPlugin', () => {
     linkPlugin(dir, 'npm', 'forest', 'plugins/forest')
     expect(readJson(join(dir, 'package.json')).workspaces).toEqual(['plugins/*'])
 
-    write(join(dir, 'package.json'), JSON.stringify({ workspaces: { packages: ['client'], nohoist: ['x'] } }))
+    write(join(dir, 'package.json'), JSON.stringify({
+      workspaces: {
+        packages: ['client'],
+        nohoist: ['x'],
+      },
+    }))
     linkPlugin(dir, 'yarn', 'forest', 'plugins/forest')
-    expect(readJson(join(dir, 'package.json')).workspaces).toEqual({ packages: ['client', 'plugins/*'], nohoist: ['x'] })
+    expect(readJson(join(dir, 'package.json')).workspaces).toEqual({
+      packages: ['client', 'plugins/*'],
+      nohoist: ['x'],
+    })
   })
 
   it('gives pnpm a link: dependency', () => {
@@ -127,8 +159,21 @@ describe('linkPlugin', () => {
 
 describe('parseMakePluginArgs', () => {
   it('takes the name and flags', () => {
-    expect(parseMakePluginArgs(['@acme/forest', '--target', 'client', '--no-install', '--cwd', 'game'], '/home'))
-      .toEqual({ cwd: resolve('/home', 'game'), name: '@acme/forest', target: 'client', register: true, install: false })
+    expect(parseMakePluginArgs([
+      '@acme/forest',
+      '--target',
+      'client',
+      '--no-install',
+      '--cwd',
+      'game',
+    ], '/home'))
+      .toEqual({
+        cwd: resolve('/home', 'game'),
+        name: '@acme/forest',
+        target: 'client',
+        register: true,
+        install: false,
+      })
     expect(parseMakePluginArgs(['forest'], '/home')).toMatchObject({ target: 'both', register: true, install: true })
     expect(parseMakePluginArgs(['-h'])).toBe('help')
   })
@@ -147,13 +192,17 @@ describe('mavonengine make:plugin', () => {
     mkdirSync(join(dir, 'client', 'src'), { recursive: true })
     const out = io()
 
-    expect(await runMakePluginCommand(options({ cwd: join(dir, 'client', 'src') }), out)).toBe(0)
+    expect(await runMakePluginCommand(options({
+      cwd: join(dir, 'client', 'src'),
+    }), out)).toBe(0)
 
     const plugin = join(dir, 'plugins', 'forest')
     expect(readJson(join(plugin, 'package.json')).mavonengine.engine).toBe('>=0.0.25')
     expect(existsSync(join(plugin, 'src', 'client.ts'))).toBe(true)
     expect(readJson(join(dir, 'package.json')).workspaces).toContain('plugins/*')
-    expect(readJson(join(dir, 'mavonengine.json')).plugins).toEqual({ forest: { enabled: true } })
+    expect(readJson(join(dir, 'mavonengine.json')).plugins).toEqual({
+      forest: { enabled: true },
+    })
     expect(out.runs).toEqual([`npm install @ ${dir}`])
     expect(out.output()).toContain('created forest in plugins/forest/')
   })

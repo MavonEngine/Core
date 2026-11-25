@@ -18,7 +18,12 @@ export interface ChatBoxOptions {
 
 export type ChatPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
 
-const POSITIONS: ChatPosition[] = ['bottom-left', 'bottom-right', 'top-left', 'top-right']
+const POSITIONS: ChatPosition[] = [
+  'bottom-left',
+  'bottom-right',
+  'top-left',
+  'top-right',
+]
 
 const STYLE_ID = 'mavonengine-chat-style'
 
@@ -123,7 +128,9 @@ export default class ChatBox {
     }
 
     this.element = doc.createElement('div')
-    this.element.className = `mavonengine-chat ${POSITIONS.includes(position) ? position : 'bottom-left'}`
+    this.element.className = `mavonengine-chat ${POSITIONS.includes(position)
+      ? position
+      : 'bottom-left'}`
 
     this.log = doc.createElement('ul')
     this.log.className = 'mavonengine-chat-log'

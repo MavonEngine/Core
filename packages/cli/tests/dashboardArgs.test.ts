@@ -14,7 +14,12 @@ describe('parseDashboardArgs', () => {
   })
 
   it('builds the url from host and port', () => {
-    const options = parseDashboardArgs(['--host', 'game.example.com', '--port', '9000'], {})
+    const options = parseDashboardArgs([
+      '--host',
+      'game.example.com',
+      '--port',
+      '9000',
+    ], {})
 
     expect(options !== 'help' && options.source.label).toBe('http://game.example.com:9000/api/game/metrics')
   })
@@ -61,10 +66,18 @@ describe('parseDashboardArgs', () => {
   })
 
   it.each([
-    [['--port', '0']],
-    [['--port', 'abc']],
-    [['--interval', '10']],
-    [['--url', 'not a url']],
+    [
+      ['--port', '0'],
+    ],
+    [
+      ['--port', 'abc'],
+    ],
+    [
+      ['--interval', '10'],
+    ],
+    [
+      ['--url', 'not a url'],
+    ],
   ])('rejects %j', (args) => {
     expect(() => parseDashboardArgs(args, {})).toThrow(UsageError)
   })

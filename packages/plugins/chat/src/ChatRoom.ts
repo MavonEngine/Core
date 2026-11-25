@@ -34,18 +34,24 @@ const TRAILING_SLASHES_RE = /\/+$/
 const LEADING_SLASHES_RE = /^\/+/
 
 function positive(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : fallback
 }
 
 function atLeastZero(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : fallback
 }
 
 /**
  * Options from mavonengine.json, with the defaults filled in
  */
 export function resolveChatOptions(options: ChatOptions = {}): ResolvedChatOptions {
-  const path = `/${(typeof options.path === 'string' ? options.path : '/api/chat').replace(LEADING_SLASHES_RE, '').replace(TRAILING_SLASHES_RE, '')}`
+  const path = `/${(typeof options.path === 'string'
+    ? options.path
+    : '/api/chat').replace(LEADING_SLASHES_RE, '').replace(TRAILING_SLASHES_RE, '')}`
   return {
     maxLength: Math.floor(positive(options.maxLength, 200)),
     rateLimit: {
@@ -55,7 +61,9 @@ export function resolveChatOptions(options: ChatOptions = {}): ResolvedChatOptio
     history: Math.floor(atLeastZero(options.history, 50)),
     range: atLeastZero(options.range, 0),
     announce: options.announce !== false,
-    path: path === '/' ? '/api/chat' : path,
+    path: path === '/'
+      ? '/api/chat'
+      : path,
   }
 }
 
@@ -107,7 +115,11 @@ export default class ChatRoom {
    */
   say(sender: ChatSender, text: unknown): SayResult {
     const checked = this.check(sender, text)
-    return 'text' in checked ? { message: this.post(sender, checked.text) } : checked
+    return 'text' in checked
+      ? {
+          message: this.post(sender, checked.text),
+        }
+      : checked
   }
 
   /**
@@ -163,7 +175,12 @@ export default class ChatRoom {
   }
 
   private add(from: ChatSender | null, text: string, remember = true): ChatMessage {
-    const message: ChatMessage = { id: this.nextId++, from, text, at: this.now() }
+    const message: ChatMessage = {
+      id: this.nextId++,
+      from,
+      text,
+      at: this.now(),
+    }
 
     if (remember && this.options.history > 0) {
       this.messages.push(message)
@@ -184,9 +201,17 @@ export default class ChatRoom {
    * mute of `kind` account, which holds when it connects again, or the id of its connection, which doesn't.
    */
   mute(playerId: string, minutes?: number, kind: Mute['kind'] = 'connection'): Mute {
-    const until = typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0 ? this.now() + minutes * 60_000 : Infinity
+    const until = typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0
+      ? this.now() + minutes * 60_000
+      : Infinity
     this.mutes.set(playerId, { until, kind })
-    return { playerId, kind, until: until === Infinity ? null : until }
+    return {
+      playerId,
+      kind,
+      until: until === Infinity
+        ? null
+        : until,
+    }
   }
 
   /**
@@ -218,14 +243,20 @@ export default class ChatRoom {
       return undefined
     }
 
-    return until === Infinity ? null : until
+    return until === Infinity
+      ? null
+      : until
   }
 
   /** The mutes that are still on */
   listMutes(): Mute[] {
     return [...this.mutes].flatMap(([playerId, { kind }]) => {
       const until = this.mutedUntil(playerId)
-      return until === undefined ? [] : [{ playerId, kind, until }]
+      return until === undefined
+        ? []
+        : [
+            { playerId, kind, until },
+          ]
     })
   }
 

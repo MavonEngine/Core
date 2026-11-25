@@ -56,22 +56,33 @@ interface Ghost {
  */
 export function ghostState(view: ServerEntityView, newestTick: number | null, sync?: SyncSnapshot, viewAs?: string | null): GhostState {
   if (sync) {
-    const player = viewAs ? sync.players.find(p => p.id === viewAs) : undefined
-    if (player)
-      return player.id === view.id || player.tracked.includes(view.id) ? 'synced' : 'untracked'
+    const player = viewAs
+      ? sync.players.find(p => p.id === viewAs)
+      : undefined
+    if (player) {
+      return player.id === view.id || player.tracked.includes(view.id)
+        ? 'synced'
+        : 'untracked'
+    }
 
     const entity = sync.entities.find(e => e.id === view.id)
     if (entity && !entity.player && entity.trackedBy === 0 && sync.players.length > 0)
       return 'untracked'
   }
 
-  return newestTick !== null && newestTick - view.tick > 1 ? 'stale' : 'synced'
+  return newestTick !== null && newestTick - view.tick > 1
+    ? 'stale'
+    : 'synced'
 }
 
 function loadOptions(): NetworkOverlayOptions {
   const defaults: NetworkOverlayOptions = { ghosts: false, rings: false, viewAs: null }
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'), viewAs: null }
+    return {
+      ...defaults,
+      ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
+      viewAs: null,
+    }
   }
   catch {
     return defaults
@@ -135,7 +146,10 @@ export default class NetworkOverlay extends EventEmitter {
   }
 
   setOptions(options: Partial<NetworkOverlayOptions>) {
-    this._options = { ...this._options, ...options }
+    this._options = {
+      ...this._options,
+      ...options,
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ghosts: this._options.ghosts, rings: this._options.rings }))
     }
@@ -200,7 +214,9 @@ export default class NetworkOverlay extends EventEmitter {
       ghost.box.scale.set(entity.scale.x, entity.scale.y * 2, entity.scale.z)
       ghost.box.material = this.materials[ghostState(entity, view!.tick, sync, this._options.viewAs)]
 
-      const off = rendered ? rendered.position.distanceTo(ghost.box.position) : 0
+      const off = rendered
+        ? rendered.position.distanceTo(ghost.box.position)
+        : 0
       ghost.error.visible = off > ERROR_EPSILON
       if (ghost.error.visible) {
         const positions = ghost.error.geometry.getAttribute('position')
@@ -236,7 +252,9 @@ export default class NetworkOverlay extends EventEmitter {
 
   private updateRings() {
     const { sync } = this.sync.get()
-    const players = this._options.rings && sync?.syncDistance ? sync.players : []
+    const players = this._options.rings && sync?.syncDistance
+      ? sync.players
+      : []
     const seen = new Set<string>()
 
     for (const player of players) {
@@ -251,7 +269,9 @@ export default class NetworkOverlay extends EventEmitter {
 
       ring.position.set(player.position.x, player.position.y + 0.05, player.position.z)
       ring.scale.setScalar(sync!.syncDistance!)
-      ring.material = player.id === this._options.viewAs ? this.ringSelectedMaterial : this.ringMaterial
+      ring.material = player.id === this._options.viewAs
+        ? this.ringSelectedMaterial
+        : this.ringMaterial
     }
 
     for (const [id, ring] of this.rings) {
@@ -285,7 +305,13 @@ export default class NetworkOverlay extends EventEmitter {
 
 /** Drawn over the scene, so a ghost inside a mesh or behind a wall still shows */
 function overlayMaterial(color: number) {
-  return new LineBasicMaterial({ color, depthTest: false, depthWrite: false, transparent: true, toneMapped: false })
+  return new LineBasicMaterial({
+    color,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    toneMapped: false,
+  })
 }
 
 /** The overlay is never selected by a click in the viewport */

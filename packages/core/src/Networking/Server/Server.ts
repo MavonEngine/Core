@@ -194,7 +194,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
    * The last packets and network events, for the dev tools (GET /api/game/dev/net/*).
    * Records outside production only; set `net.enabled` to change that.
    */
-  readonly net = new NetRecorder({ enabled: devEndpointsEnabled() })
+  readonly net = new NetRecorder({
+    enabled: devEndpointsEnabled(),
+  })
 
   /** Number of the tick being simulated. Stamped on every sv_state, so clients and tools can tell them apart */
   tickCount = 0
@@ -263,7 +265,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game.world = new ServerWorld()
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
-    this.gameSocket = geckos({ authorization: (authorization, request) => this.authorizeConnection(authorization, request) })
+    this.gameSocket = geckos({
+      authorization: (authorization, request) => this.authorizeConnection(authorization, request),
+    })
     this.logger = logger
     this.options = options ?? {}
     this.queue = new Queue(logger, this.options.queue)
@@ -294,7 +298,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.gameSocket.onConnection((channel) => {
       const identity = identityOf(channel)
-      this.logger.info(`Connected: ${channel.id}${identity ? ` as ${identity.name ?? identity.id} (${identity.id})` : ''}`)
+      this.logger.info(`Connected: ${channel.id}${identity
+        ? ` as ${identity.name ?? identity.id} (${identity.id})`
+        : ''}`)
 
       // Before anything is sent or listened to, so the game's own messages are recorded too
       this.tapChannel(channel)
@@ -448,7 +454,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     if (typeof channel.onDrop === 'function') {
       channel.onDrop((drop) => {
-        this.net.event('dropped', { peer, info: { reason: (drop as { reason?: string }).reason, message: drop.event } })
+        this.net.event('dropped', {
+          peer,
+          info: { reason: (drop as { reason?: string }).reason, message: drop.event },
+        })
       })
     }
 
@@ -476,7 +485,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.gameSocket.connectionsManager.connections.forEach((con, id) => {
       if (this.editorChannels.has(id!)) {
-        this.sendState(con.channel, [...this.game.world.entities.items.values()].filter(entity => this.isSynced(entity)), null)
+        this.sendState(con.channel, [
+          ...this.game.world.entities.items.values(),
+        ].filter(entity => this.isSynced(entity)), null)
         return
       }
 
@@ -489,7 +500,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       // Create a temporary set of entities that should be tracked for this player in this tick
       const currentTickTrackedEntities = new Set<string>()
       // Copied, because entities out of range are deleted from the player's set below
-      const previouslyTracked = this.net.enabled ? new Set(player.trackedEntities) : undefined
+      const previouslyTracked = this.net.enabled
+        ? new Set(player.trackedEntities)
+        : undefined
 
       this.game.world.entities.items.forEach((entity) => {
         if (!this.isSynced(entity))
@@ -546,10 +559,26 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const entered = [...now].filter(id => !before.has(id))
     const left = [...before].filter(id => !now.has(id))
 
-    if (entered.length)
-      this.net.event('sync_enter', { peer, tick: this.tickCount, info: { count: entered.length, entities: entered.slice(0, MAX_SYNC_EVENT_IDS) } })
-    if (left.length)
-      this.net.event('sync_leave', { peer, tick: this.tickCount, info: { count: left.length, entities: left.slice(0, MAX_SYNC_EVENT_IDS) } })
+    if (entered.length) {
+      this.net.event('sync_enter', {
+        peer,
+        tick: this.tickCount,
+        info: {
+          count: entered.length,
+          entities: entered.slice(0, MAX_SYNC_EVENT_IDS),
+        },
+      })
+    }
+    if (left.length) {
+      this.net.event('sync_leave', {
+        peer,
+        tick: this.tickCount,
+        info: {
+          count: left.length,
+          entities: left.slice(0, MAX_SYNC_EVENT_IDS),
+        },
+      })
+    }
   }
 
   /**
@@ -571,7 +600,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       const json = JSON.stringify(state)
       // The tap on the channel records the packet when it is really sent, after any simulated latency
       rememberJson(state, json)
-      this.lastStates.set(channel.id!, { tick: state.tick, bytes: Buffer.byteLength(json), entities: entities.length })
+      this.lastStates.set(channel.id!, {
+        tick: state.tick,
+        bytes: Buffer.byteLength(json),
+        entities: entities.length,
+      })
       for (const entity of entities)
         this.lastSentTick.set(entity.id, state.tick)
     }
@@ -606,7 +639,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       // The game's server doesn't implement it
     }
 
-    const entities = [...world.entities.items.values()].filter(entity => this.isSynced(entity))
+    const entities = [
+      ...world.entities.items.values(),
+    ].filter(entity => this.isSynced(entity))
 
     // Forget entities that left the world
     const ids = new Set(entities.map(entity => entity.id))
@@ -654,7 +689,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     // the whole map. The editor only runs in dev, so a production server ignores the request
     if (!devEndpointsEnabled()) {
       const identity = identityOf(channel)
-      this.logger.warn(`${id}${identity ? ` (${identity.name ?? identity.id})` : ''} asked to attach the editor, which a production server doesn't allow: ignored`)
+      this.logger.warn(`${id}${identity
+        ? ` (${identity.name ?? identity.id})`
+        : ''} asked to attach the editor, which a production server doesn't allow: ignored`)
       this.net.event('editor_refused', { peer: id })
       return
     }
@@ -764,7 +801,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   /** Packages of the project's plugins, to tell whose a table in the database is */
   databasePlugins(): string[] {
-    return [...this.pluginInfos().map(info => info.package), QUEUE_PACKAGE]
+    return [
+      ...this.pluginInfos().map(info => info.package),
+      QUEUE_PACKAGE,
+    ]
   }
 
   /**
@@ -826,7 +866,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       },
       publishedFile: (path) => {
         const root = this.projectRoot
-        return root ? publishedFile(root, loaded.package, path) : undefined
+        return root
+          ? publishedFile(root, loaded.package, path)
+          : undefined
       },
       requireAdmin: this.http.requireAdmin,
       adminToken: this.http.adminToken,
@@ -1045,7 +1087,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     try {
       const value = readConfig(root)[key]
-      return typeof value === 'string' && value ? value : undefined
+      return typeof value === 'string' && value
+        ? value
+        : undefined
     }
     catch {
       // An unreadable mavonengine.json was already reported when the plugins were loaded
@@ -1176,7 +1220,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     const root = this.projectRoot
     if (root) {
       try {
-        infos = pluginInfos(root, { readme: false }).map(({ readme: _readme, ...info }) => ({ ...info, runningOnServer: running.has(info.package) }))
+        infos = pluginInfos(root, { readme: false }).map(({ readme: _readme, ...info }) => ({
+          ...info,
+          runningOnServer: running.has(info.package),
+        }))
       }
       catch (err) {
         this.logger.warn(`Could not read the project's plugins: ${(err as Error).message}`)
@@ -1185,8 +1232,17 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     const listed = new Set(infos.map(info => info.package))
     for (const pkg of running) {
-      if (!listed.has(pkg))
-        infos.push({ package: pkg, enabled: true, installed: true, target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true })
+      if (!listed.has(pkg)) {
+        infos.push({
+          package: pkg,
+          enabled: true,
+          installed: true,
+          target: 'server',
+          declaredPrefabs: [],
+          usedPrefabs: [],
+          runningOnServer: true,
+        })
+      }
     }
 
     const database = this.databaseProvider
@@ -1205,7 +1261,9 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
   get projectRoot(): string | undefined {
     const plugins = this.options.plugins
-    return this.options.root ?? (plugins && !Array.isArray(plugins) ? plugins.root : undefined)
+    return this.options.root ?? (plugins && !Array.isArray(plugins)
+      ? plugins.root
+      : undefined)
   }
 
   /**

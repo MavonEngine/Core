@@ -16,7 +16,9 @@ let root: string
 
 function write(path: string, content: unknown) {
   mkdirSync(dirname(join(root, path)), { recursive: true })
-  writeFileSync(join(root, path), typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`)
+  writeFileSync(join(root, path), typeof content === 'string'
+    ? content
+    : `${JSON.stringify(content, null, 2)}\n`)
 }
 
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
@@ -37,19 +39,42 @@ function project(pkg: Record<string, unknown> = {}) {
   })
   installed('@mavonengine/core', '0.0.25')
   installed('@mavonengine/cli', '0.0.6')
-  installed('@mavonengine/chat', '0.1.0', { mavonengine: { target: 'server', server: 'server.js', engine: '>=0.0.22' } })
+  installed('@mavonengine/chat', '0.1.0', {
+    mavonengine: { target: 'server', server: 'server.js', engine: '>=0.0.22' },
+  })
   write('node_modules/@mavonengine/chat/server.js', '')
-  write('mavonengine.json', { plugins: { '@mavonengine/chat': {} } })
+  write('mavonengine.json', {
+    plugins: { '@mavonengine/chat': {} },
+  })
 }
 
-const engine = (range: string) => ({ mavonengine: { target: 'server', engine: range } })
+function engine(range: string) {
+  return {
+    mavonengine: { target: 'server', engine: range },
+  }
+}
 
 const REGISTRY = {
-  '@mavonengine/core': { latest: '0.0.27', versions: { '0.0.25': {}, '0.0.26': {}, '0.0.27': {}, '0.0.28-beta': {} } },
-  '@mavonengine/cli': { latest: '0.0.8', versions: { '0.0.6': {}, '0.0.8': {} } },
+  '@mavonengine/core': {
+    latest: '0.0.27',
+    versions: {
+      '0.0.25': {},
+      '0.0.26': {},
+      '0.0.27': {},
+      '0.0.28-beta': {},
+    },
+  },
+  '@mavonengine/cli': {
+    latest: '0.0.8',
+    versions: { '0.0.6': {}, '0.0.8': {} },
+  },
   '@mavonengine/chat': {
     latest: '0.3.0',
-    versions: { '0.1.0': engine('>=0.0.22'), '0.2.0': engine('>=0.0.26'), '0.3.0': engine('>=0.0.28') },
+    versions: {
+      '0.1.0': engine('>=0.0.22'),
+      '0.2.0': engine('>=0.0.26'),
+      '0.3.0': engine('>=0.0.28'),
+    },
   },
 } as Record<string, { latest: string, versions: Record<string, Record<string, unknown>> }>
 
@@ -58,17 +83,33 @@ function registry(packages = REGISTRY) {
     const name = decodeURIComponent(String(url).split('/').at(-1)!)
     const pkg = packages[name]
     return pkg
-      ? new Response(JSON.stringify({ 'name': name, 'dist-tags': { latest: pkg.latest }, 'versions': pkg.versions }))
+      ? new Response(JSON.stringify({
+          'name': name,
+          'dist-tags': { latest: pkg.latest },
+          'versions': pkg.versions,
+        }))
       : new Response('{}', { status: 404 })
   })
 }
 
 function npm(packages = REGISTRY) {
-  return new NpmRegistry({ url: 'https://registry.example.com', fetch: registry(packages) })
+  return new NpmRegistry({
+    url: 'https://registry.example.com',
+    fetch: registry(packages),
+  })
 }
 
 function options(extra: Partial<UpgradeOptions> = {}): UpgradeOptions {
-  return { cwd: root, onlyMigrations: false, dryRun: false, yes: true, force: false, allowDirty: false, registry: 'https://registry.example.com', ...extra }
+  return {
+    cwd: root,
+    onlyMigrations: false,
+    dryRun: false,
+    yes: true,
+    force: false,
+    allowDirty: false,
+    registry: 'https://registry.example.com',
+    ...extra,
+  }
 }
 
 function io(extra: Partial<UpgradeIO> = {}) {
@@ -83,7 +124,11 @@ function io(extra: Partial<UpgradeIO> = {}) {
     fetch: registry(),
     ...extra,
   }
-  return { io: value, runs, output: () => output }
+  return {
+    io: value,
+    runs,
+    output: () => output,
+  }
 }
 
 beforeEach(() => {
@@ -101,11 +146,35 @@ describe('the upgrade plan', () => {
     const plan = await planUpgrade(root, readJson('package.json'), npm())
 
     expect(plan.core).toEqual({ from: '0.0.25', to: '0.0.27' })
-    expect(plan.bumps.map(b => [b.name, b.installed, b.to, b.exact, b.field])).toEqual([
-      ['@mavonengine/core', '0.0.25', '0.0.27', true, 'dependencies'],
+    expect(plan.bumps.map(b => [
+      b.name,
+      b.installed,
+      b.to,
+      b.exact,
+      b.field,
+    ])).toEqual([
+      [
+        '@mavonengine/core',
+        '0.0.25',
+        '0.0.27',
+        true,
+        'dependencies',
+      ],
       // 0.3.0 needs core 0.0.28
-      ['@mavonengine/chat', '0.1.0', '0.2.0', false, 'dependencies'],
-      ['@mavonengine/cli', '0.0.6', '0.0.8', true, 'devDependencies'],
+      [
+        '@mavonengine/chat',
+        '0.1.0',
+        '0.2.0',
+        false,
+        'dependencies',
+      ],
+      [
+        '@mavonengine/cli',
+        '0.0.6',
+        '0.0.8',
+        true,
+        'devDependencies',
+      ],
     ])
   })
 
@@ -121,7 +190,15 @@ describe('the upgrade plan', () => {
   it('blocks on a plugin with no version for the new core', async () => {
     project()
 
-    const plan = await planUpgrade(root, readJson('package.json'), npm({ ...REGISTRY, '@mavonengine/chat': { latest: '0.1.0', versions: { '0.1.0': engine('<0.0.26') } } }))
+    const plan = await planUpgrade(root, readJson('package.json'), npm({
+      ...REGISTRY,
+      '@mavonengine/chat': {
+        latest: '0.1.0',
+        versions: {
+          '0.1.0': engine('<0.0.26'),
+        },
+      },
+    }))
 
     expect(plan.bumps.find(b => b.name === '@mavonengine/chat')).toMatchObject({ blocked: true, note: 'no published version supports @mavonengine/core 0.0.27' })
   })
@@ -144,10 +221,31 @@ describe('the upgrade plan', () => {
   })
 
   it('installs each package where package.json has it, pinned when it is pinned', () => {
-    const bump = (name: string, to: string | undefined, field: 'dependencies' | 'devDependencies', exact: boolean) => ({ name, to, field, exact, spec: '', plugin: false })
-    const bumps = [bump('a', '1.0.0', 'dependencies', true), bump('b', '2.0.0', 'dependencies', false), bump('c', '3.0.0', 'devDependencies', true), bump('d', undefined, 'dependencies', true)]
+    const bump = (name: string, to: string | undefined, field: 'dependencies' | 'devDependencies', exact: boolean) => ({
+      name,
+      to,
+      field,
+      exact,
+      spec: '',
+      plugin: false,
+    })
+    const bumps = [
+      bump('a', '1.0.0', 'dependencies', true),
+      bump('b', '2.0.0', 'dependencies', false),
+      bump('c', '3.0.0', 'devDependencies', true),
+      bump('d', undefined, 'dependencies', true),
+    ]
 
-    expect(installCommands('npm', bumps)).toEqual([['install', 'a@1.0.0', '--save-exact'], ['install', 'b@2.0.0'], ['install', 'c@3.0.0', '--save-dev', '--save-exact']])
+    expect(installCommands('npm', bumps)).toEqual([
+      ['install', 'a@1.0.0', '--save-exact'],
+      ['install', 'b@2.0.0'],
+      [
+        'install',
+        'c@3.0.0',
+        '--save-dev',
+        '--save-exact',
+      ],
+    ])
     expect(installCommands('yarn', bumps)[2]).toEqual(['add', 'c@3.0.0', '--dev', '--exact'])
   })
 })
@@ -157,7 +255,16 @@ describe('the diff', () => {
     const before = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].join('\n')
     const after = ['a', 'b', 'c', 'd', 'E', 'f', 'g', 'h'].join('\n')
 
-    expect(lineDiff(before, after)).toEqual(['  …', '  c', '  d', '- e', '+ E', '  f', '  g', '  …'])
+    expect(lineDiff(before, after)).toEqual([
+      '  …',
+      '  c',
+      '  d',
+      '- e',
+      '+ E',
+      '  f',
+      '  g',
+      '  …',
+    ])
     expect(lineDiff(undefined, 'x\ny\n')).toEqual(['+ x', '+ y'])
   })
 })
@@ -184,9 +291,32 @@ describe('the migrations it runs', () => {
 
 describe('mavonengine upgrade', () => {
   it('takes its options', () => {
-    expect(parseUpgradeArgs([], root, {})).toEqual({ cwd: root, to: undefined, onlyMigrations: false, dryRun: false, yes: false, force: false, allowDirty: false, registry: 'https://registry.npmjs.org' })
-    expect(parseUpgradeArgs(['--to', '0.0.26', '-y', '--dry-run', '--force', '--allow-dirty'], root, { npm_config_registry: 'https://npm.example.com' }))
-      .toMatchObject({ to: '0.0.26', yes: true, dryRun: true, force: true, allowDirty: true, registry: 'https://npm.example.com' })
+    expect(parseUpgradeArgs([], root, {})).toEqual({
+      cwd: root,
+      to: undefined,
+      onlyMigrations: false,
+      dryRun: false,
+      yes: false,
+      force: false,
+      allowDirty: false,
+      registry: 'https://registry.npmjs.org',
+    })
+    expect(parseUpgradeArgs([
+      '--to',
+      '0.0.26',
+      '-y',
+      '--dry-run',
+      '--force',
+      '--allow-dirty',
+    ], root, { npm_config_registry: 'https://npm.example.com' }))
+      .toMatchObject({
+        to: '0.0.26',
+        yes: true,
+        dryRun: true,
+        force: true,
+        allowDirty: true,
+        registry: 'https://npm.example.com',
+      })
     expect(parseUpgradeArgs(['--only-migrations'], root, {})).toMatchObject({ onlyMigrations: true })
     expect(() => parseUpgradeArgs(['--to', 'latest'])).toThrow(UsageError)
     expect(() => parseUpgradeArgs(['--to', '0.0.26', '--only-migrations'])).toThrow(UsageError)
@@ -212,18 +342,30 @@ describe('mavonengine upgrade', () => {
 
   it('refuses to start with uncommitted changes', async () => {
     project()
-    const { io: upgradeIO, runs, output } = io({ gitStatus: () => ' M src/game.ts\n' })
+    const { io: upgradeIO, runs, output } = io({
+      gitStatus: () => ' M src/game.ts\n',
+    })
 
     expect(await runUpgradeCommand(options(), upgradeIO)).toBe(1)
     expect(output()).toContain('M src/game.ts')
     expect(runs).toEqual([])
 
-    expect(await runUpgradeCommand(options({ allowDirty: true }), io({ gitStatus: () => ' M x' }).io)).toBe(0)
+    expect(await runUpgradeCommand(options({ allowDirty: true }), io({
+      gitStatus: () => ' M x',
+    }).io)).toBe(0)
   })
 
   it('stops when a plugin would stop working, unless forced', async () => {
     project()
-    const fetch = registry({ ...REGISTRY, '@mavonengine/chat': { latest: '0.1.0', versions: { '0.1.0': engine('<0.0.26') } } })
+    const fetch = registry({
+      ...REGISTRY,
+      '@mavonengine/chat': {
+        latest: '0.1.0',
+        versions: {
+          '0.1.0': engine('<0.0.26'),
+        },
+      },
+    })
 
     const blocked = io({ fetch })
     expect(await runUpgradeCommand(options(), blocked.io)).toBe(1)
@@ -236,7 +378,10 @@ describe('mavonengine upgrade', () => {
   })
 
   it('shows the migrations, writes them when told to, and installs what they add', async () => {
-    project({ scripts: { dev: 'npm run dev --prefix server' }, devDependencies: {} })
+    project({
+      scripts: { dev: 'npm run dev --prefix server' },
+      devDependencies: {},
+    })
     // What `npm install` leaves for the @mavonengine/cli the migration adds, which the fake install doesn't
     installed('@mavonengine/cli', cliVersion)
     write('client/index.html', '<title>My Game</title>\n')
@@ -249,14 +394,19 @@ describe('mavonengine upgrade', () => {
     expect(output()).toContain('+ <title>%MAVONENGINE_APP_NAME%</title>')
     expect(readJson('package.json').scripts).toEqual({ 'dev': 'mavonengine dev', 'dev:server': 'npm run dev --prefix server' })
     expect(readJson('package.json').devDependencies).toEqual({ '@mavonengine/cli': cliVersion })
-    expect(readJson('mavonengine.json')).toMatchObject({ appName: 'My Game', migrations: ['0.0.22-dev-script', '0.0.25-app-name-title'] })
+    expect(readJson('mavonengine.json')).toMatchObject({
+      appName: 'My Game',
+      migrations: ['0.0.22-dev-script', '0.0.25-app-name-title'],
+    })
     // The migration added @mavonengine/cli
     expect(runs).toEqual(['npm install'])
     expect(code).toBe(0)
 
     // Done: doctor has nothing pending, and running again changes nothing
     const report = await runDoctor(root, { offline: true, registry: '' })
-    expect(report.findings.filter(f => f.group === 'Migrations')).toEqual([expect.objectContaining({ level: 'ok', label: 'none pending' })])
+    expect(report.findings.filter(f => f.group === 'Migrations')).toEqual([
+      expect.objectContaining({ level: 'ok', label: 'none pending' }),
+    ])
     const again = io()
     await runUpgradeCommand(options({ onlyMigrations: true }), again.io)
     expect(again.output()).toContain('none pending')
@@ -264,9 +414,13 @@ describe('mavonengine upgrade', () => {
   })
 
   it('changes nothing on a dry run', async () => {
-    project({ scripts: { dev: 'npm run dev --prefix server' } })
+    project({
+      scripts: { dev: 'npm run dev --prefix server' },
+    })
     const before = read('package.json')
-    const { io: upgradeIO, runs, output } = io({ gitStatus: () => ' M dirty' })
+    const { io: upgradeIO, runs, output } = io({
+      gitStatus: () => ' M dirty',
+    })
 
     expect(await runUpgradeCommand(options({ dryRun: true, yes: false }), upgradeIO)).toBe(0)
 
@@ -279,9 +433,13 @@ describe('mavonengine upgrade', () => {
   })
 
   it('asks first, and without a terminal needs --yes', async () => {
-    project({ scripts: { dev: 'npm run dev --prefix server' } })
+    project({
+      scripts: { dev: 'npm run dev --prefix server' },
+    })
 
-    const declined = io({ confirm: vi.fn(async () => false) })
+    const declined = io({
+      confirm: vi.fn(async () => false),
+    })
     expect(await runUpgradeCommand(options({ yes: false, onlyMigrations: true }), declined.io)).toBe(1)
     expect(declined.io.confirm).toHaveBeenCalledWith(expect.stringContaining('Write these 2 changes?'))
     expect(readJson('package.json').scripts.dev).toBe('npm run dev --prefix server')
@@ -294,9 +452,11 @@ describe('mavonengine upgrade', () => {
 
   it('says so when the registry can\'t be reached', async () => {
     project()
-    const { io: upgradeIO, output } = io({ fetch: vi.fn(async () => {
-      throw new Error('getaddrinfo ENOTFOUND')
-    }) })
+    const { io: upgradeIO, output } = io({
+      fetch: vi.fn(async () => {
+        throw new Error('getaddrinfo ENOTFOUND')
+      }),
+    })
 
     expect(await runUpgradeCommand(options(), upgradeIO)).toBe(1)
     expect(output()).toContain('Can\'t plan the upgrade: can\'t reach https://registry.example.com')

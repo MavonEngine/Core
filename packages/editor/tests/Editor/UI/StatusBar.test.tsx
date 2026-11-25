@@ -5,16 +5,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import StatusBar from '../../../src/Editor/UI/StatusBar'
 
 vi.mock('../../../src/Editor/UI/StatusBar.module.css', () => ({
-  default: new Proxy({}, { get: (_, key) => String(key) }),
+  default: new Proxy({}, {
+    get: (_, key) => String(key),
+  }),
 }))
 vi.mock('../../../src/Editor/UI/useSceneStats', () => ({
-  useSceneStats: () => ({ fps: 60, triangles: 0, drawCalls: 0, objects: 0, materials: 0, textures: 0 }),
+  useSceneStats: () => ({
+    fps: 60,
+    triangles: 0,
+    drawCalls: 0,
+    objects: 0,
+    materials: 0,
+    textures: 0,
+  }),
 }))
-vi.mock('../../../src/Editor/UI/Controllers/useGamepads', () => ({ useGamepads: () => [] }))
+vi.mock('../../../src/Editor/UI/Controllers/useGamepads', () => ({
+  useGamepads: () => [],
+}))
 
 beforeEach(() => {
   vi.useFakeTimers()
-  ;(window as any).Game = { network: { connected: false, connectError: null } }
+  ;(window as any).Game = {
+    network: { connected: false, connectError: null },
+  }
 })
 
 afterEach(() => {

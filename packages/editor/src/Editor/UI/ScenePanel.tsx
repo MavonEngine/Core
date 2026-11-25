@@ -26,7 +26,15 @@ function useSceneRefresh(): GameScene | undefined {
 
   useEffect(() => {
     const editor = window.Game.editor
-    const events = ['sceneChanged', 'sceneSaved', 'sceneSaving', 'sceneSaveFailed', 'objectSelected', 'objectDeselected', 'assetDropped']
+    const events = [
+      'sceneChanged',
+      'sceneSaved',
+      'sceneSaving',
+      'sceneSaveFailed',
+      'objectSelected',
+      'objectDeselected',
+      'assetDropped',
+    ]
     events.forEach(event => editor?.on(event, refresh))
     const timer = setInterval(refresh, 500)
     return () => {
@@ -65,7 +73,9 @@ export default function ScenePanel() {
   const sceneObjects = new Set(entries.map(entry => entry.object).filter(Boolean))
   const live = [...window.Game.world.entities.items].filter(([, object]) => !sceneObjects.has(object) && !object.garbageCollect)
   const dirty = scene.isDirty()
-  const activeItem = window.Game.editor && 'activeItem' in window.Game.editor ? window.Game.editor.activeItem as Object3D | null : null
+  const activeItem = window.Game.editor && 'activeItem' in window.Game.editor
+    ? window.Game.editor.activeItem as Object3D | null
+    : null
   const selectedId = scene.entryOfObject3D(activeItem)?.data.id
 
   return (
@@ -99,7 +109,9 @@ export default function ScenePanel() {
           entry={entry}
           selected={entry.data.id === selectedId}
           expanded={expanded === entry.data.id}
-          onToggle={() => setExpanded(expanded === entry.data.id ? null : entry.data.id)}
+          onToggle={() => setExpanded(expanded === entry.data.id
+            ? null
+            : entry.data.id)}
         />
       ))}
 
@@ -113,7 +125,9 @@ export default function ScenePanel() {
         return (
           <div
             key={id}
-            className={`${styles.row} ${styles.liveRow} ${target && target === activeItem ? styles.selected : ''}`}
+            className={`${styles.row} ${styles.liveRow} ${target && target === activeItem
+              ? styles.selected
+              : ''}`}
             onClick={() => target && window.Game.editor?.selectObject(target)}
             title={target ? 'Select' : 'Has no object to select'}
           >
@@ -135,7 +149,9 @@ function SceneRow({ scene, entry, selected, expanded, onToggle }: { scene: GameS
     <>
       <div
         className={`${styles.row} ${selected ? styles.selected : ''}`}
-        onClick={() => (target ? window.Game.editor?.selectObject(target) : onToggle())}
+        onClick={() => (target
+          ? window.Game.editor?.selectObject(target)
+          : onToggle())}
       >
         <span
           className={styles.arrow}
@@ -252,13 +268,35 @@ function SceneSettings({ scene }: { scene: GameScene }) {
         <div className={styles.details}>
           <label className={styles.field}>
             <span>background</span>
-            <input type="checkbox" checked={!!background} onChange={e => scene.setSettings({ background: e.target.checked ? '#87ceeb' : undefined })} />
+            <input
+              type="checkbox"
+              checked={!!background}
+              onChange={e => scene.setSettings({
+                background: e.target.checked ? '#87ceeb' : undefined,
+              })}
+            />
             {background && <input type="color" value={background} onChange={e => scene.setSettings({ background: e.target.value })} />}
           </label>
           <label className={styles.field}>
             <span>fog</span>
-            <input type="checkbox" checked={!!fog} onChange={e => scene.setSettings({ fog: e.target.checked ? { color: background ?? '#ffffff', density: 0.01 } : undefined })} />
-            {fog && <input type="color" value={fog.color} onChange={e => scene.setSettings({ fog: { ...fog, color: e.target.value } })} />}
+            <input
+              type="checkbox"
+              checked={!!fog}
+              onChange={e => scene.setSettings({
+                fog: e.target.checked
+                  ? { color: background ?? '#ffffff', density: 0.01 }
+                  : undefined,
+              })}
+            />
+            {fog && (
+              <input
+                type="color"
+                value={fog.color}
+                onChange={e => scene.setSettings({
+                  fog: { ...fog, color: e.target.value },
+                })}
+              />
+            )}
           </label>
           {fog && (
             <label className={styles.field}>
@@ -269,7 +307,9 @@ function SceneSettings({ scene }: { scene: GameScene }) {
                 min="0"
                 defaultValue={fog.density}
                 onKeyDown={stop}
-                onBlur={e => scene.setSettings({ fog: { ...fog, density: Number.parseFloat(e.target.value) || 0 } })}
+                onBlur={e => scene.setSettings({
+                  fog: { ...fog, density: Number.parseFloat(e.target.value) || 0 },
+                })}
               />
             </label>
           )}

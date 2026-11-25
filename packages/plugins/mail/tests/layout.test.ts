@@ -53,7 +53,12 @@ describe('the default layout', () => {
   it('has the mail\'s content once, outside its comment', () => {
     const layout = readFileSync(DEFAULT_LAYOUT_PATH, 'utf8')
     expect(layout).toContain('{{{ content }}}')
-    const html = renderLayout(layout, { content: 'UNIQUE-CONTENT', subject: 'S', appName: 'Game', year: '2026' })
+    const html = renderLayout(layout, {
+      content: 'UNIQUE-CONTENT',
+      subject: 'S',
+      appName: 'Game',
+      year: '2026',
+    })
     expect(html.split('UNIQUE-CONTENT')).toHaveLength(2)
   })
 })
@@ -73,7 +78,11 @@ describe('mail in the layout', () => {
   })
 
   function start(options: Record<string, unknown> = {}, published?: string, appName?: string) {
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
     const queue = new Queue(logger)
     queues.push(queue)
     const ctx = {
@@ -81,7 +90,9 @@ describe('mail in the layout', () => {
       logger,
       server: {},
       queue,
-      publishedFile: (path: string) => path === 'layout.html' ? published : undefined,
+      publishedFile: (path: string) => path === 'layout.html'
+        ? published
+        : undefined,
       appUrl: 'https://game.example.com',
       appName,
     } as unknown as ServerPluginContext
@@ -92,7 +103,9 @@ describe('mail in the layout', () => {
   }
 
   it('sends html in the plugin\'s layout, with the subject, preheader, game name and year', async () => {
-    const { api, memory } = start({ layoutData: { footer: 'You play Space Game & <friends>.' } })
+    const { api, memory } = start({
+      layoutData: { footer: 'You play Space Game & <friends>.' },
+    })
     await api.to('a@example.com').send(new Welcome('<Ada>'))
 
     const html = memory.sent[0].html!
@@ -122,7 +135,12 @@ describe('mail in the layout', () => {
     }
     const plain = start()
     await plain.api.to('a@example.com').send(new Plain('Ada'))
-    await plain.api.send({ to: 'a@example.com', subject: 'Hi', text: 'Only text', layout: false })
+    await plain.api.send({
+      to: 'a@example.com',
+      subject: 'Hi',
+      text: 'Only text',
+      layout: false,
+    })
     expect(plain.memory.sent[0].html).toBe('<p>Hi <b>Ada</b></p>')
     expect(plain.memory.sent[1]).not.toHaveProperty('html')
 
@@ -169,7 +187,12 @@ describe('mail in the layout', () => {
 
 describe('htmlToLogText', () => {
   it('keeps the words of a mail in the layout, without its head, comments and markup', () => {
-    const html = renderLayout(readFileSync(DEFAULT_LAYOUT_PATH, 'utf8'), { content: '<p>Hello &amp; welcome</p><p>Bye</p>', subject: 'S', appName: 'Game', year: '2026' })
+    const html = renderLayout(readFileSync(DEFAULT_LAYOUT_PATH, 'utf8'), {
+      content: '<p>Hello &amp; welcome</p><p>Bye</p>',
+      subject: 'S',
+      appName: 'Game',
+      year: '2026',
+    })
     expect(htmlToLogText(html)).toBe('Game\nHello & welcome\nBye\n© 2026 Game')
   })
 })

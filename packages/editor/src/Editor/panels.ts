@@ -16,7 +16,9 @@ const listeners = new Set<() => void>()
 let snapshot: EditorPanelDefinition[] = []
 
 function changed() {
-  snapshot = [...panels.values()]
+  snapshot = [
+    ...panels.values(),
+  ]
   listeners.forEach(listener => listener())
 }
 

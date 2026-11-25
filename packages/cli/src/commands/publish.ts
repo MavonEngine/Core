@@ -50,10 +50,16 @@ export function parsePublishArgs(args: string[], cwd = process.cwd()): PublishOp
   if (positionals.length === 0)
     throw new UsageError(`name the plugin to publish, e.g. mavonengine asset:publish @mavonengine/mail\n\n${PUBLISH_HELP}`)
 
-  return { cwd: resolve(cwd, values.cwd ?? '.'), packages: positionals, force: values.force }
+  return {
+    cwd: resolve(cwd, values.cwd ?? '.'),
+    packages: positionals,
+    force: values.force,
+  }
 }
 
-export async function runPublishCommand(options: PublishOptions, io: PublishIO = { write: text => void process.stdout.write(text) }): Promise<number> {
+export async function runPublishCommand(options: PublishOptions, io: PublishIO = {
+  write: text => void process.stdout.write(text),
+}): Promise<number> {
   const root = findProjectRoot(options.cwd)
   if (!root) {
     io.write(`No MavonEngine project found from ${options.cwd}. Run this inside one.\n`)
@@ -86,7 +92,9 @@ export async function runPublishCommand(options: PublishOptions, io: PublishIO =
       io.write(`${pkg}:\n`)
       for (const file of files) {
         const shown = relative(root, file.to).split('\\').join('/')
-        io.write(file.status === 'kept' ? `  kept       ${shown} (you have it already, --force replaces it)\n` : `  ${file.status.padEnd(10)} ${shown}\n`)
+        io.write(file.status === 'kept'
+          ? `  kept       ${shown} (you have it already, --force replaces it)\n`
+          : `  ${file.status.padEnd(10)} ${shown}\n`)
       }
       if (files.length === 0)
         io.write('  nothing to publish\n')

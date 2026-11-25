@@ -15,7 +15,9 @@ const mockGeckosOnConnection = vi.fn()
 
 const mockGeckosServer = {
   onConnection: mockGeckosOnConnection,
-  connectionsManager: { connections: new Map() as Map<string, any> },
+  connectionsManager: {
+    connections: new Map() as Map<string, any>,
+  },
   emit: vi.fn(),
 }
 
@@ -192,7 +194,9 @@ describe('server', () => {
 
     const onCommand = vi.fn()
     ;(server as any).onCommand = onCommand
-    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'gone' }]
+    ;(server as any).commandBuffer = [
+      { sequenceId: 1, playerId: 'gone' },
+    ]
 
     expect(() => (server as any).runThroughBuffer()).not.toThrow()
     expect(onCommand).not.toHaveBeenCalled()
@@ -205,7 +209,9 @@ describe('server', () => {
     player.updateLastProcessedSequenceId(10)
     server.game.world.entities.items.set('p1', player)
 
-    ;(server as any).commandBuffer = [{ sequenceId: 4, playerId: 'p1' }]
+    ;(server as any).commandBuffer = [
+      { sequenceId: 4, playerId: 'p1' },
+    ]
     ;(server as any).runThroughBuffer()
 
     expect(player.lastProcessedSequenceId).toBe(10)
@@ -235,14 +241,18 @@ describe('server', () => {
     server.game.world.entities.items.set('p1', new TestClient('p1'))
     server.getStateSyncDistance = () => 100
 
-    ;(server as any).commandBuffer = [{ sequenceId: 1, playerId: 'p1' }]
+    ;(server as any).commandBuffer = [
+      { sequenceId: 1, playerId: 'p1' },
+    ]
     server.game.tick()
 
     expect(server.metrics.tick.sample()).toMatchObject({ ticks: 1, maxCommandsPerTick: 1 })
   })
 
   it('exposes the latency simulation config to metrics', () => {
-    const server = new TestServer(logger, undefined, { latencySimulation: { fixedLatency: 20 } })
+    const server = new TestServer(logger, undefined, {
+      latencySimulation: { fixedLatency: 20 },
+    })
 
     expect(server.metrics.snapshot().latencySimulation).toEqual({ fixedLatency: 20, jitter: 0, packetLoss: 0 })
   })
@@ -263,7 +273,9 @@ describe('server', () => {
   })
 
   it('moves the game socket onto the HTTP server when it serves the client', () => {
-    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+    const server = new TestServer(logger, undefined, {
+      client: { root: '/game/client' },
+    })
     const nodeServer = {}
 
     const listen = vi.fn()
@@ -282,7 +294,10 @@ describe('server', () => {
   })
 
   it('still opens the socket port when asked to while serving the client', () => {
-    const server = new TestServer(logger, undefined, { client: { root: '/game/client' }, socketPort: 9001 })
+    const server = new TestServer(logger, undefined, {
+      client: { root: '/game/client' },
+      socketPort: 9001,
+    })
 
     const listen = vi.fn()
     ;(server.gameSocket as any).listen = listen
@@ -298,7 +313,9 @@ describe('server', () => {
   })
 
   it('falls back to port 8081 when the client is configured but not built', () => {
-    const server = new TestServer(logger, undefined, { client: { root: '/game/client' } })
+    const server = new TestServer(logger, undefined, {
+      client: { root: '/game/client' },
+    })
 
     const listen = vi.fn()
     ;(server.gameSocket as any).listen = listen
@@ -340,11 +357,13 @@ describe('server', () => {
     it('runs setup, then plugin routes after onHttp and before the client', async () => {
       const order: string[] = []
       const server = startable(new TestServer(logger, undefined, {
-        plugins: [{
-          name: 'routes',
-          setup: ctx => order.push(`setup:${ctx.package}:${ctx.server === server}`),
-          http: (app, ctx) => order.push(`http:${app === ctx.server.httpServer}`),
-        }],
+        plugins: [
+          {
+            name: 'routes',
+            setup: ctx => order.push(`setup:${ctx.package}:${ctx.server === server}`),
+            http: (app, ctx) => order.push(`http:${app === ctx.server.httpServer}`),
+          },
+        ],
       }))
       server.onHttp(() => order.push('onHttp'))
       vi.spyOn(server.http, 'serveClient').mockImplementation(() => {
@@ -355,14 +374,25 @@ describe('server', () => {
       await server.start()
       server.stop()
 
-      expect(order).toEqual(['setup:routes:true', 'onHttp', 'http:true', 'client'])
+      expect(order).toEqual([
+        'setup:routes:true',
+        'onHttp',
+        'http:true',
+        'client',
+      ])
     })
 
     it('tells the routes of each plugin apart from the game\'s and the engine\'s', async () => {
       const handler = (_req: unknown, res: { end(): void }) => res.end()
       const server = startable(new TestServer(logger, undefined, {
         plugins: [
-          { package: '@acme/chat', options: {}, plugin: { http: app => void app.get('/chat', handler) } },
+          {
+            package: '@acme/chat',
+            options: {},
+            plugin: {
+              http: app => void app.get('/chat', handler),
+            },
+          },
           {
             package: 'shop',
             options: {},
@@ -380,22 +410,55 @@ describe('server', () => {
 
       const routes = server.http.routes.list().map(({ method, path, source, plugin }) => ({ method, path, source, plugin }))
       expect(routes.filter(route => route.source !== 'engine')).toEqual([
-        { method: 'GET', path: '/shop/early', source: 'plugin', plugin: 'shop' },
-        { method: 'GET', path: '/api/scores', source: 'game', plugin: undefined },
-        { method: 'GET', path: '/chat', source: 'plugin', plugin: '@acme/chat' },
-        { method: 'POST', path: '/shop', source: 'plugin', plugin: 'shop' },
+        {
+          method: 'GET',
+          path: '/shop/early',
+          source: 'plugin',
+          plugin: 'shop',
+        },
+        {
+          method: 'GET',
+          path: '/api/scores',
+          source: 'game',
+          plugin: undefined,
+        },
+        {
+          method: 'GET',
+          path: '/chat',
+          source: 'plugin',
+          plugin: '@acme/chat',
+        },
+        {
+          method: 'POST',
+          path: '/shop',
+          source: 'plugin',
+          plugin: 'shop',
+        },
       ])
       expect(routes.some(route => route.source === 'engine' && route.path === '/api/game/routes')).toBe(true)
     })
 
     it('gives plugins the server\'s admin guard, with the token from the options or the environment', async () => {
       const contexts: any[] = []
-      const fromOptions = startable(new TestServer(logger, undefined, { adminToken: 'from-options', plugins: [{ setup: ctx => void contexts.push(ctx) }] }))
+      const fromOptions = startable(new TestServer(logger, undefined, {
+        adminToken: 'from-options',
+        plugins: [
+          {
+            setup: ctx => void contexts.push(ctx),
+          },
+        ],
+      }))
       await fromOptions.start()
       fromOptions.stop()
 
       vi.stubEnv('MAVONENGINE_ADMIN_TOKEN', 'from-env')
-      const fromEnv = startable(new TestServer(logger, undefined, { plugins: [{ setup: ctx => void contexts.push(ctx) }] }))
+      const fromEnv = startable(new TestServer(logger, undefined, {
+        plugins: [
+          {
+            setup: ctx => void contexts.push(ctx),
+          },
+        ],
+      }))
       await fromEnv.start()
       fromEnv.stop()
       vi.unstubAllEnvs()
@@ -407,7 +470,13 @@ describe('server', () => {
 
       const allowed = (guard: any, token: string) => {
         const next = vi.fn()
-        guard({ headers: { authorization: `Bearer ${token}` }, socket: { remoteAddress: '203.0.113.9' } }, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next)
+        guard({
+          headers: { authorization: `Bearer ${token}` },
+          socket: { remoteAddress: '203.0.113.9' },
+        }, {
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        }, next)
         return next.mock.calls.length === 1
       }
       expect(allowed(contexts[0].requireAdmin, 'from-options')).toBe(true)
@@ -418,24 +487,41 @@ describe('server', () => {
     it('passes the options of loaded plugins to their context', async () => {
       const setup = vi.fn()
       const server = startable(new TestServer(logger, undefined, {
-        plugins: [{ package: 'forest', options: { density: 2 }, plugin: { setup } }],
+        plugins: [
+          {
+            package: 'forest',
+            options: { density: 2 },
+            plugin: { setup },
+          },
+        ],
       }))
 
       await server.start()
       server.stop()
 
-      expect(setup.mock.calls[0][0]).toMatchObject({ package: 'forest', options: { density: 2 } })
+      expect(setup.mock.calls[0][0]).toMatchObject({
+        package: 'forest',
+        options: { density: 2 },
+      })
     })
 
     it('ticks plugins with the server and tells them about connections', () => {
       const tick = vi.fn()
       const onConnection = vi.fn()
       const onDisconnect = vi.fn()
-      const server = startable(new TestServer(logger, undefined, { plugins: [{ tick, onConnection, onDisconnect }] }))
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [
+          { tick, onConnection, onDisconnect },
+        ],
+      }))
       server.start()
 
       let disconnect = () => {}
-      const channel = { id: 'p1', on: vi.fn(), onDisconnect: (cb: () => void) => (disconnect = cb) }
+      const channel = {
+        id: 'p1',
+        on: vi.fn(),
+        onDisconnect: (cb: () => void) => (disconnect = cb),
+      }
       mockGeckosOnConnection.mock.calls[0][0](channel)
       server.game.update(0.1)
       disconnect()
@@ -449,9 +535,27 @@ describe('server', () => {
     it('lists the project\'s plugins and says which of them it runs', async () => {
       const root = tempProject()
       installPlugin(root, 'probe', { target: 'server', server: './server.js' }, { 'server.js': 'export default {}', 'README.md': '# Probe' })
-      installPlugin(root, 'hud', { target: 'client', client: './client.js', assets: { prefabs: { Bar: ['bar.png'] } } }, { 'client.js': 'export default {}' })
-      writeConfig(root, { plugins: { probe: {}, hud: { prefabs: ['Bar'] }, gone: { enabled: false } } })
-      const server = startable(new TestServer(logger, undefined, { plugins: { root } }))
+      installPlugin(root, 'hud', {
+        target: 'client',
+        client: './client.js',
+        assets: {
+          prefabs: {
+            Bar: ['bar.png'],
+          },
+        },
+      }, { 'client.js': 'export default {}' })
+      writeConfig(root, {
+        plugins: {
+          probe: {},
+          hud: {
+            prefabs: ['Bar'],
+          },
+          gone: { enabled: false },
+        },
+      })
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: { root },
+      }))
 
       await server.start()
       const infos = server.pluginInfos()
@@ -459,20 +563,54 @@ describe('server', () => {
       rmSync(root, { recursive: true, force: true })
 
       expect(infos).toEqual([
-        { package: 'probe', enabled: true, installed: true, version: '1.0.0', target: 'server', declaredPrefabs: [], usedPrefabs: [], runningOnServer: true },
-        { package: 'hud', enabled: true, installed: true, version: '1.0.0', target: 'client', declaredPrefabs: ['Bar'], usedPrefabs: ['Bar'], runningOnServer: false },
-        { package: 'gone', enabled: false, installed: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [], runningOnServer: false },
+        {
+          package: 'probe',
+          enabled: true,
+          installed: true,
+          version: '1.0.0',
+          target: 'server',
+          declaredPrefabs: [],
+          usedPrefabs: [],
+          runningOnServer: true,
+        },
+        {
+          package: 'hud',
+          enabled: true,
+          installed: true,
+          version: '1.0.0',
+          target: 'client',
+          declaredPrefabs: ['Bar'],
+          usedPrefabs: ['Bar'],
+          runningOnServer: false,
+        },
+        {
+          package: 'gone',
+          enabled: false,
+          installed: false,
+          problem: 'Listed in mavonengine.json but not installed',
+          declaredPrefabs: [],
+          usedPrefabs: [],
+          runningOnServer: false,
+        },
       ])
     })
 
     it('lists plugins that were passed to it directly', async () => {
-      const server = startable(new TestServer(logger, undefined, { plugins: [{ name: 'inline' }, { package: 'forest', options: {}, plugin: {} }] }))
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [
+          { name: 'inline' },
+          { package: 'forest', options: {}, plugin: {} },
+        ],
+      }))
 
       await server.start()
       const infos = server.pluginInfos()
       server.stop()
 
-      expect(infos.map(info => [info.package, info.runningOnServer])).toEqual([['inline', true], ['forest', true]])
+      expect(infos.map(info => [info.package, info.runningOnServer])).toEqual([
+        ['inline', true],
+        ['forest', true],
+      ])
       // Nothing runs anymore
       expect(server.pluginInfos()).toEqual([])
     })
@@ -482,8 +620,12 @@ describe('server', () => {
       installPlugin(root, 'probe', { target: 'server', server: './server.js' }, {
         'server.js': 'export default { setup(ctx) { globalThis.probeRoot = ctx.projectRoot } }',
       })
-      writeConfig(root, { plugins: { probe: {} } })
-      const server = startable(new TestServer(logger, undefined, { plugins: { root } }))
+      writeConfig(root, {
+        plugins: { probe: {} },
+      })
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: { root },
+      }))
 
       await server.start()
       server.stop()
@@ -494,7 +636,11 @@ describe('server', () => {
 
     it('destroys plugins when it stops', () => {
       const destroy = vi.fn()
-      const server = startable(new TestServer(logger, undefined, { plugins: [{ destroy }] }))
+      const server = startable(new TestServer(logger, undefined, {
+        plugins: [
+          { destroy },
+        ],
+      }))
 
       server.start()
       server.stop()
@@ -515,7 +661,9 @@ describe('server', () => {
 
   it('does not capture logs when logBufferSize is 0', () => {
     const logger = winston.createLogger({ transports: [] })
-    const server = new TestServer(logger, undefined, { metrics: { logBufferSize: 0 } })
+    const server = new TestServer(logger, undefined, {
+      metrics: { logBufferSize: 0 },
+    })
 
     expect(server.logs).toBeUndefined()
     expect(logger.transports).toHaveLength(0)
@@ -523,12 +671,16 @@ describe('server', () => {
 
   it('records HTTP requests unless requestLogSize is 0', () => {
     expect(new TestServer(logger).requests).toBeDefined()
-    expect(new TestServer(logger, undefined, { metrics: { requestLogSize: 0 } }).requests).toBeUndefined()
+    expect(new TestServer(logger, undefined, {
+      metrics: { requestLogSize: 0 },
+    }).requests).toBeUndefined()
   })
 
   describe('periodic stats logging', () => {
     function startServer() {
-      const server = new TestServer(logger, undefined, { metrics: { logIntervalMs: 1000 } })
+      const server = new TestServer(logger, undefined, {
+        metrics: { logIntervalMs: 1000 },
+      })
       ;(server.gameSocket as any).listen = vi.fn()
       vi.spyOn(server.http, 'start').mockImplementation(() => {})
 
@@ -576,15 +728,30 @@ describe('server', () => {
     function connect(id: string, counters: { sent: number, received: number }) {
       const handlers: Record<string, (...args: any[]) => void> = {}
       let disconnect = () => {}
-      const peerConnection = { bytesSent: () => counters.sent, bytesReceived: () => counters.received }
-      const channel = { id, emit: vi.fn(), on: (event: string, cb: () => void) => (handlers[event] = cb), onDisconnect: (cb: () => void) => (disconnect = cb), webrtcConnection: { peerConnection } }
+      const peerConnection = {
+        bytesSent: () => counters.sent,
+        bytesReceived: () => counters.received,
+      }
+      const channel = {
+        id,
+        emit: vi.fn(),
+        on: (event: string, cb: () => void) => (handlers[event] = cb),
+        onDisconnect: (cb: () => void) => (disconnect = cb),
+        webrtcConnection: { peerConnection },
+      }
       mockGeckosOnConnection.mock.calls[0][0](channel)
       mockGeckosServer.connectionsManager.connections.set(id, { channel })
-      return { channel, handlers, disconnect: () => disconnect() }
+      return {
+        channel,
+        handlers,
+        disconnect: () => disconnect(),
+      }
     }
 
     function startServer() {
-      const server = new TestServer(logger, undefined, { metrics: { sampleIntervalMs: 1000 } })
+      const server = new TestServer(logger, undefined, {
+        metrics: { sampleIntervalMs: 1000 },
+      })
       ;(server.gameSocket as any).listen = vi.fn()
       vi.spyOn(server.http, 'start').mockImplementation(() => {})
       vi.spyOn(server.metrics.cpu, 'sample').mockImplementation(() => undefined as any)
@@ -643,7 +810,12 @@ describe('server', () => {
         throw new Error('closed')
       }
       // Without a WebRTC connection, like a mocked channel
-      mockGeckosServer.connectionsManager.connections.set('p2', { channel: { id: 'p2', emit: vi.fn() } })
+      mockGeckosServer.connectionsManager.connections.set('p2', {
+        channel: {
+          id: 'p2',
+          emit: vi.fn(),
+        },
+      })
 
       vi.advanceTimersByTime(1000)
       server.stop()
@@ -658,7 +830,17 @@ describe('server', () => {
       const toJSON = vi.fn(() => player.serialize())
       ;(player as any).toJSON = toJSON
       server.game.world.entities.items.set('p1', player)
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', { channel: { id: 'p1', emit: vi.fn() } }]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        [
+          'p1',
+          {
+            channel: {
+              id: 'p1',
+              emit: vi.fn(),
+            },
+          },
+        ],
+      ])
 
       server.net.enabled = false
       ;(server as any).stateSync()
@@ -676,10 +858,19 @@ describe('server', () => {
       const handlers: Record<string, (...args: any[]) => void> = {}
       let disconnect = () => {}
       const emit = vi.fn()
-      const channel = { id, emit, on: (event: string, cb: () => void) => (handlers[event] = cb), onDisconnect: (cb: () => void) => (disconnect = cb) }
+      const channel = {
+        id,
+        emit,
+        on: (event: string, cb: () => void) => (handlers[event] = cb),
+        onDisconnect: (cb: () => void) => (disconnect = cb),
+      }
       mockGeckosOnConnection.mock.calls[0][0](channel)
       mockGeckosServer.connectionsManager.connections.set(id, { channel })
-      return { channel, handlers, disconnect: () => disconnect() }
+      return {
+        channel,
+        handlers,
+        disconnect: () => disconnect(),
+      }
     }
 
     afterEach(() => {
@@ -772,7 +963,12 @@ describe('server', () => {
       }
       mockGeckosOnConnection.mock.calls[0][0](channel)
       mockGeckosServer.connectionsManager.connections.set(id, { channel })
-      return { channel, sent, handlers, drop: (reason: string, event: string) => drop({ reason, event }) }
+      return {
+        channel,
+        sent,
+        handlers,
+        drop: (reason: string, event: string) => drop({ reason, event }),
+      }
     }
 
     afterEach(() => {
@@ -822,20 +1018,103 @@ describe('server', () => {
       drop('DROPPED_FROM_BUFFERING', 'sv_state')
       handlers.disconnect()
 
-      const records = server.net.list().records.map(({ kind, direction, type, peer, tick, sequenceId, info }) => ({ kind, direction, type, peer, tick, sequenceId, info }))
+      const records = server.net.list().records.map(({ kind, direction, type, peer, tick, sequenceId, info }) => ({
+        kind,
+        direction,
+        type,
+        peer,
+        tick,
+        sequenceId,
+        info,
+      }))
       expect(records).toEqual([
-        { kind: 'event', direction: undefined, type: 'connect', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
-        { kind: 'packet', direction: 'in', type: 'command', peer: 'p1', tick: undefined, sequenceId: 3, info: { command: 'cl_move' } },
-        { kind: 'packet', direction: 'in', type: 'ping', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
-        { kind: 'packet', direction: 'out', type: 'pong', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
-        { kind: 'event', direction: undefined, type: 'sync_enter', peer: 'p1', tick: 1, sequenceId: undefined, info: { count: 1, entities: ['p1'] } },
-        { kind: 'packet', direction: 'out', type: 'sv_state', peer: 'p1', tick: 1, sequenceId: undefined, info: { entities: 1, ack: 3 } },
-        { kind: 'event', direction: undefined, type: 'dropped', peer: 'p1', tick: undefined, sequenceId: undefined, info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' } },
-        { kind: 'event', direction: undefined, type: 'disconnect', peer: 'p1', tick: undefined, sequenceId: undefined, info: undefined },
+        {
+          kind: 'event',
+          direction: undefined,
+          type: 'connect',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: undefined,
+          info: undefined,
+        },
+        {
+          kind: 'packet',
+          direction: 'in',
+          type: 'command',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: 3,
+          info: { command: 'cl_move' },
+        },
+        {
+          kind: 'packet',
+          direction: 'in',
+          type: 'ping',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: undefined,
+          info: undefined,
+        },
+        {
+          kind: 'packet',
+          direction: 'out',
+          type: 'pong',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: undefined,
+          info: undefined,
+        },
+        {
+          kind: 'event',
+          direction: undefined,
+          type: 'sync_enter',
+          peer: 'p1',
+          tick: 1,
+          sequenceId: undefined,
+          info: {
+            count: 1,
+            entities: ['p1'],
+          },
+        },
+        {
+          kind: 'packet',
+          direction: 'out',
+          type: 'sv_state',
+          peer: 'p1',
+          tick: 1,
+          sequenceId: undefined,
+          info: { entities: 1, ack: 3 },
+        },
+        {
+          kind: 'event',
+          direction: undefined,
+          type: 'dropped',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: undefined,
+          info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' },
+        },
+        {
+          kind: 'event',
+          direction: undefined,
+          type: 'disconnect',
+          peer: 'p1',
+          tick: undefined,
+          sequenceId: undefined,
+          info: undefined,
+        },
       ])
 
       const state = server.net.list({ type: 'sv_state' }).records[0]
-      expect(server.net.get(state.id)).toMatchObject({ payload: { tick: 1, ack: 3, entities: [{ id: 'p1' }] } })
+      expect(server.net.get(state.id)).toMatchObject({
+        payload: {
+          tick: 1,
+          ack: 3,
+          entities: [
+            { id: 'p1' },
+          ],
+        },
+      })
       expect(state.bytes).toBe(JSON.stringify(server.net.get(state.id)!.payload).length)
     })
 
@@ -851,8 +1130,24 @@ describe('server', () => {
       server.game.update(0.1)
 
       expect(server.net.list({ kind: 'event', type: 'sync_enter,sync_leave' }).records).toMatchObject([
-        { type: 'sync_enter', peer: 'p1', tick: 1, info: { count: 2, entities: ['p1', 'rock'] } },
-        { type: 'sync_leave', peer: 'p1', tick: 2, info: { count: 1, entities: ['rock'] } },
+        {
+          type: 'sync_enter',
+          peer: 'p1',
+          tick: 1,
+          info: {
+            count: 2,
+            entities: ['p1', 'rock'],
+          },
+        },
+        {
+          type: 'sync_leave',
+          peer: 'p1',
+          tick: 2,
+          info: {
+            count: 1,
+            entities: ['rock'],
+          },
+        },
       ])
     })
 
@@ -869,23 +1164,59 @@ describe('server', () => {
       server.game.update(0.1)
       const sync = server.syncSnapshot()
 
-      expect(sync).toMatchObject({ tick: 1, tickRate: server.game.tickRate, syncDistance: 10, editors: [] })
+      expect(sync).toMatchObject({
+        tick: 1,
+        tickRate: server.game.tickRate,
+        syncDistance: 10,
+        editors: [],
+      })
       expect(sync.players).toHaveLength(3)
-      expect(sync.players[0]).toMatchObject({ id: 'p1', ack: 0, tracked: ['p1', 'near'], lastState: { tick: 1, entities: 2 }, account: null })
+      expect(sync.players[0]).toMatchObject({
+        id: 'p1',
+        ack: 0,
+        tracked: ['p1', 'near'],
+        lastState: { tick: 1, entities: 2 },
+        account: null,
+      })
       expect(sync.players[0].lastState!.bytes).toBeGreaterThan(0)
       // near and far are players without a connection here, so they track what is around them but are sent nothing
       expect(sync.players[2]).toMatchObject({ id: 'far', lastState: null })
 
-      expect(sync.entities.map(({ id, trackedBy, lastSentTick, position }) => ({ id, trackedBy, lastSentTick, x: position.x }))).toEqual([
-        { id: 'p1', trackedBy: 1, lastSentTick: 1, x: 0 },
-        { id: 'near', trackedBy: 1, lastSentTick: 1, x: 5 },
-        { id: 'far', trackedBy: 0, lastSentTick: null, x: 500 },
+      expect(sync.entities.map(({ id, trackedBy, lastSentTick, position }) => ({
+        id,
+        trackedBy,
+        lastSentTick,
+        x: position.x,
+      }))).toEqual([
+        {
+          id: 'p1',
+          trackedBy: 1,
+          lastSentTick: 1,
+          x: 0,
+        },
+        {
+          id: 'near',
+          trackedBy: 1,
+          lastSentTick: 1,
+          x: 5,
+        },
+        {
+          id: 'far',
+          trackedBy: 0,
+          lastSentTick: null,
+          x: 500,
+        },
       ])
     })
 
     it('tells when the game\'s server has no sync distance', () => {
       const server = new TestServer(logger)
-      expect(server.syncSnapshot()).toMatchObject({ tick: 0, syncDistance: null, players: [], entities: [] })
+      expect(server.syncSnapshot()).toMatchObject({
+        tick: 0,
+        syncDistance: null,
+        players: [],
+        entities: [],
+      })
     })
 
     it('records nothing in production', () => {
@@ -912,12 +1243,21 @@ describe('server', () => {
     let root: string
     beforeEach(() => {
       root = tempProject()
-      registerSceneObject({ type: 'Crate', server: () => new Crate() })
+      registerSceneObject({
+        type: 'Crate',
+        server: () => new Crate(),
+      })
       writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({
         version: 1,
         name: 'main',
         objects: [
-          { id: 'crate', type: 'Crate', transform: { position: [1, 2, 3] } },
+          {
+            id: 'crate',
+            type: 'Crate',
+            transform: {
+              position: [1, 2, 3],
+            },
+          },
           { id: 'light', type: 'Light:AmbientLight' },
         ],
       }))
@@ -948,11 +1288,17 @@ describe('server', () => {
       const loaded = vi.fn()
       server.game.on('sceneLoaded', loaded)
 
-      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({ objects: [{ id: 'crate2', type: 'Crate' }] }))
+      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({
+        objects: [
+          { id: 'crate2', type: 'Crate' },
+        ],
+      }))
 
       await vi.waitFor(() => expect(loaded).toHaveBeenCalled(), { timeout: 3000 })
       server.stop()
-      expect([...server.game.world.entities.items.keys()]).toEqual(['crate2'])
+      expect([
+        ...server.game.world.entities.items.keys(),
+      ]).toEqual(['crate2'])
     })
 
     it('keeps the current scene when the changed file is invalid', async () => {
@@ -972,7 +1318,14 @@ describe('server', () => {
       server.getStateSyncDistance = () => 100
       server.openScene('main', { watch: false })
       const emit = vi.fn()
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', { channel: { emit } }]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        [
+          'p1',
+          {
+            channel: { emit },
+          },
+        ],
+      ])
       server.game.world.entities.items.set('p1', new TestClient('p1'))
 
       ;(server as any).stateSync()
@@ -1036,7 +1389,9 @@ describe('server', () => {
       server.getStateSyncDistance = () => 10
 
       const conn = makeConnection('p1')
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['p1', conn],
+      ])
 
       const p1 = addPlayer(server, 'p1', 0)
       const nearby = addPlayer(server, 'nearby', 5)
@@ -1056,7 +1411,9 @@ describe('server', () => {
       server.getStateSyncDistance = () => 100
 
       const conn = makeConnection('p1')
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['p1', conn],
+      ])
 
       const p1 = addPlayer(server, 'p1', 0)
       p1.needsSync = true
@@ -1073,7 +1430,9 @@ describe('server', () => {
       server.getStateSyncDistance = () => 100
 
       const conn = makeConnection('p1')
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['p1', conn],
+      ])
 
       const p1 = addPlayer(server, 'p1', 0)
       p1.needsSync = false
@@ -1091,7 +1450,9 @@ describe('server', () => {
       server.getStateSyncDistance = () => 10
 
       const conn = makeConnection('p1')
-      mockGeckosServer.connectionsManager.connections = new Map([['p1', conn]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['p1', conn],
+      ])
 
       const p1 = addPlayer(server, 'p1', 0)
       const farAway = addPlayer(server, 'faraway', 50)
@@ -1107,7 +1468,9 @@ describe('server', () => {
       server.getStateSyncDistance = () => 100
 
       const conn = makeConnection('ghost')
-      mockGeckosServer.connectionsManager.connections = new Map([['ghost', conn]])
+      mockGeckosServer.connectionsManager.connections = new Map([
+        ['ghost', conn],
+      ])
 
       // no entity added for 'ghost'
 

@@ -17,15 +17,28 @@ const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:
 
 async function serve({ token, production = false, options, setup }: { token?: string, production?: boolean, options?: AdminPanelOptions, setup?(panel: AdminPanel, app: express.Express): void } = {}) {
   const app = express()
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const panel = new AdminPanel({
-    adminToken: { configured: !!token, matches: candidate => !!token && candidate === token },
+    adminToken: {
+      configured: !!token,
+      matches: candidate => !!token && candidate === token,
+    },
     logger: logger as any,
     appName: () => 'My game',
     production: () => production,
   }, options)
   panel.mount(app)
-  panel.page({ path: '', label: 'Overview', icon: 'dashboard', order: 0, render: () => '<p id="start">start</p>' })
+  panel.page({
+    path: '',
+    label: 'Overview',
+    icon: 'dashboard',
+    order: 0,
+    render: () => '<p id="start">start</p>',
+  })
   setup?.(panel, app)
   // Stands in for the game client's page fallback
   app.use((_req, res) => void res.send('game'))
@@ -57,7 +70,13 @@ describe('adminPanel', () => {
   })
 
   it('redirects pages to their trailing slash, keeping the query', async () => {
-    const { get } = await serve({ setup: panel => panel.page({ path: 'stats', label: 'Stats', render: () => '' }) })
+    const { get } = await serve({
+      setup: panel => panel.page({
+        path: 'stats',
+        label: 'Stats',
+        render: () => '',
+      }),
+    })
 
     const res = await get('/admin/stats?x=1')
     expect(res.status).toBe(301)
@@ -75,10 +94,19 @@ describe('adminPanel', () => {
           icon: 'chat',
           children: [
             { label: 'Live', href: '#live' },
-            { label: 'Mutes', href: 'mutes', render: () => ({ html: '<p>mutes</p>', title: 'Muted players' }) },
+            {
+              label: 'Mutes',
+              href: 'mutes',
+              render: () => ({ html: '<p>mutes</p>', title: 'Muted players' }),
+            },
             { label: 'Docs', href: 'https://example.com/docs' },
           ],
-          render: () => ({ html: '<p>chat</p>', styles: ['/admin/chat/style.css'], scripts: ['/admin/chat/app.js'], data: { 'poll-interval': '500', 'Bad Key': 'x' } }),
+          render: () => ({
+            html: '<p>chat</p>',
+            styles: ['/admin/chat/style.css'],
+            scripts: ['/admin/chat/app.js'],
+            data: { 'poll-interval': '500', 'Bad Key': 'x' },
+          }),
         })
       },
     })
@@ -121,9 +149,13 @@ describe('adminPanel', () => {
   it('escapes the labels it is given and shows a failing page as an error', async () => {
     const { get, logger } = await serve({
       setup: (panel) => {
-        panel.page({ path: 'x', label: '<b>X</b>', render: () => {
-          throw new Error('<oops>')
-        } })
+        panel.page({
+          path: 'x',
+          label: '<b>X</b>',
+          render: () => {
+            throw new Error('<oops>')
+          },
+        })
       },
     })
 
@@ -143,10 +175,14 @@ describe('adminPanel', () => {
       const prompt = await get('/admin/')
       expect(prompt.status).toBe(401)
       expect(prompt.headers.get('www-authenticate')).toBe('Basic realm="MavonEngine admin", charset="UTF-8"')
-      expect((await get('/admin/', { Authorization: basic('anyone', 'wrong') })).status).toBe(401)
+      expect((await get('/admin/', {
+        Authorization: basic('anyone', 'wrong'),
+      })).status).toBe(401)
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed login for "anyone"'))
 
-      expect((await get('/admin/', { Authorization: basic('anyone', 'secret') })).status).toBe(200)
+      expect((await get('/admin/', {
+        Authorization: basic('anyone', 'secret'),
+      })).status).toBe(200)
       expect((await get('/admin/', { Authorization: 'Bearer secret' })).status).toBe(200)
     })
 
@@ -156,17 +192,26 @@ describe('adminPanel', () => {
         setup: panel => panel.forPlugin('@acme/users').addLogin(async (user, password) => user === 'bob' && password === 'hunter2'),
       })
 
-      expect((await get('/admin/', { Authorization: basic('bob', 'hunter2') })).status).toBe(200)
-      expect((await get('/admin/', { Authorization: basic('bob', 'nope') })).status).toBe(401)
+      expect((await get('/admin/', {
+        Authorization: basic('bob', 'hunter2'),
+      })).status).toBe(200)
+      expect((await get('/admin/', {
+        Authorization: basic('bob', 'nope'),
+      })).status).toBe(401)
     })
 
     it('locks an address out after too many failed logins', async () => {
       const { get } = await serve({ token: 'secret' })
 
-      for (let i = 0; i < 10; i++)
-        await get('/admin/', { Authorization: basic('x', 'wrong') })
+      for (let i = 0; i < 10; i++) {
+        await get('/admin/', {
+          Authorization: basic('x', 'wrong'),
+        })
+      }
 
-      const res = await get('/admin/', { Authorization: basic('x', 'secret') })
+      const res = await get('/admin/', {
+        Authorization: basic('x', 'secret'),
+      })
       expect(res.status).toBe(429)
       expect(res.headers.get('retry-after')).toBeTruthy()
     })
@@ -191,26 +236,62 @@ describe('adminPanel', () => {
   })
 
   it('can be turned off or moved, but not to the site root', async () => {
-    const off = await serve({ options: { enabled: false } })
+    const off = await serve({
+      options: { enabled: false },
+    })
     expect(await (await off.get('/admin/')).text()).toBe('game')
     listener?.close()
 
-    const moved = await serve({ options: { path: '/ops/' } })
+    const moved = await serve({
+      options: { path: '/ops/' },
+    })
     expect(moved.panel.url('chat')).toBe('/ops/chat')
     expect((await moved.get('/ops/')).status).toBe(200)
 
-    expect(() => new AdminPanel({ adminToken: { configured: false, matches: () => false } }, { path: '/' })).toThrow('site root')
+    expect(() => new AdminPanel({
+      adminToken: {
+        configured: false,
+        matches: () => false,
+      },
+    }, { path: '/' })).toThrow('site root')
   })
 
   it('shows the runtime, the server scene graph and physics on the Overview', async () => {
     const { registerEnginePages } = await import('../../../../src/Networking/Server/Admin/enginePages')
     const { REVISION } = await import('three')
-    const health = () => ({ serverTime: 'now', uptime: 75, players: 2, world: { entities: 9 }, physics: { bodies: 3 } })
+    const health = () => ({
+      serverTime: 'now',
+      uptime: 75,
+      players: 2,
+      world: { entities: 9 },
+      physics: { bodies: 3 },
+    })
     const inspector = {
-      sceneGraph: () => ({ objects: 5, byType: { Mesh: 3, Group: 2 }, meshes: 3, triangles: 36, lights: 0 }),
-      physics: () => ({ bodies: 3, dynamic: 2, fixed: 1, kinematic: 0, sleeping: 1, colliders: 4, gravity: { x: 0, y: -9.81, z: 0 }, timestep: 1 / 60 }),
+      sceneGraph: () => ({
+        objects: 5,
+        byType: { Mesh: 3, Group: 2 },
+        meshes: 3,
+        triangles: 36,
+        lights: 0,
+      }),
+      physics: () => ({
+        bodies: 3,
+        dynamic: 2,
+        fixed: 1,
+        kinematic: 0,
+        sleeping: 1,
+        colliders: 4,
+        gravity: { x: 0, y: -9.81, z: 0 },
+        timestep: 1 / 60,
+      }),
     }
-    const { get } = await serve({ setup: panel => registerEnginePages(panel, { health, routes: () => [], inspector }) })
+    const { get } = await serve({
+      setup: panel => registerEnginePages(panel, {
+        health,
+        routes: () => [],
+        inspector,
+      }),
+    })
 
     const html = await (await get('/admin/')).text()
     expect(html).toContain(`<dt>Three.js</dt><dd>r${REVISION}</dd>`)
@@ -227,9 +308,30 @@ describe('adminPanel', () => {
 
   it('says so on the Overview without physics', async () => {
     const { registerEnginePages } = await import('../../../../src/Networking/Server/Admin/enginePages')
-    const health = () => ({ serverTime: 'now', uptime: 5, players: 0, world: { entities: 0 }, physics: {} })
-    const inspector = { sceneGraph: () => ({ objects: 0, byType: {}, meshes: 0, triangles: 0, lights: 0 }), physics: () => null }
-    const { get } = await serve({ setup: panel => registerEnginePages(panel, { health, routes: () => [], inspector }) })
+    const health = () => ({
+      serverTime: 'now',
+      uptime: 5,
+      players: 0,
+      world: { entities: 0 },
+      physics: {},
+    })
+    const inspector = {
+      sceneGraph: () => ({
+        objects: 0,
+        byType: {},
+        meshes: 0,
+        triangles: 0,
+        lights: 0,
+      }),
+      physics: () => null,
+    }
+    const { get } = await serve({
+      setup: panel => registerEnginePages(panel, {
+        health,
+        routes: () => [],
+        inspector,
+      }),
+    })
 
     const html = await (await get('/admin/')).text()
     expect(html).toContain('<dt>Rapier</dt><dd><span class="adm-muted">not used on the server</span></dd>')
