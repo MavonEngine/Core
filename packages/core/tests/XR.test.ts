@@ -13,6 +13,14 @@ vi.mock('three/examples/jsm/webxr/VRButton.js', () => ({
   },
 }))
 
+vi.mock('../src/XRInput', () => ({
+  default: vi.fn(function () {
+    return {
+      poll: vi.fn(),
+    }
+  }),
+}))
+
 function setup(options?: ConstructorParameters<typeof XR>[2]) {
   const session = {
     end: vi.fn().mockResolvedValue(undefined),
@@ -32,6 +40,8 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   }
   const game = {
     trigger: vi.fn(),
+    camera: { rig: {} },
+    input: {} as Record<string, unknown>,
     sizes: {
       setSize: vi.fn(),
     },
@@ -53,6 +63,16 @@ describe('xr', () => {
     expect(xr.setReferenceSpaceType).toHaveBeenCalledWith('local-floor')
     expect(instance.button).toBeDefined()
     expect(document.getElementById('VRButton')).toBe(instance.button)
+  })
+
+  it('sets up the controllers as game.input.xr, unless left out', () => {
+    const { instance, game } = setup()
+    expect(instance.input).toBeDefined()
+    expect(game.input.xr).toBe(instance.input)
+
+    const without = setup({ input: false })
+    expect(without.instance.input).toBeUndefined()
+    expect(without.game.input.xr).toBeUndefined()
   })
 
   it('leaves the button out and uses the given reference space', () => {

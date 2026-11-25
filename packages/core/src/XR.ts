@@ -1,6 +1,8 @@
 import type Game from './Game'
 import type Renderer from './Renderer'
+import type { XRInputOptions } from './XRInput'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
+import XRInput from './XRInput'
 
 export interface XROptions {
   /**
@@ -12,6 +14,8 @@ export interface XROptions {
   button?: boolean
   /** Extra features for the session, e.g. `{ optionalFeatures: ['hand-tracking'] }` */
   sessionInit?: XRSessionInit
+  /** How the controllers show, or false to leave controller input out */
+  input?: XRInputOptions | false
 }
 
 /**
@@ -23,6 +27,9 @@ export interface XROptions {
 export default class XR {
   /** The "Enter VR" button, unless `button: false` was passed */
   readonly button?: HTMLElement
+
+  /** The controllers, also at `game.input.xr` */
+  readonly input?: XRInput
 
   private readonly sessionInit: XRSessionInit
 
@@ -50,6 +57,11 @@ export default class XR {
       game.sizes.setSize(window.innerWidth, window.innerHeight)
       game.trigger('xrSessionEnd')
     })
+
+    if (options.input !== false) {
+      this.input = new XRInput(xr, game.camera.rig, options.input)
+      game.input.xr = this.input
+    }
 
     if (options.button !== false) {
       this.button = VRButton.createButton(renderer.instance, options.sessionInit)

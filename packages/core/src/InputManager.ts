@@ -1,3 +1,4 @@
+import type XRInput from './XRInput'
 import { Group, Mesh, Object3D, Vector2 } from 'three'
 import Game from './Game'
 import GamepadManager from './GamepadManager'
@@ -11,6 +12,9 @@ export default class InputManager extends EventEmitter {
 
   /** Connected game controllers (Xbox, PlayStation, generic) */
   readonly gamepads = new GamepadManager()
+
+  /** VR controllers, once `game.enableXR()` was called */
+  xr?: XRInput
 
   constructor() {
     super()
@@ -62,6 +66,7 @@ export default class InputManager extends EventEmitter {
    */
   update() {
     this.gamepads.poll()
+    this.xr?.poll()
   }
 
   /**
