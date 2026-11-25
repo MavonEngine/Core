@@ -50,7 +50,7 @@
     "@geckos.io/server": "^3.1.0",
     "@mavonengine/core": "*",
     "@mavonengine/mail": "*",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "kysely": "^0.29.8",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",

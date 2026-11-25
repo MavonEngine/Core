@@ -40,7 +40,7 @@
   "devDependencies": {
     "@mavonengine/core": "*",
     "@types/adm-zip": "^0.5.7",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",

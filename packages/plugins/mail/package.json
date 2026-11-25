@@ -61,7 +61,7 @@
     "@geckos.io/server": "^3.1.0",
     "@mavonengine/core": "*",
     "@types/express": "^5.0.6",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "maildev": "^3.0.0",
     "tsup": "^8.5.1",
     "typescript": "7.0.2",

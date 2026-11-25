@@ -50,7 +50,7 @@
   "devDependencies": {
     "@mavonengine/core": "*",
     "@types/express": "^5.0.3",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "express": "5.1.0",
     "jsdom": "^28.1.0",
     "kysely": "^0.29.8",
