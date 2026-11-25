@@ -90,6 +90,13 @@ export async function startServer(env) {
 
   return {
     output: () => output,
+    /** Whether `text` shows up in the output within `ms`. The page can see an event before the server's log line about it comes through the pipe */
+    async waitForOutput(text, ms = 10000) {
+      const until = Date.now() + ms
+      while (!output.includes(text) && Date.now() < until)
+        await delay(100)
+      return output.includes(text)
+    },
     async stop() {
       if (!exited)
         child.kill()
