@@ -48,7 +48,9 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   }
   const game = {
     trigger: vi.fn(),
-    camera: { rig: new Group() },
+    camera: {
+      rig: new Group(),
+    },
     callbacks: {} as Record<string, ((event?: any) => void)[]>,
     on(name: string, callback: (event?: any) => void) {
       (this.callbacks[name] ??= []).push(callback)
