@@ -18,7 +18,13 @@ export interface TreeFieldProps {
   seed: number
 }
 
-const DEFAULTS: TreeFieldProps = { count: 15, area: 80, minScale: 0.01, maxScale: 0.015, seed: 1 }
+const DEFAULTS: TreeFieldProps = {
+  count: 15,
+  area: 80,
+  minScale: 0.01,
+  maxScale: 0.015,
+  seed: 1,
+}
 
 /** Small seeded PRNG (mulberry32), so the server places the same trees on every start */
 function seededRandom(seed: number) {
@@ -45,7 +51,10 @@ export default class TreeField extends GameObject {
 
   constructor(data: SceneObjectData) {
     super(data.id, new Vector3(...data.transform.position))
-    this.props = { ...DEFAULTS, ...(data.props as Partial<TreeFieldProps>) }
+    this.props = {
+      ...DEFAULTS,
+      ...(data.props as Partial<TreeFieldProps>),
+    }
 
     const { count, area, minScale, maxScale, seed } = this.props
     const random = seededRandom(seed)
