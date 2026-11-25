@@ -35,6 +35,19 @@ export default class InputManager extends EventEmitter {
       this.mousePressed.delete(ev.button)
     })
 
+    // Keys or buttons held while the window loses focus (clicking out of an
+    // iframe, alt-tab, switching tabs) never get their keyup/mouseup, so they
+    // would stay "pressed" forever. Drop everything when focus goes away.
+    const releaseAll = () => {
+      this.keysPressed.clear()
+      this.mousePressed.clear()
+    }
+    window.addEventListener('blur', releaseAll)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden)
+        releaseAll()
+    })
+
     window.addEventListener('mousemove', (ev) => {
       this.cursor.set(
         ev.clientX / Game.instance().sizes.width * 2 - 1,
