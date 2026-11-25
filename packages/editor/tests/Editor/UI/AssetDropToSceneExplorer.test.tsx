@@ -90,7 +90,12 @@ function makeGame(editor: MockEditor, scene: Scene) {
     scene,
     canvas,
     editor,
-    resources: { items: {} as Record<string, any>, sources: [] as any[] },
+    resources: {
+      items: {} as Record<string, any>,
+      sources: [] as any[],
+      on: vi.fn(),
+      off: vi.fn(),
+    },
     world: {
       add: vi.fn(),
     },

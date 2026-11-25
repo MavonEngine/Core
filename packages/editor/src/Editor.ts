@@ -173,6 +173,8 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     })
 
     this.initAssetsFilter()
+    // Assets loaded later, e.g. imported by a plugin, get their category too
+    Game.instance().resources.on('assetsAdded', () => this.initAssetsFilter())
   }
 
   private initAssetsFilter() {

@@ -398,6 +398,18 @@ export async function checkPlugins(ctx: DoctorContext, config: MavonEngineConfig
         found.push({ level: 'error', label, detail: `${side} entry ${manifest[side] ?? '(none)'} not found, is the plugin built?` })
     }
 
+    // The dev entry runs in the client's dev server, whatever the target. Missing only breaks the editor's tooling
+    if (manifest.dev !== undefined) {
+      const file = typeof manifest.dev === 'string' && manifest.dev
+        ? resolveInside(dir, manifest.dev)
+        : undefined
+      if (!file || !existsSync(file)) {
+        found.push({ level: 'warn', label, detail: `dev entry ${typeof manifest.dev === 'string'
+          ? manifest.dev
+          : '(invalid)'} not found, is the plugin built?` })
+      }
+    }
+
     // The assets of the prefabs in use
     const prefabs = Array.isArray(entry.prefabs)
       ? entry.prefabs.filter(prefab => typeof prefab === 'string')

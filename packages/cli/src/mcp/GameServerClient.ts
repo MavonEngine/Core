@@ -1,3 +1,6 @@
+import type { PluginToolInfo } from '@mavonengine/core/Plugins/types'
+import { DEV_TOOLS_PATH } from '@mavonengine/core/Plugins/types'
+
 export interface GameServerClientOptions {
   /** Base URL of the game server's HTTP API, e.g. http://localhost:8050 */
   url: string
@@ -160,6 +163,49 @@ export default class GameServerClient {
   /** Who is sent which entities */
   sync() {
     return this.get('api/game/dev/net/sync', {}, NET_UNAVAILABLE)
+  }
+
+  /**
+   * The MCP tools of the plugins' dev entries, from the client's dev server. Null when there is none to ask: it isn't
+   * running, or its @mavonengine/core has no plugin tools
+   */
+  async pluginTools(timeoutMs = 1500): Promise<PluginToolInfo[] | null> {
+    try {
+      const res = await this.fetchImpl(new URL(DEV_TOOLS_PATH.slice(1), this.clientBase), {
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!res.ok || !res.headers.get('content-type')?.includes('application/json'))
+        return null
+      const { tools } = await res.json() as { tools?: PluginToolInfo[] }
+      return Array.isArray(tools)
+        ? tools
+        : null
+    }
+    catch {
+      return null
+    }
+  }
+
+  /** Run a plugin's tool on the client's dev server. Rejects with the tool's error */
+  async callPluginTool(name: string, args: Record<string, unknown>, timeoutMs = 120_000): Promise<unknown> {
+    let res: Response
+    try {
+      res = await this.fetchImpl(new URL(`${DEV_TOOLS_PATH.slice(1)}/${encodeURIComponent(name)}`, this.clientBase), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ arguments: args }),
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    }
+    catch (err) {
+      throw new GameServerError(`Can't reach the client dev server at ${this.clientUrl}: ${(err as Error).message}. Is it running?`)
+    }
+    const body = await res.json().catch(() => null) as { result?: unknown, error?: string } | null
+    if (!body)
+      throw new GameServerError(`The client dev server at ${this.clientUrl} answered ${res.status} without JSON`)
+    if (body.error !== undefined || !res.ok)
+      throw new GameServerError(body.error ?? `The client dev server answered ${res.status}`)
+    return body.result
   }
 
   /** The game tabs open in a browser, through the dev bridge */
