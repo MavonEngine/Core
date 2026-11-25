@@ -18,13 +18,13 @@ export class RainEmitter extends Emitter {
   declare material: ShaderMaterial
 
   constructor() {
-    super(Game.instance().camera.instance.position, new ShaderMaterial({
+    super(Game.instance().camera.worldPosition, new ShaderMaterial({
       transparent: true,
       vertexShader: RainVertextShader,
       fragmentShader: RainFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uCameraPosition: { value: Game.instance().camera.instance.position },
+        uCameraPosition: { value: Game.instance().camera.worldPosition },
       },
     }), 1000, 20)
 
@@ -47,7 +47,7 @@ export class RainEmitter extends Emitter {
 
   update(delta: number): void {
     this.material.uniforms.uTime.value += delta
-    this.material.uniforms.uCameraPosition.value = Game.instance().camera.instance.position
+    this.material.uniforms.uCameraPosition.value = Game.instance().camera.worldPosition
   }
 }
 

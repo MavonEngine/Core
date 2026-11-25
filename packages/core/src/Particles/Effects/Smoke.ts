@@ -64,7 +64,7 @@ export class SmokeEmitter extends Emitter {
       depthWrite: false,
       uniforms: {
         uTime: { value: 0 },
-        uCameraPosition: { value: Game.instance().camera.instance.position },
+        uCameraPosition: { value: Game.instance().camera.worldPosition },
         uTexture: { value: smokeTexture },
         uAlpha: { value: 0.5 },
       },

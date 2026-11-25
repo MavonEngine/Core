@@ -117,6 +117,14 @@ function createMockGame() {
       style: { opacity: '' },
     },
     camera: {
+      rig: {
+        position: {
+          set: vi.fn(),
+        },
+        quaternion: {
+          identity: vi.fn(),
+        },
+      },
       instance: {
         position: {
           set: vi.fn(),
@@ -274,6 +282,13 @@ describe('editor', () => {
       const _editor = new Editor()
 
       expect(mockGame.camera.instance.position.set).toHaveBeenCalledWith(20, 10, 20)
+    })
+
+    it('resets the camera rig a game may have moved', () => {
+      const _editor = new Editor()
+
+      expect(mockGame.camera.rig.position.set).toHaveBeenCalledWith(0, 0, 0)
+      expect(mockGame.camera.rig.quaternion.identity).toHaveBeenCalled()
     })
 
     it('registers mousedown and keydown listeners on input', () => {

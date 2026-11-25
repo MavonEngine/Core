@@ -241,7 +241,7 @@ export default class Grass extends WithEditorHelper(Entity3D) {
         mat.uniforms.uTime.value += delta
     })
 
-    const cameraPos = Game.instance().camera.instance.position
+    const cameraPos = Game.instance().camera.worldPosition
     const distance = cameraPos.distanceTo(this.mesh!.position)
 
     if (this.lowResMesh) {

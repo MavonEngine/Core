@@ -51,7 +51,7 @@ export default abstract class ObjectLabel implements GameObjectInterface {
       this.domElement.style.transform
         = `translateX(${translateX}px) translateY(${translateY}px) translate(-50%, -50%)`
 
-      const cameraPos = Game.instance().camera.instance.position
+      const cameraPos = Game.instance().camera.worldPosition
       const distance = worldPosition.distanceTo(cameraPos)
 
       const maxDistance = 40

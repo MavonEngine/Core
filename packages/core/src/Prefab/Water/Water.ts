@@ -256,7 +256,7 @@ export default class Water extends WithEditorHelper(GameObject) {
       this.material.uniforms.uSunDirection.value.copy(WaterManager.instance.sunPosition)
     }
 
-    const cameraPos = Game.instance().camera.instance.position
+    const cameraPos = Game.instance().camera.worldPosition
 
     for (const section of this.sections) {
       const distance = cameraPos.distanceTo(section.mesh.position)
