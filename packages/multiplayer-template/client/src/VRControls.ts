@@ -6,9 +6,11 @@ import { Vector2, Vector3 } from 'three'
 const UP = new Vector3(0, 1, 0)
 /** Where the view sits from the character, before turning: behind and above it */
 const CHASE_OFFSET = new Vector3(0, 3, 7)
-/** How far the camera aims above the character's feet */
+/** How far the camera aims above the character's position, the center of its collider */
 const AIM_HEIGHT = 1
-/** How quickly the view catches up with the character. Higher is tighter */
+/** How far the model's feet are below the character's position */
+const FOOT_OFFSET = 0.8
+/** How quickly the view catches up with the character before its model is loaded. Higher is tighter */
 const FOLLOW_RATE = 8
 const SNAP_ANGLE = Math.PI / 6
 const SNAP_THRESHOLD = 0.7
@@ -127,8 +129,16 @@ export default class VRControls {
       this.snapArmed = false
     }
 
-    this.direction.copy(this.player.position).y += AIM_HEIGHT
-    this.aim.lerp(this.direction, 1 - Math.exp(-FOLLOW_RATE * delta))
+    // Aim at the model where it's drawn, which already moves smoothly every frame: the character then holds still in
+    // the view while the world moves past. Smoothed here only until the model is loaded
+    const rendered = this.player.graphicalComponent.renderedPosition
+    if (rendered) {
+      this.aim.copy(rendered).y += AIM_HEIGHT + FOOT_OFFSET
+    }
+    else {
+      this.direction.copy(this.player.position).y += AIM_HEIGHT
+      this.aim.lerp(this.direction, 1 - Math.exp(-FOLLOW_RATE * delta))
+    }
 
     this.view.copy(CHASE_OFFSET).applyAxisAngle(UP, this.chaseYaw).add(this.aim)
     // Turned only by chaseYaw, which changes only when the player turns the view

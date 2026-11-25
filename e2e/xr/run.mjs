@@ -124,6 +124,45 @@ async function main() {
     check(strafed.player[0] - walked.player[0] > 1, `pushing it right walks right (moved ${(strafed.player[0] - walked.player[0]).toFixed(2)}m along X)`)
     check(Math.abs(strafed.yaw + Math.PI / 2) < 0.15, `and turns the character to face right (yaw ${strafed.yaw.toFixed(3)})`)
 
+    // Smooth in the headset: the character's position only changes 30 times a second, unevenly, so its model
+    // follows it every rendered frame and the view follows the model. Measured while walking
+    const smooth = await page.evaluate(async () => {
+      const game = window.Game
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+      const model = game.localPlayer.graphicalComponent.instance
+      window.__headset.controllers.left.updateAxes('thumbstick', 0, -1)
+      await sleep(600)
+      const jitter = []
+      let moved = 0
+      let frames = 0
+      let lastRelative
+      const lastModel = model.position.clone()
+      const render = game.renderer.update.bind(game.renderer)
+      game.renderer.update = (delta) => {
+        render(delta)
+        frames++
+        game.camera.updateWorldPosition()
+        const relative = model.position.clone().sub(game.camera.worldPosition)
+        if (lastRelative)
+          jitter.push(relative.distanceTo(lastRelative))
+        if (!model.position.equals(lastModel))
+          moved++
+        lastRelative = relative
+        lastModel.copy(model.position)
+      }
+      await sleep(1000)
+      game.renderer.update = render
+      window.__headset.controllers.left.updateAxes('thumbstick', 0, 0)
+      await sleep(600)
+      return {
+        frames,
+        moved,
+        jitter: Math.max(...jitter),
+      }
+    })
+    check(smooth.moved === smooth.frames, `the character's model moves every rendered frame (${smooth.moved} of ${smooth.frames})`)
+    check(smooth.jitter < 0.01, `and holds still in the view while walking (${(smooth.jitter * 100).toFixed(2)}cm most from one frame to the next)`)
+
     log('\n== snap turn')
     const before = await page.evaluate(() => window.Game.camera.rig.rotation.y)
     await stick(page, 'right', 1, 0)
