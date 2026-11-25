@@ -54,7 +54,7 @@
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.0",
     "express": "5.1.0",
-    "jsdom": "^28.1.0",
+    "jsdom": "^31.0.1",
     "kysely": "^0.29.8",
     "tsup": "^9.0.0",
     "typescript": "7.0.2",
