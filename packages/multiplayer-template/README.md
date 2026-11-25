@@ -103,10 +103,29 @@ Press `.` in the game to open the editor on the running game: the connection to 
 | `Character` | `Entities/Player.ts` | Local and remote players with graphics and labels |
 | `PlayerGraphicsComponent` | `Entities/Player/PlayerGraphicsComponent.ts` | Loads GLTF model, maps and plays animations |
 | `PlayerController` | `PlayerController.ts` | Keyboard input, third-person camera (OrbitControls), sends `CL_MOVE` |
+| `VRControls` | `VRControls.ts` | VR thumbstick movement, snap turns and the chase view in a headset |
 | `GameSyncManager` | `GameSyncManager.ts` | Processes `SV_STATE`: spawns/despawns entities within 150 units |
 | `NetworkManager` | `NetworkManager.ts` | geckos.io socket wrapper; maps incoming/outgoing commands |
 | `Trees` | `World/Trees.ts` | Instanced mesh renderer for all trees received from server |
 | `PlayerLabel` | `ui/PlayerLabel.ts` | 3D text labels for player names and chat bubbles |
+
+### VR
+
+On a device that can do WebXR (a Quest's browser, or desktop Chrome with a headset or the
+[Immersive Web Emulator](https://chromewebstore.google.com/detail/immersive-web-emulator/cgffilbpcibhmcfbgggfhfolhkfbhmik)
+extension) an **Enter VR** button shows. Join first, then enter VR:
+
+- the left stick, or WASD, walks the character the way it's pushed, relative to where you look
+- the right stick, or Q / E, snap turns the view around the character, 30 degrees a flick, and dragging the mouse sideways turns it
+- the view follows the character from behind, smoothed every rendered frame (`VRControls.ts`)
+
+Movement goes through the same `CL_MOVE` as the keyboard, so the server needs nothing for VR.
+
+WebXR only runs on `https` or `localhost`. To play the dev server on a Quest over USB, forward the port so the
+headset opens it as `localhost`: `adb reverse tcp:8050 tcp:8050`, then open `http://localhost:8050` in the Quest's
+browser.
+
+`npm run test:xr-e2e` (from the repository root) plays it in an emulated Quest 3.
 
 ### Network commands
 

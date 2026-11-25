@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { EventDispatcher } from 'three'
+import { EventDispatcher, Group } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import XR from '../src/XR'
 
@@ -48,7 +48,9 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   }
   const game = {
     trigger: vi.fn(),
-    camera: { rig: {} },
+    camera: {
+      rig: new Group(),
+    },
     callbacks: {} as Record<string, ((event?: any) => void)[]>,
     on(name: string, callback: (event?: any) => void) {
       (this.callbacks[name] ??= []).push(callback)
@@ -102,7 +104,11 @@ describe('xr', () => {
     xr.dispatchEvent({ type: 'sessionstart' })
     expect(game.trigger).toHaveBeenCalledWith('xrSessionStart', session)
 
+    game.camera.rig.position.set(3, 0, 4)
+    game.camera.rig.rotation.y = 1
     xr.dispatchEvent({ type: 'sessionend' })
+    expect(game.camera.rig.position.toArray()).toEqual([0, 0, 0])
+    expect(game.camera.rig.quaternion.toArray()).toEqual([0, 0, 0, 1])
     expect(game.sizes.setSize).toHaveBeenCalledWith(window.innerWidth, window.innerHeight)
     expect(game.trigger).toHaveBeenCalledWith('xrSessionEnd')
   })

@@ -1,6 +1,7 @@
 import type { App } from 'vue'
 import RAPIER from '@dimforge/rapier3d-compat'
 import Game from '@mavonengine/core/Game'
+import XR from '@mavonengine/core/XR'
 import plugins from 'virtual:mavonengine/plugins'
 import { createApp } from 'vue'
 import GameWorld from './Scenes/GameWorld'
@@ -32,6 +33,13 @@ RAPIER.init().then(() => {
 
   // Cap the rendering, the game tick and physics keep their own rate
   game.renderer.maxFps = 60
+
+  // Play in a VR headset: an "Enter VR" button shows on devices that can (e.g. a Quest's browser), the left
+  // stick walks and the right stick turns the view. The headset sets the frame rate there, not maxFps
+  XR.isSupported().then((supported) => {
+    if (supported)
+      game.enableXR()
+  })
 
   // The map: sky, lights and ground, shared with the server which builds the trees from it. Edit it in the editor (press .)
   game.openScene('main').catch(err => game.logger?.error(`Could not load the scene: ${(err as Error).message}`))
