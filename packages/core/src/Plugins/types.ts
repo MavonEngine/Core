@@ -1,7 +1,7 @@
 import type { ServerChannel } from '@geckos.io/server'
 import type { Express, RequestHandler } from 'express'
 import type { Kysely } from 'kysely'
-import type { IncomingMessage } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type winston from 'winston'
 import type BaseGame from '../BaseGame'
 import type Game from '../Game'
@@ -260,6 +260,69 @@ export function defineClientPlugin(plugin: ClientPlugin): ClientPlugin {
 
 export function defineServerPlugin(plugin: ServerPlugin): ServerPlugin {
   return plugin
+}
+
+/** A Connect handler, what Vite's dev server takes as middleware */
+export type DevMiddleware = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void | Promise<void>
+
+export interface DevPluginContext {
+  /** npm package name of the plugin */
+  readonly package: string
+  /** `plugins.<package>.options` from mavonengine.json, read anew on every access so it is never stale */
+  readonly options: PluginOptions
+  /** Directory with mavonengine.json */
+  readonly projectRoot: string
+  /** The client's Vite root */
+  readonly clientRoot: string
+  /**
+   * The client's public directory: files there are served as they are, copied into every build and usually
+   * committed. Where a plugin puts files that become part of the game
+   */
+  readonly publicDir: string
+  /**
+   * `<project root>/.mavonengine/plugins/<package>/`, for downloads, caches and other files that are not part of the
+   * game. Not committed and never shipped. Not created until the plugin writes to it
+   */
+  readonly dataDir: string
+  /** Where `middleware` is mounted, e.g. `/__mavonengine/plugins/<package>/`. Same as `devPluginBase(package)` */
+  readonly base: string
+  readonly logger: { info(message: string): void, warn(message: string): void, error(message: string): void }
+  /**
+   * Change this plugin's `options` in mavonengine.json. `change` gets a copy to change; return false to write nothing.
+   * Returns whether it wrote. The game reloads when options change, unless the manifest has `reloadOnOptions: false`
+   */
+  updateOptions(change: (options: PluginOptions) => boolean | void): boolean
+}
+
+/**
+ * The default export of a plugin's dev entry (`mavonengine.dev` in its package.json). It runs in the client's Vite dev
+ * server, only in dev, for tooling the editor uses, like writing files into the project. Never part of a build.
+ */
+export interface DevPlugin {
+  /** Shown in logs. Defaults to the package name */
+  name?: string
+  /** Called once when the dev server starts or the plugin was added */
+  setup?(ctx: DevPluginContext): void | Promise<void>
+  /**
+   * Handle requests under `ctx.base`, which is taken off `req.url`: a request for `<base>catalog` arrives as
+   * `/catalog`. Only requests from localhost get here, and those that change things (not GET or HEAD) only from the
+   * page this dev server serves, so another site open in the browser can't make them. Calling `next()` answers 404.
+   */
+  middleware?(ctx: DevPluginContext): DevMiddleware
+  /** Called when the dev server stops or the plugin was removed */
+  destroy?(ctx: DevPluginContext): void | Promise<void>
+}
+
+export function defineDevPlugin(plugin: DevPlugin): DevPlugin {
+  return plugin
+}
+
+/** Dev only: dev entries of plugins are mounted under `<this>/<package>/` */
+export const DEV_PLUGINS_PATH = '/__mavonengine/plugins'
+
+/** URL prefix a plugin's dev entry answers under, for its client code to call: `fetch(\`${devPluginBase(ctx.package)}catalog\`)` */
+export function devPluginBase(pkg: string): string {
+  return `${DEV_PLUGINS_PATH}/${pkg}/`
 }
 
 /** URL prefix plugin assets are served and shipped under */

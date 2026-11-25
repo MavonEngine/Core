@@ -109,6 +109,8 @@ function createMockGame() {
     },
     resources: {
       items: {} as Record<string, object>,
+      on: vi.fn(),
+      off: vi.fn(),
     },
     editor: undefined as Editor | undefined,
   }
@@ -162,6 +164,19 @@ describe('editor', () => {
   })
 
   describe('constructor', () => {
+    it('lists the categories of assets loaded after it booted', () => {
+      mockGame.resources.items = { tree: { scene: {} } }
+      const editor = new Editor()
+      expect(editor.availableAssetCategories).toEqual(['Object'])
+
+      const [[, onAdded]] = vi.mocked(mockGame.resources.on).mock.calls.filter(([event]) => event === 'assetsAdded')
+      class Texture {}
+      mockGame.resources.items.bark = new Texture()
+      onAdded()
+
+      expect(editor.availableAssetCategories).toEqual(['Object', 'Texture'])
+    })
+
     it('logs a boot message', () => {
       const _editor = new Editor()
 

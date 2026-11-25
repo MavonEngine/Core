@@ -452,6 +452,8 @@ To let `compare_entity` match your own player with the server's, set `game.local
 
 - `target`: `client`, `server` or `both`. The matching entries are required.
 - `assets`: paths relative to `dir` (default `assets`). They are served at `/plugins/<package>/<path>`: all of them in dev, and only the shared ones and those of used prefabs in a release.
+- `dev`: optional, for any target. An entry that runs in the client's Vite dev server, see [Dev entries](#dev-entries).
+- `reloadOnOptions`: default `true`. Set it to `false` when the plugin changes its own `options` while the editor is open and its client picks up the change without a reload.
 
 Each entry default-exports the plugin. Every hook gets the plugin's context last, which carries `package`, `options`, `game` and `logger`.
 
@@ -493,6 +495,39 @@ export default defineServerPlugin({
 ```
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+### Dev entries
+
+A plugin's `dev` entry runs in the client's Vite dev server, only in dev: tooling for the editor that has to work with the project's files, like downloading something and writing it into `client/public/`. It is never part of a build, and the game server never loads it.
+
+```ts
+// dev.ts
+import { mkdirSync } from 'node:fs'
+import { defineDevPlugin } from '@mavonengine/core/Plugins/types'
+
+export default defineDevPlugin({
+  setup(ctx) {
+    mkdirSync(ctx.dataDir, { recursive: true })
+  },
+  // Answers under /__mavonengine/plugins/<package>/, with that prefix taken off req.url
+  middleware: ctx => (req, res, next) => {
+    if (req.url !== '/status')
+      return next() // 404
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ options: ctx.options }))
+  },
+  destroy(ctx) {},
+})
+```
+
+The client side calls it with `` fetch(`${devPluginBase(ctx.package)}status`) ``, using `devPluginBase` from `@mavonengine/core/Plugins/types`. Only requests from localhost reach the middleware, and requests that change something (anything but GET and HEAD) only when they come from the game's own page, so another site open in the browser can't make them. Paths in `req.url` come from the browser: resolve them with `resolveInside()` from `@mavonengine/core/Plugins/ProjectConfig` before reading or writing files.
+
+The context has `package`, `options` (read from `mavonengine.json` on every access), `projectRoot`, `clientRoot`, `publicDir`, `logger`, and:
+
+- `dataDir`: `.mavonengine/plugins/<package>/` in the project, for downloads and caches. The project's `.gitignore` leaves out `.mavonengine`, so nothing there is committed or shipped.
+- `updateOptions(change)`: changes the plugin's `options` in `mavonengine.json`. Use it to record what should be committed with the project.
+
+Dev entries start with the dev server and restart when plugins are added, removed, turned on or off in `mavonengine.json`. Changing options doesn't restart them. One that fails to start is logged, and its URLs answer 404 with the reason.
 
 Guard a plugin's admin routes with `ctx.requireAdmin`, which asks for the server's [admin token](#admin-token), instead of giving the plugin a token of its own:
 

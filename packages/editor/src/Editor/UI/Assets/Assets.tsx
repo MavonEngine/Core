@@ -73,6 +73,15 @@ export default () => {
   const [openAssets, setOpenAssets] = useState<OpenAsset[]>([])
   const [search, setSearch] = useState('')
   const nextId = useRef(0)
+  // Re-render when assets are loaded later, e.g. imported by a plugin, so they show in the list
+  const [, setAssetsVersion] = useState(0)
+
+  useEffect(() => {
+    const resources = window.Game.resources
+    const onAdded = () => setAssetsVersion(version => version + 1)
+    resources.on('assetsAdded', onAdded)
+    return () => resources.off('assetsAdded', onAdded)
+  }, [])
 
   function onItemDragStart(e: DragEvent, key: string) {
     if (!e.dataTransfer)
