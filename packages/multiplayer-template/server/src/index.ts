@@ -20,7 +20,9 @@ RAPIER.init().then(() => {
       dev: process.env.MAVONENGINE_DEV_CLIENT === '1',
     },
     // Engine plugins enabled in mavonengine.json, see `mavonengine install`
-    plugins: { root: fileURLToPath(new URL('../..', import.meta.url)) },
+    plugins: {
+      root: fileURLToPath(new URL('../..', import.meta.url)),
+    },
   })
   server.start().then(() => {
     // scenes/main.json, shared with the client. In dev it is reloaded whenever the editor saves it

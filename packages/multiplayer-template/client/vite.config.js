@@ -20,7 +20,10 @@ export default {
   server: {
     ...config.server,
     fs: {
-      allow: [templateRoot, resolve(clientRoot, '../../')],
+      allow: [
+        templateRoot,
+        resolve(clientRoot, '../../'),
+      ],
     },
   },
   plugins: [
@@ -30,10 +33,21 @@ export default {
   resolve: {
     ...config.resolve,
     alias: {
-      ...(useSource && existsSync(editorSrc) ? { '@mavonengine/editor': editorSrc } : {}),
-      ...(useSource && existsSync(coreSrc) ? { '@mavonengine/core': coreSrc } : {}),
+      ...(useSource && existsSync(editorSrc)
+        ? { '@mavonengine/editor': editorSrc }
+        : {}),
+      ...(useSource && existsSync(coreSrc)
+        ? { '@mavonengine/core': coreSrc }
+        : {}),
       '@template/server': resolve(templateRoot, 'server/src'),
     },
-    dedupe: ['@mavonengine/core', 'three', 'vue', 'react', 'react-dom', '@dimforge/rapier3d-compat'],
+    dedupe: [
+      '@mavonengine/core',
+      'three',
+      'vue',
+      'react',
+      'react-dom',
+      '@dimforge/rapier3d-compat',
+    ],
   },
 }
