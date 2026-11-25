@@ -1,3 +1,4 @@
+import type { Matrix4, WebGLRenderer, WebGLRenderTarget } from 'three'
 import type Game from './Game'
 import type Renderer from './Renderer'
 import type { XRInputOptions } from './XRInput'
@@ -65,6 +66,7 @@ export default class XR {
   ) {
     const xr = renderer.instance.xr
     xr.enabled = true
+    patchRenderer(renderer.instance)
     xr.setReferenceSpaceType(options.referenceSpace ?? 'local-floor')
 
     this.sessionInit = {
@@ -201,4 +203,62 @@ export default class XR {
   dispose() {
     this.button?.remove()
   }
+}
+
+/**
+ * Fixes for what three.js's WebXR leaves to the game:
+ *
+ * - **Reversed depth** (`reversedDepthBuffer: true`): three gives each eye the headset's projection, which maps depth
+ *   the GL way (-1 near, 1 far). Seeing a reversed depth buffer the renderer takes the eyes for cameras not yet set up
+ *   for it and recomputes their projection from their default 50 degree fov, once, and from then on renders the
+ *   headset's GL projection into the reversed buffer: the depth test inverted, the far side drawn over the near.
+ *   After three found the view's frustum from the GL projections (it reads the near and far planes off them), the
+ *   eyes, and the game's camera that three gives their union, get the reversed form instead.
+ * - **Off-screen renders**: while presenting, `render()` draws through the headset's cameras whatever it's given,
+ *   into a render target too, e.g. an environment map, a lookup table or a mirror. Renders into a target that isn't
+ *   the headset's render with the camera they were given, as three's own Reflector does it.
+ */
+function patchRenderer(renderer: WebGLRenderer) {
+  const xr = renderer.xr
+  const updateCamera = xr.updateCamera.bind(xr)
+  xr.updateCamera = (camera: PerspectiveCamera) => {
+    updateCamera(camera)
+    if (!renderer.state.buffers.depth.getReversed())
+      return
+    for (const eye of xr.getCamera().cameras)
+      reverseDepth(eye)
+    reverseDepth(camera)
+  }
+
+  const render = renderer.render.bind(renderer)
+  renderer.render = (scene, camera) => {
+    const target = renderer.getRenderTarget() as (WebGLRenderTarget & { isXRRenderTarget?: boolean }) | null
+    if (!xr.enabled || !xr.isPresenting || !target || target.isXRRenderTarget) {
+      render(scene, camera)
+      return
+    }
+    xr.enabled = false
+    try {
+      render(scene, camera)
+    }
+    finally {
+      xr.enabled = true
+    }
+  }
+}
+
+/** Turn a camera's GL depth projection (as WebXR hands it out) into the reversed depth buffer's: 1 near, 0 far */
+export function reverseDepth(camera: PerspectiveCamera) {
+  // Marks it set up for reversed depth, so the renderer doesn't recompute the projection from fov and aspect
+  ;(camera as unknown as { _reversedDepth: boolean })._reversedDepth = true
+  reverseDepthMatrix(camera.projectionMatrix)
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert()
+}
+
+/** Only the z row changes: z becomes (w - z) / 2, so GL's -1 (near) .. 1 (far) maps to 1 .. 0 */
+export function reverseDepthMatrix(m: Matrix4): Matrix4 {
+  const e = m.elements
+  for (const column of [0, 4, 8, 12])
+    e[column + 2] = (e[column + 3] - e[column + 2]) / 2
+  return m
 }

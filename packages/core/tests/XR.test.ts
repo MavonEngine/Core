@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { EventDispatcher, Group, PerspectiveCamera, Scene, WebGLRenderTarget } from 'three'
+import { EventDispatcher, Group, Matrix4, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import XR from '../src/XR'
+import XR, { reverseDepthMatrix } from '../src/XR'
 
 vi.mock('three/examples/jsm/webxr/VRButton.js', () => ({
   VRButton: {
@@ -33,20 +33,35 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   const session = {
     end: vi.fn().mockResolvedValue(undefined),
   }
+  const eyes = [
+    new PerspectiveCamera(),
+    new PerspectiveCamera(),
+  ]
   const xr = Object.assign(new EventDispatcher<any>(), {
     enabled: false,
     isPresenting: false,
     setReferenceSpaceType: vi.fn(),
     setSession: vi.fn().mockResolvedValue(undefined),
     getSession: vi.fn((): any => null),
+    updateCamera: vi.fn(),
+    getCamera: () => ({ cameras: eyes }),
   })
+  const depth = { reversed: false }
+  const draw = vi.fn()
   const renderTarget = { current: null as WebGLRenderTarget | null }
   const webgl = {
     xr,
     shadowMap: { autoUpdate: true },
     getRenderTarget: vi.fn(() => renderTarget.current),
     setRenderTarget: vi.fn((target: WebGLRenderTarget | null) => renderTarget.current = target),
-    render: vi.fn(),
+    state: {
+      buffers: {
+        depth: {
+          getReversed: () => depth.reversed,
+        },
+      },
+    },
+    render: draw,
   }
   const renderer = {
     instance: webgl,
@@ -78,8 +93,13 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     xr,
     game,
     session,
-    webgl,
+    // with the mock render, which XR wraps
+    webgl: { ...webgl, render: draw },
+    // with XR's wrapped render
+    patched: webgl,
     renderTarget,
+    depth,
+    eyes,
   }
 }
 
@@ -250,5 +270,55 @@ describe('xr', () => {
 
     expect(() => instance.renderMirror()).toThrow('lost context')
     expect(webgl.xr.enabled).toBe(true)
+  })
+
+  describe('renderer fixes', () => {
+    it('renders into a render target with the camera it\'s given while presenting, into the headset\'s through it', () => {
+      const { xr, webgl, patched, renderTarget } = setup()
+      xr.isPresenting = true
+      const during: boolean[] = []
+      webgl.render.mockImplementation(() => during.push(xr.enabled))
+
+      renderTarget.current = new WebGLRenderTarget(1, 1)
+      patched.render(new Scene(), new PerspectiveCamera())
+      renderTarget.current = Object.assign(new WebGLRenderTarget(1, 1), { isXRRenderTarget: true })
+      patched.render(new Scene(), new PerspectiveCamera())
+
+      expect(during).toEqual([false, true])
+      expect(xr.enabled).toBe(true)
+    })
+
+    it('gives the eyes and the camera the reversed form of the headset\'s projection with a reversed depth buffer', () => {
+      const { xr, depth, eyes } = setup()
+      depth.reversed = true
+      const gl = new Matrix4().makePerspective(-0.1, 0.1, 0.1, -0.1, 0.1, 100)
+      const camera = new PerspectiveCamera()
+      for (const c of [...eyes, camera])
+        c.projectionMatrix.copy(gl)
+
+      xr.updateCamera(camera)
+
+      for (const c of [...eyes, camera]) {
+        expect(c.reversedDepth).toBe(true)
+        expect(c.projectionMatrix.equals(reverseDepthMatrix(gl.clone()))).toBe(true)
+      }
+    })
+
+    it('leaves the projections alone with a normal depth buffer', () => {
+      const { xr, eyes } = setup()
+      const before = eyes[0].projectionMatrix.clone()
+      xr.updateCamera(new PerspectiveCamera())
+      expect(eyes[0].projectionMatrix.equals(before)).toBe(true)
+    })
+
+    it('maps the near plane to depth 1 and the far one to 0', () => {
+      const m = reverseDepthMatrix(new Matrix4().makePerspective(-0.1, 0.1, 0.1, -0.1, 0.1, 100))
+      const depthAt = (z: number) => {
+        const v = new Vector4(0, 0, -z, 1).applyMatrix4(m)
+        return v.z / v.w
+      }
+      expect(depthAt(0.1)).toBeCloseTo(1)
+      expect(depthAt(100)).toBeCloseTo(0)
+    })
   })
 })
