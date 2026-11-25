@@ -60,6 +60,10 @@ export default class XR {
     xr.addEventListener('sessionend', () => {
       // Resizes were skipped while presenting, so catch up with the window
       game.sizes.setSize(window.innerWidth, window.innerHeight)
+      // Hand the camera back to desktop controls that move it directly (orbit, fly), without the VR offset and
+      // turns. Games placing the view with camera.place() place it again anyway
+      game.camera.rig.position.set(0, 0, 0)
+      game.camera.rig.quaternion.identity()
       game.trigger('xrSessionEnd')
     })
 
