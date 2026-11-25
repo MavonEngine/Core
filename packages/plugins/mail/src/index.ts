@@ -2,12 +2,14 @@ import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugin
 import type { DispatchOptions } from '@mavonengine/core/Queue/Queue'
 import type { Express } from 'express'
 import type { DevInbox } from './devInbox'
+import type { InboxLocation } from './inboxFile'
 import type { Address, MailAddress, MailInput, MailMessage } from './message'
 import type { MailTransport, NodemailerTransport, SentMail } from './transports'
 import { join } from 'node:path'
 import process from 'node:process'
 import Job from '@mavonengine/core/Queue/Job'
 import { DEV_INBOX_PAGE, DEV_INBOX_THEME_JS, DEV_INBOX_THEME_SCRIPT, devInboxTransport, devInboxWanted, proxyToInbox, refuseInboxUpgrades, registerInboxPage, startDevInbox } from './devInbox'
+import { mailDataDir, removeInboxLocation, writeInboxLocation } from './inboxFile'
 import { LAYOUT_FILE, LayoutFile, renderLayout, textToHtml } from './layout'
 import { formatAddress, MailError, parseAddress, toMessage } from './message'
 import { logTransport, nodemailerTransport } from './transports'
@@ -237,6 +239,8 @@ interface MailState {
   inboxPort?: number
   /** Where its UI is served, `/admin/mail/inbox` */
   inboxPath?: string
+  /** What the server wrote for the dev entry's tools to find the inbox, see `INBOX_FILE` */
+  inboxLocation?: InboxLocation
 }
 
 const STATES = Symbol.for('mavonengine.mail.states')
@@ -436,6 +440,14 @@ function openDevInbox(state: MailState) {
       return
     }
     state.inboxPort = inbox.webPort
+    if (ctx.projectRoot) {
+      try {
+        state.inboxLocation = writeInboxLocation(mailDataDir(ctx.projectRoot), inbox.webPort, state.inboxPath ?? '')
+      }
+      catch (err) {
+        ctx.logger?.warn(`Mail: AI assistants won't find the dev inbox, its address could not be written: ${(err as Error).message}`)
+      }
+    }
     const where = ctx.admin
       ? `${ctx.admin.url(DEV_INBOX_PAGE)}/ in the admin panel`
       : `http://127.0.0.1:${inbox.webPort}/`
@@ -490,6 +502,12 @@ export default {
     await ctx.queue.stop()
     await state?.transport.close?.()
     const inbox = await state?.inbox?.catch(() => undefined)
+    if (state?.inboxLocation && ctx.projectRoot) {
+      try {
+        removeInboxLocation(mailDataDir(ctx.projectRoot), state.inboxLocation)
+      }
+      catch {}
+    }
     await inbox?.stop().catch(() => {})
   },
 } satisfies ServerPlugin

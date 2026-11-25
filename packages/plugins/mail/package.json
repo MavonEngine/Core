@@ -46,6 +46,7 @@
   "mavonengine": {
     "target": "server",
     "server": "./dist/index.js",
+    "dev": "./dist/dev.js",
     "publish": "publish",
     "engine": ">=0.0.25"
   },
