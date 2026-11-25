@@ -179,7 +179,10 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         return 'export default []\n'
       }
 
-      this.addWatchFile(join(root, CONFIG_FILE))
+      // For `vite build --watch`. In dev `watchConfig` handles changes: as a watch file of this module, every change
+      // would make Vite reload the page itself, even ones that shouldn't, like recorded prefabs
+      if (config.command === 'build')
+        this.addWatchFile(join(root, CONFIG_FILE))
 
       const { plugins, warnings, incompatible, signature, reloadSignature } = clientPlugins(root)
       loadedSignature = signature

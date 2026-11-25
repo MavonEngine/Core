@@ -214,6 +214,8 @@ describe('dev server', () => {
 
     changed({ plugins: { ...plugins, forest: { options: { density: 5 } } } })
     expect(send).toHaveBeenCalledWith({ type: 'full-reload' })
+    // Vite doesn't reload on its own either: mavonengine.json isn't a dependency of the module
+    expect(vite.moduleGraph.getModulesByFile(join(root, 'mavonengine.json'))?.size ?? 0).toBe(0)
   })
 
   it('stops the dev entries when the dev server closes', async () => {
