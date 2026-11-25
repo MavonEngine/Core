@@ -39,7 +39,7 @@
   },
   "peerDependencies": {
     "@mavonengine/core": "*",
-    "three": "0.184.0"
+    "three": "0.187.0"
   },
   "dependencies": {
     "@tweakpane/core": "^2.0.5",
@@ -57,16 +57,16 @@
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "0.184.1",
+    "@types/three": "0.187.0",
     "@vitejs/plugin-react": "^6.2.1",
     "@vitest/coverage-v8": "^5.1.0",
     "@vitest/ui": "^5.1.0",
     "glob": "^10.5.0",
     "jsdom": "^28.1.0",
-    "three": "0.184.0",
+    "three": "0.187.0",
     "typescript": "7.0.2",
     "vite": "^8.3.5",
-    "vite-plugin-glsl": "^1.6.2",
-    "vitest": "^5.1.0"
+    "vite-plugin-glsl": "^1.6.3",
+    "vitest": "^5.1.1"
   }
 }
