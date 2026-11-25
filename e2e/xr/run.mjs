@@ -43,10 +43,32 @@ async function framesDrawn(page, count, ms = 10000) {
   const frame = () => page.evaluate(() => window.Game.renderer.instance.info.render.frame)
   const start = await frame()
   const until = Date.now() + ms
-  let drawn = 0
-  while ((drawn = await frame() - start) < count && Date.now() < until)
+  while (true) {
+    const drawn = await frame() - start
+    if (drawn >= count || Date.now() > until)
+      return drawn
     await delay(100)
-  return drawn
+  }
+}
+
+/**
+ * Poll `fn` until it gives something truthy or `ms` have passed, and give its last value. The game reads the sticks
+ * and keys once a frame, and a CI runner can take hundreds of ms over one, so input is held until the game reacts
+ */
+async function until(fn, ms = 15000) {
+  const end = Date.now() + ms
+  while (true) {
+    const value = await fn()
+    if (value || Date.now() > end)
+      return value
+    await delay(100)
+  }
+}
+
+/** Let the game see an input change: a few frames, then time for the server's answer */
+async function settle(page) {
+  await framesDrawn(page, 3)
+  await delay(600)
 }
 
 const stick = (page, hand, x, y) => page.evaluate(([hand, x, y]) => window.__headset.controllers[hand].updateAxes('thumbstick', x, y), [hand, x, y])
@@ -119,9 +141,9 @@ async function main() {
 
     log('\n== walk')
     await stick(page, 'left', 0, -1)
-    await delay(1000)
+    await until(async () => (await pose(page)).player[2] - start.player[2] < -2.5)
     await stick(page, 'left', 0, 0)
-    await delay(800)
+    await settle(page)
     const walked = await pose(page)
     const dz = walked.player[2] - start.player[2]
     check(dz < -2 && Math.abs(walked.player[0] - start.player[0]) < 0.5, `pushing the left stick forward walks the character the way the player looks, through the server (moved ${dz.toFixed(2)}m along Z)`)
@@ -130,9 +152,9 @@ async function main() {
 
     // Pushed right: walks along +X, facing it
     await stick(page, 'left', 1, 0)
-    await delay(600)
+    await until(async () => (await pose(page)).player[0] - walked.player[0] > 1.5)
     await stick(page, 'left', 0, 0)
-    await delay(600)
+    await settle(page)
     const strafed = await pose(page)
     check(strafed.player[0] - walked.player[0] > 1, `pushing it right walks right (moved ${(strafed.player[0] - walked.player[0]).toFixed(2)}m along X)`)
     check(Math.abs(strafed.yaw + Math.PI / 2) < 0.15, `and turns the character to face right (yaw ${strafed.yaw.toFixed(3)})`)
@@ -144,7 +166,11 @@ async function main() {
       const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
       const model = game.localPlayer.graphicalComponent.instance
       window.__headset.controllers.left.updateAxes('thumbstick', 0, -1)
-      await sleep(600)
+      // Until it walks, then a little longer to get up to speed
+      const still = game.localPlayer.position.clone()
+      for (let waited = 0; game.localPlayer.position.distanceTo(still) < 0.5 && waited < 15000; waited += 50)
+        await sleep(50)
+      await sleep(300)
       const jitter = []
       let moved = 0
       let frames = 0
@@ -166,22 +192,22 @@ async function main() {
       await sleep(1000)
       game.renderer.update = render
       window.__headset.controllers.left.updateAxes('thumbstick', 0, 0)
-      await sleep(600)
       return {
         frames,
         moved,
         jitter: Math.max(...jitter),
       }
     })
-    check(smooth.moved === smooth.frames, `the character's model moves every rendered frame (${smooth.moved} of ${smooth.frames})`)
+    check(smooth.frames > 0 && smooth.moved === smooth.frames, `the character's model moves every rendered frame (${smooth.moved} of ${smooth.frames})`)
     check(smooth.jitter < 0.01, `and holds still in the view while walking (${(smooth.jitter * 100).toFixed(2)}cm most from one frame to the next)`)
 
     log('\n== snap turn')
+    await settle(page)
     const before = await page.evaluate(() => window.Game.camera.rig.rotation.y)
     await stick(page, 'right', 1, 0)
-    await delay(300)
+    await until(async () => await page.evaluate(() => window.Game.camera.rig.rotation.y) !== before)
     await stick(page, 'right', 0, 0)
-    await delay(800)
+    await settle(page)
     const turned = await page.evaluate(() => window.Game.camera.rig.rotation.y) - before
     check(Math.abs(turned * 180 / Math.PI + 30) < 1, `a right stick flick snap turns the view 30 degrees right, once (${(turned * 180 / Math.PI).toFixed(1)})`)
     const around = await pose(page)
@@ -198,9 +224,12 @@ async function main() {
     ]
     const beforeKeys = await pose(page)
     await page.keyboard.down('KeyW')
-    await delay(800)
+    await until(async () => {
+      const now = (await pose(page)).player
+      return Math.hypot(now[0] - beforeKeys.player[0], now[2] - beforeKeys.player[2]) > 2.5
+    })
     await page.keyboard.up('KeyW')
-    await delay(600)
+    await settle(page)
     const keyed = await pose(page)
     const kx = keyed.player[0] - beforeKeys.player[0]
     const kz = keyed.player[2] - beforeKeys.player[2]
@@ -209,12 +238,14 @@ async function main() {
 
     const beforeQ = await rigYaw()
     await page.keyboard.press('KeyQ')
-    await delay(200)
+    await until(async () => await rigYaw() !== beforeQ)
+    await framesDrawn(page, 2)
     const q = (await rigYaw() - beforeQ) * 180 / Math.PI
     check(Math.abs(q - 30) < 1, `Q snap turns the view 30 degrees left (${q.toFixed(1)})`)
     const beforeE = await rigYaw()
     await page.keyboard.press('KeyE')
-    await delay(200)
+    await until(async () => await rigYaw() !== beforeE)
+    await framesDrawn(page, 2)
     const e = (await rigYaw() - beforeE) * 180 / Math.PI
     check(Math.abs(e + 30) < 1, `E snap turns it 30 degrees right (${e.toFixed(1)})`)
 
@@ -224,13 +255,14 @@ async function main() {
     for (let x = 610; x <= 700; x += 10)
       await page.mouse.move(x, 400)
     await page.mouse.up()
-    await delay(200)
+    await until(async () => await rigYaw() !== beforeDrag)
+    await framesDrawn(page, 2)
     const dragged = (await rigYaw() - beforeDrag) * 180 / Math.PI
     check(dragged < -20 && dragged > -40, `dragging the mouse 100px right turns the view right (${dragged.toFixed(1)} degrees)`)
     // Moving the mouse without a button held leaves the view alone
     const beforeHover = await rigYaw()
     await page.mouse.move(800, 400)
-    await delay(200)
+    await framesDrawn(page, 2)
     check(await rigYaw() === beforeHover, 'moving the mouse without dragging leaves the view alone')
 
     log('\n== mirror')
