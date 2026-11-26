@@ -63,8 +63,13 @@ export default class Camera {
    *
    * Turning the view continuously in VR is uncomfortable for many players, so pass `turn: false` to only move the
    * rig and leave its heading alone (turn it yourself in steps, e.g. 30 degree snap turns).
+   *
+   * In VR the player's own head movement moves the view from `position` (leaning, standing up), as it would in the
+   * room. Pass `pinHead: true` to keep the view at `position` instead, the head only turning it: for a first person
+   * view on a body, where leaning would put the eyes ahead of the head or back in the neck. It follows the head's
+   * pose of the last rendered frame.
    */
-  place(position: Vector3, target: Vector3, { turn = true }: { turn?: boolean } = {}) {
+  place(position: Vector3, target: Vector3, { turn = true, pinHead = false }: { turn?: boolean, pinHead?: boolean } = {}) {
     if (!this.xrPresenting) {
       this.instance.position.set(0, 0, 0)
       this.instance.quaternion.identity()
@@ -87,7 +92,11 @@ export default class Camera {
 
     // The head sits above the rig's floor level (and wherever the player stood when the session began), so move
     // the rig by that offset to land the head at `position`
-    headOffset.copy(this.xrHeadOffset ?? { x: 0, y: DEFAULT_EYE_HEIGHT, z: 0 }).applyQuaternion(this.rig.quaternion)
+    // Pinned, the head where it is now rather than where it was measured
+    const head = pinHead && this.xrHeadOffset
+      ? this.instance.position
+      : this.xrHeadOffset
+    headOffset.copy(head ?? { x: 0, y: DEFAULT_EYE_HEIGHT, z: 0 }).applyQuaternion(this.rig.quaternion)
     this.rig.position.copy(position).sub(headOffset)
     this.updateWorldPosition()
   }
