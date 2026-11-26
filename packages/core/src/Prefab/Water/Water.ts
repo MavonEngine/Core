@@ -58,11 +58,17 @@ export default class Water extends WithEditorHelper(GameObject) {
         uTime: { value: 0 },
 
         uBigWavesElevation: { value: 0.380 },
-        uBigWavesFrequency: { value: new Vector2(0.326, 0.978) },
+        uBigWavesFrequency: {
+          value: new Vector2(0.326, 0.978),
+        },
         uBigWavesSpeed: { value: 1.0 },
 
-        uDepthColor: { value: new Color('#186691') },
-        uSurfaceColor: { value: new Color('#9bd8ff') },
+        uDepthColor: {
+          value: new Color('#186691'),
+        },
+        uSurfaceColor: {
+          value: new Color('#9bd8ff'),
+        },
         uColorOffset: { value: 0.380 },
         uColorMultiplier: { value: 0.761 },
 
@@ -73,7 +79,9 @@ export default class Water extends WithEditorHelper(GameObject) {
           value: Array.from({ length: MAX_PUSH_POINTS }).fill(0),
         },
 
-        uSunDirection: { value: new Vec3(0, 1, 0) },
+        uSunDirection: {
+          value: new Vec3(0, 1, 0),
+        },
         uSunReflectionStrength: { value: 1.0 },
       },
     })
@@ -248,7 +256,7 @@ export default class Water extends WithEditorHelper(GameObject) {
       this.material.uniforms.uSunDirection.value.copy(WaterManager.instance.sunPosition)
     }
 
-    const cameraPos = Game.instance().camera.instance.position
+    const cameraPos = Game.instance().camera.worldPosition
 
     for (const section of this.sections) {
       const distance = cameraPos.distanceTo(section.mesh.position)

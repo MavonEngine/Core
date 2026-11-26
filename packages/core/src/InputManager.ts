@@ -1,3 +1,4 @@
+import type XRInput from './XRInput'
 import { Group, Mesh, Object3D, Vector2 } from 'three'
 import Game from './Game'
 import GamepadManager from './GamepadManager'
@@ -11,6 +12,9 @@ export default class InputManager extends EventEmitter {
 
   /** Connected game controllers (Xbox, PlayStation, generic) */
   readonly gamepads = new GamepadManager()
+
+  /** VR controllers, once `game.enableXR()` was called */
+  xr?: XRInput
 
   constructor() {
     super()
@@ -35,6 +39,19 @@ export default class InputManager extends EventEmitter {
       this.mousePressed.delete(ev.button)
     })
 
+    // Keys or buttons held while the window loses focus (clicking out of an
+    // iframe, alt-tab, switching tabs) never get their keyup/mouseup, so they
+    // would stay "pressed" forever. Drop everything when focus goes away.
+    const releaseAll = () => {
+      this.keysPressed.clear()
+      this.mousePressed.clear()
+    }
+    window.addEventListener('blur', releaseAll)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden)
+        releaseAll()
+    })
+
     window.addEventListener('mousemove', (ev) => {
       this.cursor.set(
         ev.clientX / Game.instance().sizes.width * 2 - 1,
@@ -49,6 +66,7 @@ export default class InputManager extends EventEmitter {
    */
   update() {
     this.gamepads.poll()
+    this.xr?.poll()
   }
 
   /**

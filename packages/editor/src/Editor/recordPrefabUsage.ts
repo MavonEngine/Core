@@ -23,7 +23,9 @@ export function recordPrefabUsage(plugin: string, prefab: string, fetchFn: typeo
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plugin, prefab }),
   }).then(
-    res => (res.ok ? undefined : warn(`${res.status} ${res.statusText}`)),
+    res => (res.ok
+      ? undefined
+      : warn(`${res.status} ${res.statusText}`)),
     (err: Error) => warn(err.message),
   )
 }

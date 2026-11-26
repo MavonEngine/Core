@@ -22,14 +22,51 @@ async function liveState(samples = 30): Promise<DashboardState> {
     error: null,
     failures: 0,
     logs: [
-      { id: 1, timestamp: 0, level: 'info', message: 'Starting @mavon/engine - Socket Server' },
-      { id: 2, timestamp: 0, level: 'warn', message: 'Slow tick: 40.1 ms (budget 33.33 ms)' },
+      {
+        id: 1,
+        timestamp: 0,
+        level: 'info',
+        message: 'Starting @mavon/engine - Socket Server',
+      },
+      {
+        id: 2,
+        timestamp: 0,
+        level: 'warn',
+        message: 'Slow tick: 40.1 ms (budget 33.33 ms)',
+      },
     ],
     logsAvailable: true,
     requests: [
-      { id: 1, timestamp: 0, method: 'GET', path: '/assets/index.js', status: 200, durationMs: 3.2, bytes: 412000, address: '203.0.113.10' },
-      { id: 2, timestamp: 0, method: 'GET', path: '/favicon.ico', status: 404, durationMs: 0.8, bytes: 160, address: '203.0.113.10' },
-      { id: 3, timestamp: 0, method: 'WS', path: '/hmr', status: 101, durationMs: 1.1, bytes: 129, address: '127.0.0.1' },
+      {
+        id: 1,
+        timestamp: 0,
+        method: 'GET',
+        path: '/assets/index.js',
+        status: 200,
+        durationMs: 3.2,
+        bytes: 412000,
+        address: '203.0.113.10',
+      },
+      {
+        id: 2,
+        timestamp: 0,
+        method: 'GET',
+        path: '/favicon.ico',
+        status: 404,
+        durationMs: 0.8,
+        bytes: 160,
+        address: '203.0.113.10',
+      },
+      {
+        id: 3,
+        timestamp: 0,
+        method: 'WS',
+        path: '/hmr',
+        status: 101,
+        durationMs: 1.1,
+        bytes: 129,
+        address: '127.0.0.1',
+      },
     ],
     requestsAvailable: true,
     packets: normalizePackets(await source.fetchPackets!(0)).entries,
@@ -37,15 +74,64 @@ async function liveState(samples = 30): Promise<DashboardState> {
     sync: normalizeSync(await source.fetchSync!()),
     packetDetail: null,
     routes: [
-      { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false, summary: 'Whether the server is up' },
-      { method: 'POST', path: '/api/scores/:player', source: 'game', params: { player: '' }, devOnly: false },
-      { method: 'GET', path: '/monitoring/api/metrics', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
+      {
+        method: 'GET',
+        path: '/api/game/health',
+        source: 'engine',
+        params: {},
+        devOnly: false,
+        summary: 'Whether the server is up',
+      },
+      {
+        method: 'POST',
+        path: '/api/scores/:player',
+        source: 'game',
+        params: { player: '' },
+        devOnly: false,
+      },
+      {
+        method: 'GET',
+        path: '/monitoring/api/metrics',
+        source: 'plugin',
+        plugin: '@mavonengine/http-monitoring',
+        params: {},
+        devOnly: false,
+      },
     ],
     routesAvailable: true,
     plugins: [
-      { package: '@mavonengine/http-monitoring', enabled: true, installed: true, runningOnServer: true, version: '0.0.1', description: 'The dashboard in the browser', license: 'MIT', target: 'server', engine: '^0.0.22', declaredPrefabs: [], usedPrefabs: [] },
-      { package: '@acme/forest', enabled: true, installed: true, runningOnServer: false, version: '2.3.1', target: 'client', declaredPrefabs: ['Tree', 'Rock'], usedPrefabs: ['Tree'] },
-      { package: 'ghost', enabled: true, installed: false, runningOnServer: false, problem: 'Listed in mavonengine.json but not installed', declaredPrefabs: [], usedPrefabs: [] },
+      {
+        package: '@mavonengine/http-monitoring',
+        enabled: true,
+        installed: true,
+        runningOnServer: true,
+        version: '0.0.1',
+        description: 'The dashboard in the browser',
+        license: 'MIT',
+        target: 'server',
+        engine: '^0.0.22',
+        declaredPrefabs: [],
+        usedPrefabs: [],
+      },
+      {
+        package: '@acme/forest',
+        enabled: true,
+        installed: true,
+        runningOnServer: false,
+        version: '2.3.1',
+        target: 'client',
+        declaredPrefabs: ['Tree', 'Rock'],
+        usedPrefabs: ['Tree'],
+      },
+      {
+        package: 'ghost',
+        enabled: true,
+        installed: false,
+        runningOnServer: false,
+        problem: 'Listed in mavonengine.json but not installed',
+        declaredPrefabs: [],
+        usedPrefabs: [],
+      },
     ],
     pluginsAvailable: true,
     database: null,
@@ -56,7 +142,10 @@ async function liveState(samples = 30): Promise<DashboardState> {
 }
 
 function viewState(overrides: Partial<ViewState> = {}): ViewState {
-  return { ...initialViewState(), ...overrides }
+  return {
+    ...initialViewState(),
+    ...overrides,
+  }
 }
 
 function render(state: DashboardState, width = 130, height = 40, transparent = false, tab = 0, view = viewState({ tab }), startup?: StartupInfo) {
@@ -64,14 +153,45 @@ function render(state: DashboardState, width = 130, height = 40, transparent = f
 }
 
 function startingState(status: DashboardState['status']): DashboardState {
-  return { status, source: 'http://localhost:8050/api/game/metrics', snapshot: null, lastUpdate: null, error: 'Can\'t reach', failures: 3, logs: [], logsAvailable: null, requests: [], requestsAvailable: null, packets: [], packetsAvailable: null, sync: null, packetDetail: null, routes: [], routesAvailable: null, plugins: [], pluginsAvailable: null, database: null, databaseAvailable: null, databaseError: null, tableDetail: null }
+  return {
+    status,
+    source: 'http://localhost:8050/api/game/metrics',
+    snapshot: null,
+    lastUpdate: null,
+    error: 'Can\'t reach',
+    failures: 3,
+    logs: [],
+    logsAvailable: null,
+    requests: [],
+    requestsAvailable: null,
+    packets: [],
+    packetsAvailable: null,
+    sync: null,
+    packetDetail: null,
+    routes: [],
+    routesAvailable: null,
+    plugins: [],
+    pluginsAvailable: null,
+    database: null,
+    databaseAvailable: null,
+    databaseError: null,
+    tableDetail: null,
+  }
 }
 
 describe('dashboard view', () => {
   it('shows every panel when live', async () => {
     const screen = render(await liveState())
 
-    for (const title of ['CPU', 'Network', 'Tick', 'World', 'Players (', 'LIVE', 'q Quit'])
+    for (const title of [
+      'CPU',
+      'Network',
+      'Tick',
+      'World',
+      'Players (',
+      'LIVE',
+      'q Quit',
+    ])
       expect(screen.contains(title), title).toBe(true)
 
     expect(screen.contains('sim-01')).toBe(true)
@@ -81,7 +201,13 @@ describe('dashboard view', () => {
     const state = await liveState()
     for (const width of [130, 80]) {
       const screen = render(state, width, 80)
-      for (const text of ['Queue (database)', 'queued', 'processed', 'failed', 'Running'])
+      for (const text of [
+        'Queue (database)',
+        'queued',
+        'processed',
+        'failed',
+        'Running',
+      ])
         expect(screen.contains(text), `${text} at ${width}`).toBe(true)
     }
   })
@@ -124,7 +250,14 @@ describe('dashboard view', () => {
 
     expect(screen.contains('4 HTTP')).toBe(true)
     expect(screen.contains('HTTP requests (3, 1 error)')).toBe(true)
-    for (const text of ['/assets/index.js', '/favicon.ico', '404', 'WS', '/hmr', '402.3 KiB'])
+    for (const text of [
+      '/assets/index.js',
+      '/favicon.ico',
+      '404',
+      'WS',
+      '/hmr',
+      '402.3 KiB',
+    ])
       expect(screen.contains(text), text).toBe(true)
     expect(screen.find('/hmr')!.y).toBeLessThan(screen.find('/favicon.ico')!.y)
     expect(screen.contains('Slow tick')).toBe(false)
@@ -132,7 +265,16 @@ describe('dashboard view', () => {
 
   it('keeps a scrolled http table on the same request as new ones arrive', async () => {
     const state = await liveState()
-    const request = (id: number) => ({ id, timestamp: 0, method: 'GET', path: `/page-${id}`, status: 200, durationMs: 1, bytes: 10, address: null })
+    const request = (id: number) => ({
+      id,
+      timestamp: 0,
+      method: 'GET',
+      path: `/page-${id}`,
+      status: 200,
+      durationMs: 1,
+      bytes: 10,
+      address: null,
+    })
     state.requests = Array.from({ length: 80 }, (_, i) => request(i + 1))
     const view = viewState({ tab: 3, requestTopId: 60 })
 
@@ -169,7 +311,10 @@ describe('dashboard view', () => {
     const closed = render(state, 130, 40, false, 1)
     expect(closed.contains(player.connection!.address!)).toBe(false)
 
-    for (const [width, height] of [[130, 40], [80, 60]]) {
+    for (const [width, height] of [
+      [130, 40],
+      [80, 60],
+    ]) {
       const screen = render(state, width, height, false, 1, viewState({ tab: 1, selectedPlayerId: player.id }))
       expect(screen.contains(player.connection!.address!), `${width}x${height}`).toBe(true)
       expect(screen.contains('Connected')).toBe(true)
@@ -444,7 +589,19 @@ describe('network tab', () => {
   it('shows the state sync, what the traffic is made of and the packets, newest first', async () => {
     const screen = render(await liveState(), 150, 40, false, 4)
 
-    for (const text of ['5 Network', 'State sync (tick 900)', '151 synced entities', 'out of every player\'s range', 'distance 200', 'By message (last 5 s)', 'sv_state', 'cl_move', 'pings hidden', 'p Show pings', 'e Events only'])
+    for (const text of [
+      '5 Network',
+      'State sync (tick 900)',
+      '151 synced entities',
+      'out of every player\'s range',
+      'distance 200',
+      'By message (last 5 s)',
+      'sv_state',
+      'cl_move',
+      'pings hidden',
+      'p Show pings',
+      'e Events only',
+    ])
       expect(screen.contains(text), text).toBe(true)
     // Pings count in the summary but are left out of the list
     expect(screen.find('pong')!.y).toBeLessThan(screen.find('Details')!.y)
@@ -526,15 +683,34 @@ describe('network tab', () => {
     // Its content is loaded after the selection changed
     expect(render(state, 150, 40, false, 4, view).contains('Loading…')).toBe(true)
 
-    state.packetDetail = { id: view.selectedPacketId!, status: 'loaded', lines: ['{', '  "tick": 900,', '  "entities": []', '}'] }
+    state.packetDetail = {
+      id: view.selectedPacketId!,
+      status: 'loaded',
+      lines: [
+        '{',
+        '  "tick": 900,',
+        '  "entities": []',
+        '}',
+      ],
+    }
     const screen = render(state, 150, 40, false, 4, view)
-    for (const text of [`${newestFirst[0].type} out ·`, '"tick": 900,', 'esc Close', '↑↓ Open packet', 'By message'])
+    for (const text of [
+      `${newestFirst[0].type} out ·`,
+      '"tick": 900,',
+      'esc Close',
+      '↑↓ Open packet',
+      'By message',
+    ])
       expect(screen.contains(text), text).toBe(true)
     // The list stays next to it
     expect(screen.find('"tick": 900,')!.x).toBeGreaterThan(screen.find('Details')!.x)
 
     // The details of another packet are not shown for this one
-    state.packetDetail = { id: -1, status: 'loaded', lines: ['"other"'] }
+    state.packetDetail = {
+      id: -1,
+      status: 'loaded',
+      lines: ['"other"'],
+    }
     expect(render(state, 150, 40, false, 4, view).contains('"other"')).toBe(false)
 
     expect(handleNetworkKey(view, 'escape', state.packets)).toBe(true)
@@ -544,7 +720,11 @@ describe('network tab', () => {
   })
 
   it('opens the first or last packet when none is selected, and stops at the ends', () => {
-    const packets = [packet(1), packet(2), packet(3)]
+    const packets = [
+      packet(1),
+      packet(2),
+      packet(3),
+    ]
     const view = viewState({ tab: 4, payloadOffset: 9 })
 
     handleNetworkKey(view, 'up', packets)
@@ -559,7 +739,11 @@ describe('network tab', () => {
   it('puts the content under the list on a narrow terminal and scrolls long payloads', async () => {
     const state = await liveState()
     const id = state.packets.at(-1)!.id
-    state.packetDetail = { id, status: 'loaded', lines: Array.from({ length: 200 }, (_, i) => `line ${i}`) }
+    state.packetDetail = {
+      id,
+      status: 'loaded',
+      lines: Array.from({ length: 200 }, (_, i) => `line ${i}`),
+    }
     const view = viewState({ tab: 4, selectedPacketId: id, payloadOffset: 150 })
 
     const screen = render(state, 80, 44, false, 4, view)
@@ -570,7 +754,11 @@ describe('network tab', () => {
     expect(screen.find('line 150')!.y).toBeGreaterThan(screen.find('Details')!.y)
 
     // A shorter payload than where the last one was scrolled to
-    state.packetDetail = { id, status: 'loaded', lines: ['only line'] }
+    state.packetDetail = {
+      id,
+      status: 'loaded',
+      lines: ['only line'],
+    }
     expect(render(state, 80, 44, false, 4, view).contains('only line')).toBe(true)
     expect(view.payloadOffset).toBe(0)
   })
@@ -580,7 +768,12 @@ describe('network tab', () => {
     const id = state.packets.at(-1)!.id
     const view = viewState({ tab: 4, selectedPacketId: id })
     const shows = (detail: Partial<PacketDetail>, text: string) => {
-      state.packetDetail = { id, status: 'loaded', lines: [], ...detail }
+      state.packetDetail = {
+        id,
+        status: 'loaded',
+        lines: [],
+        ...detail,
+      }
       return render(state, 150, 40, false, 4, view).contains(text)
     }
 
@@ -590,7 +783,11 @@ describe('network tab', () => {
 
     // A packet the dashboard no longer lists keeps its panel
     view.selectedPacketId = 999999
-    state.packetDetail = { id: 999999, status: 'loaded', lines: ['"kept"'] }
+    state.packetDetail = {
+      id: 999999,
+      status: 'loaded',
+      lines: ['"kept"'],
+    }
     const screen = render(state, 150, 40, false, 4, view)
     expect(screen.contains('#999999')).toBe(true)
     expect(screen.contains('"kept"')).toBe(true)
@@ -606,35 +803,88 @@ describe('network tab', () => {
       packet(1, { timestamp: 0, bytes: 9999 }), // Before the window
       packet(2, { timestamp: 6000, bytes: 1000 }),
       packet(3, { timestamp: 8000, bytes: 3000 }),
-      packet(4, { timestamp: 9000, direction: 'in', type: 'command', bytes: 50 }),
-      packet(5, { timestamp: 9500, kind: 'event', direction: null, type: 'sync_leave', bytes: 0 }),
-      packet(6, { timestamp: 10000, direction: 'in', type: 'command', bytes: 50 }),
+      packet(4, {
+        timestamp: 9000,
+        direction: 'in',
+        type: 'command',
+        bytes: 50,
+      }),
+      packet(5, {
+        timestamp: 9500,
+        kind: 'event',
+        direction: null,
+        type: 'sync_leave',
+        bytes: 0,
+      }),
+      packet(6, {
+        timestamp: 10000,
+        direction: 'in',
+        type: 'command',
+        bytes: 50,
+      }),
     ]
 
     expect(messageStats(packets, 5000)).toEqual([
-      { direction: 'out', type: 'sv_state', rate: 0.4, bytesPerSecond: 800, avgBytes: 2000 },
-      { direction: 'in', type: 'command', rate: 0.4, bytesPerSecond: 20, avgBytes: 50 },
+      {
+        direction: 'out',
+        type: 'sv_state',
+        rate: 0.4,
+        bytesPerSecond: 800,
+        avgBytes: 2000,
+      },
+      {
+        direction: 'in',
+        type: 'command',
+        rate: 0.4,
+        bytesPerSecond: 20,
+        avgBytes: 50,
+      },
     ])
     expect(messageStats([])).toEqual([])
     // Half a second of data is not stretched to less than a second
-    expect(messageStats([packet(1, { timestamp: 0 }), packet(2, { timestamp: 500 })])[0]).toMatchObject({ rate: 2, bytesPerSecond: 2000 })
+    expect(messageStats([
+      packet(1, { timestamp: 0 }),
+      packet(2, { timestamp: 500 }),
+    ])[0]).toMatchObject({ rate: 2, bytesPerSecond: 2000 })
   })
 
   it('filters and describes packets', () => {
-    const packets = [packet(1), packet(2, { type: 'ping' }), packet(3, { kind: 'event', type: 'connect' })]
+    const packets = [
+      packet(1),
+      packet(2, { type: 'ping' }),
+      packet(3, { kind: 'event', type: 'connect' }),
+    ]
 
     expect(visiblePackets(packets, { showPings: false, eventsOnly: false }).map(p => p.id)).toEqual([1, 3])
     expect(visiblePackets(packets, { showPings: true, eventsOnly: false }).map(p => p.id)).toEqual([1, 2, 3])
     expect(visiblePackets(packets, { showPings: true, eventsOnly: true }).map(p => p.id)).toEqual([3])
 
-    expect(describePacket(packet(1, { tick: 7, info: { entities: 3, ack: null } }))).toBe('tick 7 · entities 3')
-    expect(describePacket(packet(1, { tick: null, sequenceId: 4, reliable: true, info: { entities: ['a', 'b'], drop: { reason: 'x' } } }))).toBe('seq 4 · reliable · entities a, b · drop {"reason":"x"}')
+    expect(describePacket(packet(1, {
+      tick: 7,
+      info: { entities: 3, ack: null },
+    }))).toBe('tick 7 · entities 3')
+    expect(describePacket(packet(1, {
+      tick: null,
+      sequenceId: 4,
+      reliable: true,
+      info: {
+        entities: ['a', 'b'],
+        drop: { reason: 'x' },
+      },
+    }))).toBe('seq 4 · reliable · entities a, b · drop {"reason":"x"}')
   })
 })
 
 describe('toLogRows', () => {
   it('splits multi-line messages and trims blank edges', () => {
-    const rows = toLogRows([{ id: 1, timestamp: 0, level: 'info', message: '\n\n┌──┐\n│ME│\n└──┘\n' }])
+    const rows = toLogRows([
+      {
+        id: 1,
+        timestamp: 0,
+        level: 'info',
+        message: '\n\n┌──┐\n│ME│\n└──┘\n',
+      },
+    ])
 
     expect(rows).toHaveLength(3)
     expect(rows[0]).toMatchObject({ level: 'info', message: '┌──┐' })
@@ -647,7 +897,15 @@ describe('toLogRows', () => {
       const screen = render(await liveState(), 150, 40, false, 5)
 
       expect(screen.contains('HTTP endpoints (3: 1 engine, 1 game, 1 from 1 plugin, 0 dev only)')).toBe(true)
-      for (const text of ['/api/game/health', 'Whether the server is up', 'POST', '/api/scores/:player', 'game', '/monitoring/api/metrics', '@mavonengine/http-monitoring'])
+      for (const text of [
+        '/api/game/health',
+        'Whether the server is up',
+        'POST',
+        '/api/scores/:player',
+        'game',
+        '/monitoring/api/metrics',
+        '@mavonengine/http-monitoring',
+      ])
         expect(screen.contains(text), text).toBe(true)
       expect(screen.contains('CPU')).toBe(false)
     })
@@ -655,8 +913,20 @@ describe('toLogRows', () => {
     it('says which endpoints only exist in development', async () => {
       const state = await liveState()
       state.routes = [
-        { method: 'GET', path: '/api/game/dev/scene', source: 'engine', params: {}, devOnly: true },
-        { method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false },
+        {
+          method: 'GET',
+          path: '/api/game/dev/scene',
+          source: 'engine',
+          params: {},
+          devOnly: true,
+        },
+        {
+          method: 'GET',
+          path: '/api/scores',
+          source: 'game',
+          params: {},
+          devOnly: false,
+        },
       ]
       const screen = render(state, 150, 40, false, 5)
 
@@ -670,7 +940,11 @@ describe('toLogRows', () => {
     })
 
     it('says so when the server doesn\'t list its endpoints', async () => {
-      const screen = render({ ...await liveState(), routes: [], routesAvailable: false }, 150, 40, false, 5)
+      const screen = render({
+        ...await liveState(),
+        routes: [],
+        routesAvailable: false,
+      }, 150, 40, false, 5)
 
       expect(screen.contains('without GET /api/game/routes')).toBe(true)
     })
@@ -697,7 +971,15 @@ describe('toLogRows', () => {
       expect(row('Package')).toMatch(/Version\s+Status\s+Runs on\s+Routes\s+Prefabs/)
       expect(row('ghost')).toMatch(/—\s+problem/)
 
-      for (const text of ['The dashboard in the browser', '@mavonengine/core ^0.0.22', 'MIT', 'running', 'HTTP endpoints (1)', '/monitoring/api/metrics', 'prod + dev'])
+      for (const text of [
+        'The dashboard in the browser',
+        '@mavonengine/core ^0.0.22',
+        'MIT',
+        'running',
+        'HTTP endpoints (1)',
+        '/monitoring/api/metrics',
+        'prod + dev',
+      ])
         expect(screen.contains(text), text).toBe(true)
       expect(screen.contains('CPU')).toBe(false)
     })
@@ -733,7 +1015,9 @@ describe('toLogRows', () => {
 
     it('marks a server plugin that this server doesn\'t run', async () => {
       const state = await liveState()
-      state.plugins = [{ ...state.plugins[0], runningOnServer: false }]
+      state.plugins = [
+        { ...state.plugins[0], runningOnServer: false },
+      ]
 
       const screen = render(state, 150, 40, false, 6)
 
@@ -750,8 +1034,18 @@ describe('toLogRows', () => {
 
     describe('available to install', () => {
       const LIST = [
-        { package: '@mavonengine/http-monitoring', name: 'HTTP Monitoring', description: 'The dashboard in the browser', target: 'server' as const },
-        { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const },
+        {
+          package: '@mavonengine/http-monitoring',
+          name: 'HTTP Monitoring',
+          description: 'The dashboard in the browser',
+          target: 'server' as const,
+        },
+        {
+          package: '@acme/weather',
+          name: 'Weather',
+          description: 'Rain and fog',
+          target: 'both' as const,
+        },
         { package: 'plain', name: 'plain' },
       ]
 
@@ -797,7 +1091,10 @@ describe('toLogRows', () => {
         const available = new AvailablePlugins('x', async () => ({ plugins: LIST }))
         await available.load()
 
-        const screen = draw({ ...await liveState(), plugins: [] }, available)
+        const screen = draw({
+          ...await liveState(),
+          plugins: [],
+        }, available)
 
         expect(screen.contains('The project has no plugins')).toBe(true)
         expect(screen.contains('Available to install (3)')).toBe(true)
@@ -806,7 +1103,9 @@ describe('toLogRows', () => {
 
       it('says so when nothing is left to install, or the list can\'t be read', async () => {
         const state = await liveState()
-        const all = new AvailablePlugins('x', async () => ({ plugins: [LIST[0]] }))
+        const all = new AvailablePlugins('x', async () => ({
+          plugins: [LIST[0]],
+        }))
         await all.load()
         expect(draw(state, all).contains('The project has every plugin on the list')).toBe(true)
 
@@ -821,12 +1120,20 @@ describe('toLogRows', () => {
     })
 
     describe('installing', () => {
-      const weather = { package: '@acme/weather', name: 'Weather', description: 'Rain and fog', target: 'both' as const, homepage: 'https://example.com/weather' }
+      const weather = {
+        package: '@acme/weather',
+        name: 'Weather',
+        description: 'Rain and fog',
+        target: 'both' as const,
+        homepage: 'https://example.com/weather',
+      }
       const plain = { package: 'plain', name: 'plain' }
       const idle = { job: null, busy: false }
 
       async function loaded() {
-        const available = new AvailablePlugins('x', async () => ({ plugins: [weather, plain] }))
+        const available = new AvailablePlugins('x', async () => ({
+          plugins: [weather, plain],
+        }))
         await available.load()
         return available
       }
@@ -860,7 +1167,14 @@ describe('toLogRows', () => {
         const available = await loaded()
 
         const withInstaller = draw(state, view, available, idle)
-        for (const text of ['Weather (@acme/weather)', 'Rain and fog', 'not installed', 'https://example.com/weather', 'Press i to install it and restart the dev servers', 'i Install'])
+        for (const text of [
+          'Weather (@acme/weather)',
+          'Rain and fog',
+          'not installed',
+          'https://example.com/weather',
+          'Press i to install it and restart the dev servers',
+          'i Install',
+        ])
           expect(withInstaller.contains(text), text).toBe(true)
 
         // A dashboard that didn't start the dev servers can't restart them
@@ -878,7 +1192,15 @@ describe('toLogRows', () => {
         expect(view.confirmInstall).toBe('@acme/weather')
 
         const screen = draw(state, view, await loaded(), idle)
-        for (const text of ['Install @acme/weather?', 'Installing a package runs its code on this machine.', 'Check the source before you install it:', 'https://example.com/weather', 'I checked the source, install it', 'y Install', 'n Cancel'])
+        for (const text of [
+          'Install @acme/weather?',
+          'Installing a package runs its code on this machine.',
+          'Check the source before you install it:',
+          'https://example.com/weather',
+          'I checked the source, install it',
+          'y Install',
+          'n Cancel',
+        ])
           expect(screen.contains(text), text).toBe(true)
 
         // The selection stays where it is while the question is open
@@ -928,16 +1250,30 @@ describe('toLogRows', () => {
         const state = await liveState()
         const view = viewState({ tab: 6 })
         const available = await loaded()
-        const job = { id: 1, packages: ['@acme/weather'], status: 'installing', output: 'mavonengine: running npm install\nadded 3 packages in 2s\n' }
+        const job = {
+          id: 1,
+          packages: ['@acme/weather'],
+          status: 'installing',
+          output: 'mavonengine: running npm install\nadded 3 packages in 2s\n',
+        }
 
         const installing = draw(state, view, available, { job, busy: true })
         expect(installing.contains('Installing @acme/weather')).toBe(true)
         expect(installing.contains('added 3 packages in 2s')).toBe(true)
 
-        expect(draw(state, view, available, { job: { ...job, status: 'restarting' }, busy: true }).contains('Installed, restarting the dev servers for @acme/weather')).toBe(true)
-        expect(draw(state, view, available, { job: { ...job, status: 'done' }, busy: false }).contains('The dev servers were restarted with it')).toBe(true)
+        expect(draw(state, view, available, {
+          job: { ...job, status: 'restarting' },
+          busy: true,
+        }).contains('Installed, restarting the dev servers for @acme/weather')).toBe(true)
+        expect(draw(state, view, available, {
+          job: { ...job, status: 'done' },
+          busy: false,
+        }).contains('The dev servers were restarted with it')).toBe(true)
 
-        const failed = draw(state, view, available, { job: { ...job, status: 'failed', error: '\'npm install @acme/weather\' exited with code 1' }, busy: false })
+        const failed = draw(state, view, available, {
+          job: { ...job, status: 'failed', error: '\'npm install @acme/weather\' exited with code 1' },
+          busy: false,
+        })
         expect(failed.contains('Could not install @acme/weather')).toBe(true)
         expect(failed.contains('exited with code 1')).toBe(true)
       })

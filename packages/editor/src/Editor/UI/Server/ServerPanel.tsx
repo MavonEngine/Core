@@ -35,7 +35,13 @@ function Descriptions({ title, entries }: { title: string, entries: Record<strin
   )
 }
 
-const COLUMNS = ['Method', 'Path', 'Served in', 'From', 'What it does']
+const COLUMNS = [
+  'Method',
+  'Path',
+  'Served in',
+  'From',
+  'What it does',
+]
 
 function Route({ route, from, open, onToggle }: { route: HttpRouteInfo, from: string, open: boolean, onToggle(): void }) {
   // Only something a browser can open as it is: a GET without parameters to fill in
@@ -172,7 +178,9 @@ export default function ServerPanel({ fetchFn }: { fetchFn?: typeof fetch }) {
       <div className={styles.toolbar}>
         <span className={styles.title}>
           HTTP endpoints
-          {routes ? ` (${routes.length})` : ''}
+          {routes
+            ? ` (${routes.length})`
+            : ''}
         </span>
         <button className={styles.refresh} onClick={() => void load()}>Refresh</button>
       </div>

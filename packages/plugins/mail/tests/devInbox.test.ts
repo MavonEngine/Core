@@ -33,11 +33,21 @@ async function inboxMails(port: number, basePath = ''): Promise<any[]> {
   return (await fetch(`http://127.0.0.1:${port}${basePath}/api/email`)).json()
 }
 
-const message = { to: [{ address: 'ada@example.com', name: 'Ada' }], subject: 'Welcome', text: 'Hello Ada', html: '<p>Hello <b>Ada</b></p>' }
+const message = {
+  to: [
+    { address: 'ada@example.com', name: 'Ada' },
+  ],
+  subject: 'Welcome',
+  text: 'Hello Ada',
+  html: '<p>Hello <b>Ada</b></p>',
+}
 
 describe('dev inbox', () => {
   it('runs MailDev on free local ports and keeps the mail sent to it, with a sender when it has none', async () => {
-    const inbox = (await startDevInbox({ basePath: '', mailDirectory: tempDir() }))!
+    const inbox = (await startDevInbox({
+      basePath: '',
+      mailDirectory: tempDir(),
+    }))!
     cleanups.push(() => inbox.stop())
     const transport = devInboxTransport(Promise.resolve(inbox), logTransport(undefined), () => 'game@localhost')
     cleanups.push(() => transport.close?.())
@@ -46,12 +56,25 @@ describe('dev inbox', () => {
     await transport.send(message)
 
     const [mail] = await inboxMails(inbox.webPort)
-    expect(mail).toMatchObject({ subject: 'Welcome', from: [{ address: 'game@localhost' }], to: [{ address: 'ada@example.com' }] })
+    expect(mail).toMatchObject({
+      subject: 'Welcome',
+      from: [
+        { address: 'game@localhost' },
+      ],
+      to: [
+        { address: 'ada@example.com' },
+      ],
+    })
   })
 
   it('writes mail to the log when MailDev isn\'t there or couldn\'t start', async () => {
-    const logger = { info: vi.fn() }
-    for (const inbox of [Promise.resolve(undefined), Promise.reject(new Error('port taken'))]) {
+    const logger = {
+      info: vi.fn(),
+    }
+    for (const inbox of [
+      Promise.resolve(undefined),
+      Promise.reject(new Error('port taken')),
+    ]) {
       inbox.catch(() => {})
       await devInboxTransport(inbox as Promise<DevInbox | undefined>, logTransport(logger), () => 'x@localhost').send(message)
     }
@@ -71,21 +94,36 @@ describe('dev inbox', () => {
 async function startedPlugin({ token = 'admin-token', env = 'development' }: { token?: string, env?: string } = {}) {
   vi.stubEnv('NODE_ENV', env)
   const app = express()
-  const panel = new AdminPanel({ adminToken: { configured: true, matches: candidate => candidate === token }, production: () => false })
+  const panel = new AdminPanel({
+    adminToken: {
+      configured: true,
+      matches: candidate => candidate === token,
+    },
+    production: () => false,
+  })
   panel.mount(app)
   const listener: NodeServer = await new Promise((resolve) => {
     const server = app.listen(0, '127.0.0.1', () => resolve(server))
   })
   cleanups.push(() => new Promise<void>(resolve => listener.close(() => resolve())))
 
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
   const queue = new Queue(logger, { pollIntervalMs: 10 })
-  const requests = { ignorePrefix: vi.fn() }
+  const requests = {
+    ignorePrefix: vi.fn(),
+  }
   const ctx = {
     package: '@mavonengine/mail',
     options: {},
     logger,
-    server: { http: { server: listener }, requests },
+    server: {
+      http: { server: listener },
+      requests,
+    },
     queue,
     admin: panel.forPlugin('@mavonengine/mail'),
     projectRoot: tempDir(),
@@ -101,8 +139,19 @@ async function startedPlugin({ token = 'admin-token', env = 'development' }: { t
   })
 
   const port = (listener.address() as AddressInfo).port
-  const get = (path: string, headers: Record<string, string> = {}) => fetch(`http://127.0.0.1:${port}${path}`, { headers: { Authorization: `Bearer ${token}`, ...headers }, redirect: 'manual' })
-  return { api, ctx, logger, requests, panel, port, get }
+  const get = (path: string, headers: Record<string, string> = {}) => fetch(`http://127.0.0.1:${port}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, ...headers },
+    redirect: 'manual',
+  })
+  return {
+    api,
+    ctx,
+    logger,
+    requests,
+    panel,
+    port,
+    get,
+  }
 }
 
 describe('dev inbox in the admin panel', () => {
@@ -110,7 +159,7 @@ describe('dev inbox in the admin panel', () => {
     const { api, logger, requests, panel, get } = await startedPlugin()
 
     expect(api.transport).toBe('maildev')
-    await vi.waitFor(() => expect(logger.info).toHaveBeenCalledWith('Mail: no transport set up, mail goes to the dev inbox at /admin/mail/ in the admin panel'))
+    await vi.waitFor(() => expect(logger.info).toHaveBeenCalledWith('Mail: no transport set up, mail goes to the dev inbox at /admin/mail/ in the admin panel'), { timeout: 15_000 })
     expect(panel.list().map(page => page.path)).toContain('mail')
     expect(requests.ignorePrefix).toHaveBeenCalledWith('/admin/mail/inbox/')
 

@@ -226,7 +226,9 @@ export default class ServerMetrics {
         heapTotal: memory.heapTotal,
         external: memory.external,
       },
-      latencySimulation: latencySimulation ? { ...latencySimulation } : null,
+      latencySimulation: latencySimulation
+        ? { ...latencySimulation }
+        : null,
       queue: this.queue
         ? {
             driver: this.queue.driver,

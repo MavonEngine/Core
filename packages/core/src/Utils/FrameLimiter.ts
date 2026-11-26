@@ -35,7 +35,9 @@ export default class FrameLimiter {
 
     // Advance by a whole interval so the cadence doesn't drift below the cap when frames land between intervals,
     // but start over after a stall (e.g. a hidden tab) instead of trying to catch up
-    this.lastFrame = elapsed > interval * 2 ? now : this.lastFrame + interval
+    this.lastFrame = elapsed > interval * 2
+      ? now
+      : this.lastFrame + interval
     return true
   }
 }

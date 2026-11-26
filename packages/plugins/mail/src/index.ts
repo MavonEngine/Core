@@ -2,12 +2,14 @@ import type { ServerPlugin, ServerPluginContext } from '@mavonengine/core/Plugin
 import type { DispatchOptions } from '@mavonengine/core/Queue/Queue'
 import type { Express } from 'express'
 import type { DevInbox } from './devInbox'
+import type { InboxLocation } from './inboxFile'
 import type { Address, MailAddress, MailInput, MailMessage } from './message'
 import type { MailTransport, NodemailerTransport, SentMail } from './transports'
 import { join } from 'node:path'
 import process from 'node:process'
 import Job from '@mavonengine/core/Queue/Job'
 import { DEV_INBOX_PAGE, DEV_INBOX_THEME_JS, DEV_INBOX_THEME_SCRIPT, devInboxTransport, devInboxWanted, proxyToInbox, refuseInboxUpgrades, registerInboxPage, startDevInbox } from './devInbox'
+import { mailDataDir, removeInboxLocation, writeInboxLocation } from './inboxFile'
 import { LAYOUT_FILE, LayoutFile, renderLayout, textToHtml } from './layout'
 import { formatAddress, MailError, parseAddress, toMessage } from './message'
 import { logTransport, nodemailerTransport } from './transports'
@@ -71,7 +73,15 @@ export interface MailOptions {
   devInbox: boolean
 }
 
-const DEFAULTS: MailOptions = { queued: true, queue: 'default', tries: 3, backoffMs: [10_000, 60_000], layout: true, layoutData: {}, devInbox: false }
+const DEFAULTS: MailOptions = {
+  queued: true,
+  queue: 'default',
+  tries: 3,
+  backoffMs: [10_000, 60_000],
+  layout: true,
+  layoutData: {},
+  devInbox: false,
+}
 
 /** Transports nobody receives mail from, so mail doesn't need a sender */
 const NOWHERE_TRANSPORTS = new Set(['log', 'maildev'])
@@ -81,13 +91,21 @@ const DEV_FROM = 'game@localhost'
 
 export function parseOptions(raw: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = process.env): MailOptions {
   const options: MailOptions = {
-    queued: typeof raw.queued === 'boolean' ? raw.queued : DEFAULTS.queued,
-    queue: typeof raw.queue === 'string' && raw.queue ? raw.queue : DEFAULTS.queue,
-    tries: typeof raw.tries === 'number' && raw.tries >= 1 ? Math.floor(raw.tries) : DEFAULTS.tries,
+    queued: typeof raw.queued === 'boolean'
+      ? raw.queued
+      : DEFAULTS.queued,
+    queue: typeof raw.queue === 'string' && raw.queue
+      ? raw.queue
+      : DEFAULTS.queue,
+    tries: typeof raw.tries === 'number' && raw.tries >= 1
+      ? Math.floor(raw.tries)
+      : DEFAULTS.tries,
     backoffMs: typeof raw.backoffMs === 'number' || (Array.isArray(raw.backoffMs) && raw.backoffMs.every(ms => typeof ms === 'number'))
       ? raw.backoffMs as number | number[]
       : DEFAULTS.backoffMs,
-    layout: typeof raw.layout === 'boolean' ? raw.layout : DEFAULTS.layout,
+    layout: typeof raw.layout === 'boolean'
+      ? raw.layout
+      : DEFAULTS.layout,
     layoutData: {},
     devInbox: devInboxWanted(raw.devInbox, env),
   }
@@ -128,7 +146,9 @@ export function smtpConfig(smtp: SmtpOptions | string, env: NodeJS.ProcessEnv = 
     host: smtp.host,
     port: smtp.port ?? (secure ? 465 : 587),
     secure,
-    auth: smtp.user ? { user: smtp.user, pass: password ?? '' } : undefined,
+    auth: smtp.user
+      ? { user: smtp.user, pass: password ?? '' }
+      : undefined,
   }
 }
 
@@ -219,6 +239,8 @@ interface MailState {
   inboxPort?: number
   /** Where its UI is served, `/admin/mail/inbox` */
   inboxPath?: string
+  /** What the server wrote for the dev entry's tools to find the inbox, see `INBOX_FILE` */
+  inboxLocation?: InboxLocation
 }
 
 const STATES = Symbol.for('mavonengine.mail.states')
@@ -279,7 +301,13 @@ async function deliver(state: MailState, message: MailMessage): Promise<MailResu
   const sent = await transport.send(message) as SentMail | undefined
   if (transport.name !== 'log')
     state.ctx.logger?.info(`Mail sent through ${transport.name} to ${message.to.map(formatAddress).join(', ')}: ${message.subject}`)
-  return { queued: false, transport: transport.name, ...(sent?.messageId ? { messageId: sent.messageId } : {}) }
+  return {
+    queued: false,
+    transport: transport.name,
+    ...(sent?.messageId
+      ? { messageId: sent.messageId }
+      : {}),
+  }
 }
 
 function createState(ctx: ServerPluginContext): MailState {
@@ -305,7 +333,13 @@ function createState(ctx: ServerPluginContext): MailState {
   }
 
   const layout = new LayoutFile(() => ctx.publishedFile?.(LAYOUT_FILE))
-  const state = { ctx, options, from, transport, layout } as MailState
+  const state = {
+    ctx,
+    options,
+    from,
+    transport,
+    layout,
+  } as MailState
 
   if (!options.smtp && options.devInbox)
     openDevInbox(state)
@@ -345,8 +379,14 @@ function createState(ctx: ServerPluginContext): MailState {
       preheader: mailable.preheader?.(),
     })
     return {
-      cc: (...more) => pending(to, [...cc, ...more], bcc),
-      bcc: (...more) => pending(to, cc, [...bcc, ...more]),
+      cc: (...more) => pending(to, [
+        ...cc,
+        ...more,
+      ], bcc),
+      bcc: (...more) => pending(to, cc, [
+        ...bcc,
+        ...more,
+      ]),
       send: (mailable, sendOptions) => send(render(mailable), sendOptions, mailable.queued),
       sendNow: mailable => send(render(mailable), { queued: false }),
     }
@@ -380,10 +420,14 @@ function openDevInbox(state: MailState) {
   const { ctx } = state
   const fallback = state.transport
   // Without an admin panel (a core from before it), MailDev's UI is at the root of its own port
-  state.inboxPath = ctx.admin ? ctx.admin.url(`${DEV_INBOX_PAGE}/inbox`) : ''
+  state.inboxPath = ctx.admin
+    ? ctx.admin.url(`${DEV_INBOX_PAGE}/inbox`)
+    : ''
   state.inbox = startDevInbox({
     basePath: state.inboxPath,
-    mailDirectory: ctx.projectRoot ? join(ctx.projectRoot, '.mavonengine', 'maildev') : undefined,
+    mailDirectory: ctx.projectRoot
+      ? join(ctx.projectRoot, '.mavonengine', 'maildev')
+      : undefined,
   })
   const transport = devInboxTransport(state.inbox, fallback, () => DEV_FROM)
   state.transport = transport
@@ -396,7 +440,17 @@ function openDevInbox(state: MailState) {
       return
     }
     state.inboxPort = inbox.webPort
-    const where = ctx.admin ? `${ctx.admin.url(DEV_INBOX_PAGE)}/ in the admin panel` : `http://127.0.0.1:${inbox.webPort}/`
+    if (ctx.projectRoot) {
+      try {
+        state.inboxLocation = writeInboxLocation(mailDataDir(ctx.projectRoot), inbox.webPort, state.inboxPath ?? '')
+      }
+      catch (err) {
+        ctx.logger?.warn(`Mail: AI assistants won't find the dev inbox, its address could not be written: ${(err as Error).message}`)
+      }
+    }
+    const where = ctx.admin
+      ? `${ctx.admin.url(DEV_INBOX_PAGE)}/ in the admin panel`
+      : `http://127.0.0.1:${inbox.webPort}/`
     ctx.logger?.info(`Mail: no transport set up, mail goes to the dev inbox at ${where}`)
   }, (err: unknown) => {
     ctx.logger?.error(`Mail: the dev inbox (MailDev) could not start, writing mail to the log: ${(err as Error)?.message ?? err}`)
@@ -448,6 +502,12 @@ export default {
     await ctx.queue.stop()
     await state?.transport.close?.()
     const inbox = await state?.inbox?.catch(() => undefined)
+    if (state?.inboxLocation && ctx.projectRoot) {
+      try {
+        removeInboxLocation(mailDataDir(ctx.projectRoot), state.inboxLocation)
+      }
+      catch {}
+    }
     await inbox?.stop().catch(() => {})
   },
 } satisfies ServerPlugin

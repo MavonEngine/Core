@@ -14,9 +14,27 @@ describe('routeCatalog', () => {
     app.all('/api/anything', handler)
 
     expect(catalog.list()).toEqual([
-      { method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false },
-      { method: 'POST', path: '/api/scores', source: 'game', params: {}, devOnly: false },
-      { method: 'ALL', path: '/api/anything', source: 'game', params: {}, devOnly: false },
+      {
+        method: 'GET',
+        path: '/api/scores',
+        source: 'game',
+        params: {},
+        devOnly: false,
+      },
+      {
+        method: 'POST',
+        path: '/api/scores',
+        source: 'game',
+        params: {},
+        devOnly: false,
+      },
+      {
+        method: 'ALL',
+        path: '/api/anything',
+        source: 'game',
+        params: {},
+        devOnly: false,
+      },
     ])
   })
 
@@ -37,7 +55,12 @@ describe('routeCatalog', () => {
     app.route('/api/item').get(handler).delete(handler)
     app.get(['/a', '/b'], handler)
 
-    expect(catalog.list().map(route => `${route.method} ${route.path}`)).toEqual(['GET /api/item', 'DELETE /api/item', 'GET /a', 'GET /b'])
+    expect(catalog.list().map(route => `${route.method} ${route.path}`)).toEqual([
+      'GET /api/item',
+      'DELETE /api/item',
+      'GET /a',
+      'GET /b',
+    ])
   })
 
   it('says where routes come from', () => {
@@ -52,10 +75,30 @@ describe('routeCatalog', () => {
     })
 
     expect(catalog.list().map(({ path, method, source, plugin }) => ({ method, path, source, plugin }))).toEqual([
-      { method: 'GET', path: '/api/game/health', source: 'engine', plugin: undefined },
-      { method: 'GET', path: '/api/scores', source: 'game', plugin: undefined },
-      { method: 'GET', path: '/chat', source: 'plugin', plugin: '@acme/chat' },
-      { method: 'POST', path: '/chat', source: 'plugin', plugin: '@acme/chat' },
+      {
+        method: 'GET',
+        path: '/api/game/health',
+        source: 'engine',
+        plugin: undefined,
+      },
+      {
+        method: 'GET',
+        path: '/api/scores',
+        source: 'game',
+        plugin: undefined,
+      },
+      {
+        method: 'GET',
+        path: '/chat',
+        source: 'plugin',
+        plugin: '@acme/chat',
+      },
+      {
+        method: 'POST',
+        path: '/chat',
+        source: 'plugin',
+        plugin: '@acme/chat',
+      },
     ])
   })
 
@@ -68,7 +111,9 @@ describe('routeCatalog', () => {
       throw new Error('boom')
     })).toThrow('boom')
 
-    expect(catalog.list()).toMatchObject([{ path: '/before-it-broke', plugin: 'broken' }])
+    expect(catalog.list()).toMatchObject([
+      { path: '/before-it-broke', plugin: 'broken' },
+    ])
   })
 
   it('adds what a route was described with, and finds the parameters in its path', () => {
@@ -83,17 +128,19 @@ describe('routeCatalog', () => {
       auth: 'None',
     }), handler)
 
-    expect(catalog.list()).toEqual([{
-      method: 'GET',
-      path: '/api/teams/:team/players/:id',
-      source: 'game',
-      summary: 'One player',
-      params: { team: '', id: 'Id of the player' },
-      query: { full: 'Include the inventory' },
-      response: 'The player',
-      auth: 'None',
-      devOnly: false,
-    }])
+    expect(catalog.list()).toEqual([
+      {
+        method: 'GET',
+        path: '/api/teams/:team/players/:id',
+        source: 'game',
+        summary: 'One player',
+        params: { team: '', id: 'Id of the player' },
+        query: { full: 'Include the inventory' },
+        response: 'The player',
+        auth: 'None',
+        devOnly: false,
+      },
+    ])
   })
 
   it('tells routes that only exist in development from those served in production too', () => {
@@ -137,7 +184,12 @@ describe('routeCatalog', () => {
     catalog.registerAs({ source: 'plugin', plugin: 'shop' }, () => app.use('/shop/', router))
     app.use(router)
 
-    expect(catalog.list().map(({ path, source }) => `${source} ${path}`)).toEqual(['plugin /shop', 'plugin /shop/:id', 'game /', 'game /:id'])
+    expect(catalog.list().map(({ path, source }) => `${source} ${path}`)).toEqual([
+      'plugin /shop',
+      'plugin /shop/:id',
+      'game /',
+      'game /:id',
+    ])
   })
 
   it('leaves out middleware and routers it has no path for', () => {

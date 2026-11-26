@@ -8,7 +8,14 @@ import Server from '../../src/Networking/Server/Server'
 import { memoryDb } from '../Plugins/Database/memoryDb'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestClient extends Player {
@@ -29,7 +36,10 @@ class TestServer extends Server<TestClient> {
 }
 
 function sqlite(db: Kysely<any>): ServerPlugin {
-  return { name: 'sqlite', database: () => db }
+  return {
+    name: 'sqlite',
+    database: () => db,
+  }
 }
 
 describe('server plugin apis', () => {
@@ -56,11 +66,27 @@ describe('server plugin apis', () => {
     const server = new TestServer(logger, undefined, {
       stopOnSignals: false,
       plugins: [
-        { package: '@mavonengine/ses', options: {}, plugin: { setup: ctx => ctx.plugin<MailApi>('@mavonengine/mail')?.transport('ses', to => void sent.push(to)) } },
-        { package: '@mavonengine/mail', options: {}, plugin: mailPlugin() },
-        { package: 'game', options: {}, plugin: { setup: (ctx) => {
-          mail = ctx.plugin<MailApi>('@mavonengine/mail')
-        } } },
+        {
+          package: '@mavonengine/ses',
+          options: {},
+          plugin: {
+            setup: ctx => ctx.plugin<MailApi>('@mavonengine/mail')?.transport('ses', to => void sent.push(to)),
+          },
+        },
+        {
+          package: '@mavonengine/mail',
+          options: {},
+          plugin: mailPlugin(),
+        },
+        {
+          package: 'game',
+          options: {},
+          plugin: {
+            setup: (ctx) => {
+              mail = ctx.plugin<MailApi>('@mavonengine/mail')
+            },
+          },
+        },
       ],
     })
     vi.spyOn(server.http, 'start').mockImplementation(() => {})
@@ -80,10 +106,27 @@ describe('server plugin apis', () => {
       stopOnSignals: false,
       plugins: [
         sqlite(db),
-        { package: '@mavonengine/mail', options: {}, plugin: { ...mailPlugin(), migrations: { '001': { up: async () => { throw new Error('nope') } } } } },
-        { package: 'game', options: {}, plugin: { setup: (ctx) => {
-          found = ctx.plugin('@mavonengine/mail')
-        } } },
+        {
+          package: '@mavonengine/mail',
+          options: {},
+          plugin: {
+            ...mailPlugin(),
+            migrations: {
+              '001': {
+                up: async () => { throw new Error('nope') },
+              },
+            },
+          },
+        },
+        {
+          package: 'game',
+          options: {},
+          plugin: {
+            setup: (ctx) => {
+              found = ctx.plugin('@mavonengine/mail')
+            },
+          },
+        },
       ],
     })
     vi.spyOn(server.http, 'start').mockImplementation(() => {})

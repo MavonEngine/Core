@@ -9,12 +9,13 @@
     "packages/plugins/*"
   ],
   "devDependencies": {
-    "@antfu/eslint-config": "8.0.0",
+    "@antfu/eslint-config": "10.0.0",
     "bcryptjs": "^3.0.3",
-    "eslint": "10.1.0",
-    "playwright-core": "^1.65.0",
+    "eslint": "10.15.0",
+    "iwer": "^2.8.0",
+    "playwright-core": "^1.65.1",
     "vite": "^8.3.5",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -31,6 +32,7 @@
     "test:mcp-e2e": "node e2e/mcp/run.mjs",
     "test:editor-dist-e2e": "node e2e/editor-dist/run.mjs",
     "test:doctor-e2e": "node e2e/doctor/run.mjs",
-    "test:upgrade-e2e": "node e2e/upgrade/run.mjs"
+    "test:upgrade-e2e": "node e2e/upgrade/run.mjs",
+    "test:xr-e2e": "node e2e/xr/run.mjs"
   }
 }

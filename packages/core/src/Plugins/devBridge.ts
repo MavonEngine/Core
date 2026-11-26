@@ -36,7 +36,9 @@ const QUERY_TIMEOUT_MS: Partial<Record<BridgeQuery, number>> = { screenshot: 100
 
 /** A trace records for its duration before it answers */
 function queryTimeout(query: BridgeQuery, params: Record<string, string>): number | undefined {
-  return query === 'trace' ? traceDuration(params.durationMs) + TRACE_GRACE_MS : QUERY_TIMEOUT_MS[query]
+  return query === 'trace'
+    ? traceDuration(params.durationMs) + TRACE_GRACE_MS
+    : QUERY_TIMEOUT_MS[query]
 }
 
 /**
@@ -57,7 +59,11 @@ export class DevBridgeHub {
       return
 
     // A reload keeps the id but connects again
-    this.tabs.set(info.id, { info, client, connectedAt: Date.now() })
+    this.tabs.set(info.id, {
+      info,
+      client,
+      connectedAt: Date.now(),
+    })
   }
 
   private disconnect(client: BridgeSocketClient) {
@@ -116,7 +122,9 @@ export class DevBridgeHub {
       return id
     }
 
-    const tabs = [...this.tabs.values()]
+    const tabs = [
+      ...this.tabs.values(),
+    ]
     if (tabs.length === 0)
       throw new BridgeError('No game tab is open. Open the game in a browser while the dev server runs', 404)
     if (tabs.length === 1)
@@ -166,7 +174,9 @@ export function handleBridgeRequest(hub: DevBridgeHub, req: IncomingMessage, res
   const token = env.MAVONENGINE_METRICS_TOKEN
   if (token) {
     const header = req.headers.authorization
-    const provided = header?.startsWith('Bearer ') ? header.slice(7) : url.searchParams.get('token')
+    const provided = header?.startsWith('Bearer ')
+      ? header.slice(7)
+      : url.searchParams.get('token')
     if (typeof provided !== 'string' || !safeEqual(provided, token)) {
       send(401, { error: 'Invalid metrics token' })
       return true
@@ -180,7 +190,9 @@ export function handleBridgeRequest(hub: DevBridgeHub, req: IncomingMessage, res
   const [, id, query] = match
   const reply = (work: Promise<unknown>) => work.then(
     data => send(200, data),
-    err => send(err instanceof BridgeError ? err.status : 500, { error: (err as Error).message }),
+    err => send(err instanceof BridgeError
+      ? err.status
+      : 500, { error: (err as Error).message }),
   )
 
   if (!id) {

@@ -23,7 +23,9 @@ export interface PluginMigration {
  */
 export async function runPluginMigrations(db: Kysely<any>, pkg: string, migrations: Record<string, PluginMigration>): Promise<string[]> {
   const table = migrationsTableName(pkg)
-  const tools: MigrationTools = { table: name => tableName(pkg, name) }
+  const tools: MigrationTools = {
+    table: name => tableName(pkg, name),
+  }
 
   await db.schema
     .createTable(table)
@@ -41,12 +43,15 @@ export async function runPluginMigrations(db: Kysely<any>, pkg: string, migratio
 
     const migration = migrations[name]
     if (typeof migration?.up !== 'function')
-      throw new Error(`Migration ${name} has no up()`)
+      throw new TypeError(`Migration ${name} has no up()`)
 
     try {
       await db.transaction().execute(async (trx) => {
         await migration.up(trx, tools)
-        await trx.insertInto(table).values({ name, executed_at: new Date().toISOString() }).execute()
+        await trx.insertInto(table).values({
+          name,
+          executed_at: new Date().toISOString(),
+        }).execute()
       })
     }
     catch (err) {

@@ -13,7 +13,9 @@ export type MigrationsModule = typeof bundled
  */
 export async function loadMigrations(root: string): Promise<{ module: MigrationsModule, from: 'project' | 'cli' }> {
   const dir = findPackageDir(root, '@mavonengine/core')
-  const file = dir ? join(dir, 'dist', 'Migrations', 'index.js') : undefined
+  const file = dir
+    ? join(dir, 'dist', 'Migrations', 'index.js')
+    : undefined
 
   if (file && existsSync(file)) {
     try {

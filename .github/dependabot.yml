@@ -1,0 +1,48 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /packages/multiplayer-template
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Dublin
+    open-pull-requests-limit: 10
+    ignore:
+      # Stay on the Node 24 typings to match the runtime; minor/patch still flow
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
+    groups:
+      # three and its types must move together, and usually need code changes
+      three:
+        patterns:
+          - three
+          - '@types/three'
+      tooling:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      prod-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    # Major bumps outside the groups above arrive as individual PRs
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Dublin
+    groups:
+      actions:
+        patterns:
+          - '*'

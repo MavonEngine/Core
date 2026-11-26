@@ -23,7 +23,12 @@ export default class AvailablePlugins {
     url = process.env[PLUGIN_REGISTRY_ENV] ?? PLUGIN_REGISTRY_URL,
     private fetchRegistry: (url: string) => Promise<{ plugins: AvailablePlugin[] }> = registryUrl => fetchPluginRegistry({ url: registryUrl }),
   ) {
-    this.state = { status: 'idle', url, plugins: [], error: null }
+    this.state = {
+      status: 'idle',
+      url,
+      plugins: [],
+      error: null,
+    }
   }
 
   onChange(listener: () => void) {

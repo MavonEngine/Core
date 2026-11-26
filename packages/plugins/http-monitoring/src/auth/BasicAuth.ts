@@ -54,7 +54,9 @@ export function isLoopback(address: string | undefined): boolean {
  * `user:password` from an `Authorization: Basic …` header, or undefined if there is none or it is malformed.
  */
 export function parseBasicAuth(header: string | undefined): { user: string, password: string } | undefined {
-  const encoded = header ? BASIC_RE.exec(header.trim())?.[1] : undefined
+  const encoded = header
+    ? BASIC_RE.exec(header.trim())?.[1]
+    : undefined
   if (!encoded)
     return undefined
 
@@ -63,7 +65,10 @@ export function parseBasicAuth(header: string | undefined): { user: string, pass
   if (colon < 0)
     return undefined
 
-  return { user: decoded.slice(0, colon), password: decoded.slice(colon + 1) }
+  return {
+    user: decoded.slice(0, colon),
+    password: decoded.slice(colon + 1),
+  }
 }
 
 /**
@@ -148,7 +153,9 @@ export default class BasicAuth {
 
     if (credentials || bearer !== undefined) {
       this.recordFailure(address)
-      this.options.logger?.warn(`Monitoring: failed login ${credentials ? `for "${credentials.user}"` : 'with a token'} from ${address}`)
+      this.options.logger?.warn(`Monitoring: failed login ${credentials
+        ? `for "${credentials.user}"`
+        : 'with a token'} from ${address}`)
     }
 
     res.setHeader('WWW-Authenticate', `Basic realm="${this.options.realm.replace(/"/g, '')}", charset="UTF-8"`)
@@ -189,15 +196,22 @@ export default class BasicAuth {
       return 0
     }
 
-    return entry.count >= this.maxFailures ? this.lockoutMs - elapsed : 0
+    return entry.count >= this.maxFailures
+      ? this.lockoutMs - elapsed
+      : 0
   }
 
   private recordFailure(address: string) {
     const entry = this.failures.get(address)
-    if (entry)
+    if (entry) {
       entry.count++
-    else
-      this.failures.set(address, { count: 1, since: this.now() })
+    }
+    else {
+      this.failures.set(address, {
+        count: 1,
+        since: this.now(),
+      })
+    }
 
     // Don't let an address scan grow this forever
     if (this.failures.size > 10000)
@@ -235,7 +249,10 @@ export default class BasicAuth {
     // Removed users and changed passwords must not stay logged in through the cache
     this.verified.clear()
 
-    if (!initial)
-      this.options.logger?.info(`Monitoring: reloaded ${credentials.path}, ${users.size} user${users.size === 1 ? '' : 's'}`)
+    if (!initial) {
+      this.options.logger?.info(`Monitoring: reloaded ${credentials.path}, ${users.size} user${users.size === 1
+        ? ''
+        : 's'}`)
+    }
   }
 }

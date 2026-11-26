@@ -19,7 +19,12 @@ async function listen(handler: Parameters<typeof createServer>[0]) {
 /** Ask for a WebSocket upgrade and resolve with the status line, or null if the connection closes first */
 function upgrade(port: number, path: string) {
   return new Promise<string | null>((resolve) => {
-    const req = httpRequest({ port, host: '127.0.0.1', path, headers: { Connection: 'Upgrade', Upgrade: 'websocket' } })
+    const req = httpRequest({
+      port,
+      host: '127.0.0.1',
+      path,
+      headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+    })
     req.on('upgrade', (res, socket) => {
       socket.destroy()
       resolve(`${res.statusCode}`)
@@ -42,7 +47,9 @@ describe('requestLog', () => {
 
   it('records requests with status, size and timing, without the query string', async () => {
     const { log, port } = await listen((req, res) => {
-      res.statusCode = req.url!.startsWith('/missing') ? 404 : 200
+      res.statusCode = req.url!.startsWith('/missing')
+        ? 404
+        : 200
       res.end('hello')
     })
 
@@ -98,7 +105,9 @@ describe('requestLog', () => {
     expect(await upgrade(port, '/hmr?token=abc')).toBe('101')
     await settle()
 
-    expect(log.since().entries).toEqual([expect.objectContaining({ method: 'WS', path: '/hmr', status: 101 })])
+    expect(log.since().entries).toEqual([
+      expect.objectContaining({ method: 'WS', path: '/hmr', status: 101 }),
+    ])
   })
 
   it('closes upgrades nothing else handles, like Node does without listeners', async () => {
@@ -107,15 +116,31 @@ describe('requestLog', () => {
     expect(await upgrade(port, '/ws')).toBeNull()
     await settle()
 
-    expect(log.since().entries).toEqual([expect.objectContaining({ method: 'WS', path: '/ws', status: null })])
+    expect(log.since().entries).toEqual([
+      expect.objectContaining({ method: 'WS', path: '/ws', status: null }),
+    ])
   })
 
   it('returns only entries after the given id and drops the oldest past capacity', () => {
     const log = new RequestLog(2)
-    for (const path of ['/a', '/b', '/c'])
-      log.push({ timestamp: 0, method: 'GET', path, status: 200, durationMs: 1, bytes: 0, address: null })
+    for (const path of ['/a', '/b', '/c']) {
+      log.push({
+        timestamp: 0,
+        method: 'GET',
+        path,
+        status: 200,
+        durationMs: 1,
+        bytes: 0,
+        address: null,
+      })
+    }
 
     expect(log.since().entries.map(e => e.id)).toEqual([2, 3])
-    expect(log.since(2)).toEqual({ entries: [expect.objectContaining({ path: '/c' })], latestId: 3 })
+    expect(log.since(2)).toEqual({
+      entries: [
+        expect.objectContaining({ path: '/c' }),
+      ],
+      latestId: 3,
+    })
   })
 })

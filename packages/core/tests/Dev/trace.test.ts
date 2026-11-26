@@ -39,15 +39,22 @@ class FakeGL {
   }
 
   getQueryParameter(_query: unknown, name: number) {
-    return name === this.QUERY_RESULT_AVAILABLE ? true : 4_000_000
+    return name === this.QUERY_RESULT_AVAILABLE
+      ? true
+      : 4_000_000
   }
 }
 
 function fakeGame(gl: FakeGL) {
-  const info = { autoReset: true, render: { calls: 0, triangles: 0 }, programs: [{}], reset() {
-    info.render.calls = 0
-    info.render.triangles = 0
-  } }
+  const info = {
+    autoReset: true,
+    render: { calls: 0, triangles: 0 },
+    programs: [{}],
+    reset() {
+      info.render.calls = 0
+      info.render.triangles = 0
+    },
+  }
   const pass = {
     render() {
       gl.useProgram()
@@ -60,10 +67,20 @@ function fakeGame(gl: FakeGL) {
       info.render.triangles += 100
     },
   }
-  const perf = { begin: vi.fn(), end: vi.fn() }
+  const perf = {
+    begin: vi.fn(),
+    end: vi.fn(),
+  }
   const renderer = {
-    instance: { getContext: () => gl, getPixelRatio: () => 1, info },
-    composer: { passes: [pass], render: () => pass.render() },
+    instance: {
+      getContext: () => gl,
+      getPixelRatio: () => 1,
+      info,
+    },
+    composer: {
+      passes: [pass],
+      render: () => pass.render(),
+    },
     perf: perf as typeof perf | undefined,
     maxFps: 0,
     update(this: any, _delta: number) {
@@ -71,12 +88,16 @@ function fakeGame(gl: FakeGL) {
       this.composer.render()
     },
   }
-  const world = { update: vi.fn() }
+  const world = {
+    update: vi.fn(),
+  }
   const game = {
     canvas: { width: 800, height: 600 },
     renderer,
     world,
-    physicsWorld: { step: vi.fn() },
+    physicsWorld: {
+      step: vi.fn(),
+    },
     tick() {
       this.physicsWorld.step()
       this.world.update(0.03)
@@ -116,7 +137,12 @@ describe('recordTrace', () => {
       gl.readPixels()
     }, 40)
 
-    const done = recordTrace(game as any, { durationMs: 200, gpu: true, jsProfile: true, sampleIntervalMs: 10 })
+    const done = recordTrace(game as any, {
+      durationMs: 200,
+      gpu: true,
+      jsProfile: true,
+      sampleIntervalMs: 10,
+    })
     expect(renderer.perf).toBeUndefined()
     await vi.advanceTimersByTimeAsync(400)
     const capture = await done
@@ -127,17 +153,38 @@ describe('recordTrace', () => {
     expect(frame).toMatchObject({ calls: 2, triangles: 100, gpu: 4 })
     expect(frame.interval).toBeCloseTo(16, 0)
     expect(frame.passes[0]).toHaveLength(2)
-    expect(frame.gl).toMatchObject({ draws: 2, instancedDraws: 1, programSwitches: 1, textureBinds: 1, uniformCalls: 2 })
+    expect(frame.gl).toMatchObject({
+      draws: 2,
+      instancedDraws: 1,
+      programSwitches: 1,
+      textureBinds: 1,
+      uniformCalls: 2,
+    })
 
     const withUploads = capture.frames.find(f => f.gl.textureUploads)!
-    expect(withUploads.gl).toMatchObject({ shaderCompiles: 1, textureUploads: 1, bufferUploads: 1, bufferUploadBytes: 1024, syncCalls: 1 })
+    expect(withUploads.gl).toMatchObject({
+      shaderCompiles: 1,
+      textureUploads: 1,
+      bufferUploads: 1,
+      bufferUploadBytes: 1024,
+      syncCalls: 1,
+    })
 
     expect(capture.ticks.length).toBeGreaterThan(8)
     expect(game.physicsWorld.step).toHaveBeenCalled()
-    expect(capture.ticks[0]).toMatchObject({ physics: expect.any(Number), world: expect.any(Number) })
+    expect(capture.ticks[0]).toMatchObject({
+      physics: expect.any(Number),
+      world: expect.any(Number),
+    })
 
-    expect(capture.gpuTiming).toEqual({ enabled: true, note: expect.stringContaining('three-perf') })
-    expect(capture.jsProfile).toEqual({ enabled: false, note: expect.stringContaining('Chromium') })
+    expect(capture.gpuTiming).toEqual({
+      enabled: true,
+      note: expect.stringContaining('three-perf'),
+    })
+    expect(capture.jsProfile).toEqual({
+      enabled: false,
+      note: expect.stringContaining('Chromium'),
+    })
 
     // Restored
     expect(renderer.update).toBe(originalUpdate)
@@ -151,8 +198,18 @@ describe('recordTrace', () => {
     const gl = new FakeGL()
     const { game } = fakeGame(gl)
 
-    const first = recordTrace(game as any, { durationMs: 50, gpu: false, jsProfile: false, sampleIntervalMs: 10 })
-    await expect(recordTrace(game as any, { durationMs: 50, gpu: false, jsProfile: false, sampleIntervalMs: 10 })).rejects.toThrow('already running')
+    const first = recordTrace(game as any, {
+      durationMs: 50,
+      gpu: false,
+      jsProfile: false,
+      sampleIntervalMs: 10,
+    })
+    await expect(recordTrace(game as any, {
+      durationMs: 50,
+      gpu: false,
+      jsProfile: false,
+      sampleIntervalMs: 10,
+    })).rejects.toThrow('already running')
     await vi.advanceTimersByTimeAsync(100)
     const capture = await first
 

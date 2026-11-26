@@ -15,20 +15,47 @@ afterEach(() => {
 
 describe('prefabRegistry', () => {
   it('keys plugin prefabs by plugin so names can repeat', () => {
-    register({ name: 'Tree', spawn: vi.fn() })
-    register({ name: 'Tree', plugin: 'forest', spawn: vi.fn() })
+    register({
+      name: 'Tree',
+      spawn: vi.fn(),
+    })
+    register({
+      name: 'Tree',
+      plugin: 'forest',
+      spawn: vi.fn(),
+    })
 
     expect(getPrefab('Tree')?.plugin).toBeUndefined()
     expect(getPrefab('forest:Tree')?.plugin).toBe('forest')
   })
 
   it('lists built-in prefabs first, then plugin prefabs grouped by plugin', () => {
-    register({ name: 'Rock', plugin: 'stones', spawn: vi.fn() })
-    register({ name: 'Water', spawn: vi.fn() })
-    register({ name: 'Tree', plugin: 'forest', spawn: vi.fn() })
-    register({ name: 'Bush', plugin: 'forest', spawn: vi.fn() })
+    register({
+      name: 'Rock',
+      plugin: 'stones',
+      spawn: vi.fn(),
+    })
+    register({
+      name: 'Water',
+      spawn: vi.fn(),
+    })
+    register({
+      name: 'Tree',
+      plugin: 'forest',
+      spawn: vi.fn(),
+    })
+    register({
+      name: 'Bush',
+      plugin: 'forest',
+      spawn: vi.fn(),
+    })
 
-    expect(getPrefabs().map(p => p.key)).toEqual(['Water', 'forest:Tree', 'forest:Bush', 'stones:Rock'])
+    expect(getPrefabs().map(p => p.key)).toEqual([
+      'Water',
+      'forest:Tree',
+      'forest:Bush',
+      'stones:Rock',
+    ])
   })
 
   it('spawns at the position and treats no return value as created', () => {
@@ -41,7 +68,10 @@ describe('prefabRegistry', () => {
   })
 
   it('returns null for unknown prefabs and ones that decline to spawn', () => {
-    register({ name: 'Grass', spawn: () => null })
+    register({
+      name: 'Grass',
+      spawn: () => null,
+    })
 
     expect(spawnPrefab('Grass', new Vector3())).toBeNull()
     expect(spawnPrefab('nope', new Vector3())).toBeNull()

@@ -6,7 +6,10 @@ const bob = { id: 'b2', name: 'Bob' }
 
 function room(options: Parameters<typeof resolveChatOptions>[0] = {}) {
   const clock = { now: 1_000_000 }
-  return { clock, room: new ChatRoom(resolveChatOptions(options), () => clock.now) }
+  return {
+    clock,
+    room: new ChatRoom(resolveChatOptions(options), () => clock.now),
+  }
 }
 
 describe('resolveChatOptions', () => {
@@ -22,7 +25,14 @@ describe('resolveChatOptions', () => {
   })
 
   it('takes what mavonengine.json says', () => {
-    expect(resolveChatOptions({ maxLength: 80, rateLimit: { messages: 2, perSeconds: 30 }, history: 0, range: 25, announce: false, path: 'admin/chat/' })).toEqual({
+    expect(resolveChatOptions({
+      maxLength: 80,
+      rateLimit: { messages: 2, perSeconds: 30 },
+      history: 0,
+      range: 25,
+      announce: false,
+      path: 'admin/chat/',
+    })).toEqual({
       maxLength: 80,
       rateLimit: { messages: 2, perMs: 30_000 },
       history: 0,
@@ -37,9 +47,21 @@ describe('resolveChatOptions', () => {
   })
 
   it('falls back to the default for nonsense', () => {
-    const options = resolveChatOptions({ maxLength: -5, rateLimit: { messages: 0, perSeconds: Number.NaN }, history: -1, range: 'far' as any, path: '/' })
+    const options = resolveChatOptions({
+      maxLength: -5,
+      rateLimit: { messages: 0, perSeconds: Number.NaN },
+      history: -1,
+      range: 'far' as any,
+      path: '/',
+    })
 
-    expect(options).toMatchObject({ maxLength: 200, rateLimit: { messages: 5, perMs: 10_000 }, history: 50, range: 0, path: '/api/chat' })
+    expect(options).toMatchObject({
+      maxLength: 200,
+      rateLimit: { messages: 5, perMs: 10_000 },
+      history: 50,
+      range: 0,
+      path: '/api/chat',
+    })
   })
 })
 
@@ -47,22 +69,44 @@ describe('chatRoom', () => {
   it('passes on what a player says, with who said it and when', () => {
     const { room: chat, clock } = room()
 
-    expect(chat.say(ada, 'hello there')).toEqual({ message: { id: 1, from: ada, text: 'hello there', at: clock.now } })
-    expect(chat.say(bob, 'hi')).toMatchObject({ message: { id: 2, from: bob, text: 'hi' } })
+    expect(chat.say(ada, 'hello there')).toEqual({
+      message: {
+        id: 1,
+        from: ada,
+        text: 'hello there',
+        at: clock.now,
+      },
+    })
+    expect(chat.say(bob, 'hi')).toMatchObject({
+      message: { id: 2, from: bob, text: 'hi' },
+    })
   })
 
   it('cleans up what is said', () => {
     const { room: chat } = room()
 
-    expect(chat.say(ada, '  spaced\tout \n over   lines\u0007 ')).toMatchObject({ message: { text: 'spaced out over lines' } })
+    expect(chat.say(ada, '  spaced\tout \n over   lines\u0007 ')).toMatchObject({
+      message: { text: 'spaced out over lines' },
+    })
     // Markup is text like any other: the client never treats it as HTML
-    expect(chat.say(ada, '<img src=x onerror=alert(1)>')).toMatchObject({ message: { text: '<img src=x onerror=alert(1)>' } })
+    expect(chat.say(ada, '<img src=x onerror=alert(1)>')).toMatchObject({
+      message: { text: '<img src=x onerror=alert(1)>' },
+    })
   })
 
   it('ignores what is no text or nothing', () => {
     const { room: chat } = room()
 
-    for (const text of ['', '   ', '\n\t', undefined, null, 42, { text: 'x' }, ['x']])
+    for (const text of [
+      '',
+      '   ',
+      '\n\t',
+      undefined,
+      null,
+      42,
+      { text: 'x' },
+      ['x'],
+    ])
       expect(chat.say(ada, text)).toEqual({ ignored: true })
     expect(chat.history).toEqual([])
   })
@@ -77,7 +121,9 @@ describe('chatRoom', () => {
   })
 
   it('limits how fast a player may talk, each player on its own', () => {
-    const { room: chat, clock } = room({ rateLimit: { messages: 2, perSeconds: 10 } })
+    const { room: chat, clock } = room({
+      rateLimit: { messages: 2, perSeconds: 10 },
+    })
 
     expect(chat.say(ada, 'one')).toHaveProperty('message')
     clock.now += 4000
@@ -92,14 +138,19 @@ describe('chatRoom', () => {
   })
 
   it('doesn\'t count refused messages against the limit', () => {
-    const { room: chat } = room({ rateLimit: { messages: 1, perSeconds: 10 }, maxLength: 3 })
+    const { room: chat } = room({
+      rateLimit: { messages: 1, perSeconds: 10 },
+      maxLength: 3,
+    })
 
     expect(chat.say(ada, 'too long')).toHaveProperty('notice')
     expect(chat.say(ada, 'ok')).toHaveProperty('message')
   })
 
   it('forgets what a player sent once it left', () => {
-    const { room: chat } = room({ rateLimit: { messages: 1, perSeconds: 10 } })
+    const { room: chat } = room({
+      rateLimit: { messages: 1, perSeconds: 10 },
+    })
 
     chat.say(ada, 'one')
     expect(chat.say(ada, 'two')).toHaveProperty('notice')
@@ -113,7 +164,9 @@ describe('chatRoom', () => {
     expect(chat.mute(ada.id, 10)).toEqual({ playerId: ada.id, kind: 'connection', until: clock.now + 600_000 })
     expect(chat.say(ada, 'hello?')).toEqual({ notice: 'You are muted for another 10 min' })
     expect(chat.say(bob, 'hi')).toHaveProperty('message')
-    expect(chat.listMutes()).toEqual([{ playerId: ada.id, kind: 'connection', until: clock.now + 600_000 }])
+    expect(chat.listMutes()).toEqual([
+      { playerId: ada.id, kind: 'connection', until: clock.now + 600_000 },
+    ])
 
     clock.now += 9 * 60_000 + 1
     expect(chat.say(ada, 'hello?')).toEqual({ notice: 'You are muted for another 1 min' })
@@ -142,7 +195,9 @@ describe('chatRoom', () => {
 
     expect(chat.say(ada, 'hi')).toHaveProperty('message')
     expect(chat.check(ada, 'hi', 'acc-ada')).toEqual({ notice: 'You are muted' })
-    expect(chat.listMutes()).toEqual([{ playerId: 'acc-ada', kind: 'account', until: null }])
+    expect(chat.listMutes()).toEqual([
+      { playerId: 'acc-ada', kind: 'account', until: null },
+    ])
   })
 
   it('puts back saved mutes that are still on, without undoing newer ones', () => {
@@ -164,11 +219,19 @@ describe('chatRoom', () => {
   it('says things as the server', () => {
     const { room: chat, clock } = room()
 
-    expect(chat.system('Ada joined')).toEqual({ id: 1, from: null, text: 'Ada joined', at: clock.now })
+    expect(chat.system('Ada joined')).toEqual({
+      id: 1,
+      from: null,
+      text: 'Ada joined',
+      at: clock.now,
+    })
   })
 
   it('keeps the recent messages, oldest first', () => {
-    const { room: chat } = room({ history: 3, rateLimit: { messages: 100 } })
+    const { room: chat } = room({
+      history: 3,
+      rateLimit: { messages: 100 },
+    })
 
     chat.system('Ada joined')
     for (const text of ['one', 'two', 'three'])

@@ -82,7 +82,9 @@ export default class RouteCatalog {
       const [first] = args
       const paths = typeof first === 'string'
         ? [first]
-        : Array.isArray(first) && first.every(path => typeof path === 'string') ? first as string[] : ['/']
+        : Array.isArray(first) && first.every(path => typeof path === 'string')
+          ? first as string[]
+          : ['/']
 
       for (const layer of this.stack.slice(before))
         this.mounts.set(layer, paths)
@@ -93,7 +95,9 @@ export default class RouteCatalog {
 
   private get stack(): Layer[] {
     const stack = (this.app as unknown as { router?: { stack?: Layer[] } }).router?.stack
-    return Array.isArray(stack) ? stack : []
+    return Array.isArray(stack)
+      ? stack
+      : []
   }
 
   /**
@@ -142,8 +146,12 @@ export default class RouteCatalog {
     const registered = Object.keys(route.methods).filter(method => route.methods[method])
     // app.all() registers the route once per HTTP method
     const all = registered.includes('_all') || METHODS.every(method => route.methods[method.toLowerCase()])
-    const methods = all ? ['ALL'] : registered.map(method => method.toUpperCase())
-    const paths = (Array.isArray(route.path) ? route.path : [route.path]).map(path => joinPaths(prefix, String(path)))
+    const methods = all
+      ? ['ALL']
+      : registered.map(method => method.toUpperCase())
+    const paths = (Array.isArray(route.path)
+      ? route.path
+      : [route.path]).map(path => joinPaths(prefix, String(path)))
 
     for (const path of paths) {
       const params: Record<string, string> = {}
@@ -153,11 +161,15 @@ export default class RouteCatalog {
       for (const method of methods) {
         routes.push({
           ...doc,
-          ...(auth ? { auth } : {}),
+          ...(auth
+            ? { auth }
+            : {}),
           method,
           path,
           source: origin.source,
-          ...(origin.plugin ? { plugin: origin.plugin } : {}),
+          ...(origin.plugin
+            ? { plugin: origin.plugin }
+            : {}),
           params,
           devOnly: doc?.devOnly === true,
         })

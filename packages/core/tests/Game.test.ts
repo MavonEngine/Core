@@ -20,16 +20,44 @@ vi.mock('three', async () => {
   }
 })
 
-const mockCamera = { resize: vi.fn(), update: vi.fn() }
-const mockRenderer = { resize: vi.fn(), update: vi.fn(), shouldRender: vi.fn().mockReturnValue(true) }
+const mockCamera = {
+  resize: vi.fn(),
+  update: vi.fn(),
+}
+const mockRenderer = {
+  instance: {
+    setAnimationLoop: vi.fn(),
+  },
+  resize: vi.fn(),
+  update: vi.fn(),
+  shouldRender: vi.fn().mockReturnValue(true),
+}
 const mockResources = {}
-const mockSizes = { on: vi.fn() }
+const mockSizes = {
+  on: vi.fn(),
+}
 const mockDebug = {}
-const mockLoadingScreen = { update: vi.fn() }
-const mockLogger = { info: vi.fn(), debug: vi.fn(), error: vi.fn(), emerg: vi.fn() }
-const mockParticleSystem = { update: vi.fn() }
-const mockInputManager = { update: vi.fn() }
-const mockClientGameWorld = { update: vi.fn(), entities: { items: new Map() } }
+const mockLoadingScreen = {
+  update: vi.fn(),
+}
+const mockLogger = {
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+  emerg: vi.fn(),
+}
+const mockParticleSystem = {
+  update: vi.fn(),
+}
+const mockInputManager = {
+  update: vi.fn(),
+}
+const mockClientGameWorld = {
+  update: vi.fn(),
+  entities: {
+    items: new Map(),
+  },
+}
 
 vi.mock('../src/Camera', () => ({
   default: vi.fn(function () {
@@ -82,10 +110,16 @@ vi.mock('../src/World/World', () => ({
   }),
 }))
 vi.mock('../src/Renderer/PhysicsRenderer', () => ({
-  RapierDebugRenderer: vi.fn(function () { return { update: vi.fn() } }),
+  RapierDebugRenderer: vi.fn(function () {
+    return {
+      update: vi.fn(),
+    }
+  }),
 }))
 vi.mock('../src/Editor', () => ({
-  default: { registerListener: vi.fn() },
+  default: {
+    registerListener: vi.fn(),
+  },
 }))
 
 describe('game', () => {
@@ -111,20 +145,37 @@ describe('game', () => {
     expect(game.world).toBeDefined()
   })
 
-  it('skips rendering the frames the renderer limits, but keeps requesting them', () => {
-    mockRenderer.shouldRender.mockReturnValueOnce(false)
+  it('renders through the renderer\'s animation loop, skipping the frames it limits', () => {
     void new Game([])
 
+    expect(mockRenderer.instance.setAnimationLoop).toHaveBeenCalledTimes(1)
+    const render = mockRenderer.instance.setAnimationLoop.mock.calls[0][0]
+
+    mockRenderer.shouldRender.mockReturnValueOnce(false)
+    render(8)
     expect(mockRenderer.update).not.toHaveBeenCalled()
     expect(mockParticleSystem.update).not.toHaveBeenCalled()
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
 
-    const render = vi.mocked(requestAnimationFrame).mock.calls[0][0]
     render(16)
 
     expect(mockRenderer.shouldRender).toHaveBeenLastCalledWith(16)
     expect(mockRenderer.update).toHaveBeenCalledWith(0.016)
     expect(mockParticleSystem.update).toHaveBeenCalledWith(0.016)
+  })
+
+  it('triggers beforeRender on each rendered frame, before rendering', () => {
+    const game = new Game([])
+    const render = mockRenderer.instance.setAnimationLoop.mock.calls[0][0]
+    const beforeRender = vi.fn(() => expect(mockRenderer.update).not.toHaveBeenCalled())
+    game.on('beforeRender', beforeRender)
+
+    mockRenderer.shouldRender.mockReturnValueOnce(false)
+    render(8)
+    expect(beforeRender).not.toHaveBeenCalled()
+
+    render(16)
+    expect(beforeRender).toHaveBeenCalledWith(0.016)
+    expect(mockRenderer.update).toHaveBeenCalled()
   })
 
   describe('plugins', () => {
@@ -133,13 +184,25 @@ describe('game', () => {
     })
 
     it('loads plugin assets with the game, from /plugins/<package>/', () => {
-      Game.usePlugins([{
-        package: 'forest',
-        options: {},
-        plugin: { assets: ctx => [{ name: 'tree', type: 'gltfModel', path: ctx.assetUrl('/models/tree.glb') }] },
-      }])
+      Game.usePlugins([
+        {
+          package: 'forest',
+          options: {},
+          plugin: {
+            assets: ctx => [
+              {
+                name: 'tree',
+                type: 'gltfModel',
+                path: ctx.assetUrl('/models/tree.glb'),
+              },
+            ],
+          },
+        },
+      ])
 
-      void new Game([{ name: 'pine', type: 'gltfModel', path: '/pine.glb' }])
+      void new Game([
+        { name: 'pine', type: 'gltfModel', path: '/pine.glb' },
+      ])
 
       expect(vi.mocked(Resources)).toHaveBeenLastCalledWith([
         { name: 'pine', type: 'gltfModel', path: '/pine.glb' },
@@ -148,18 +211,32 @@ describe('game', () => {
     })
 
     it('skips assets left out of the release', () => {
-      Game.usePlugins([{
-        package: 'forest',
-        options: {},
-        shippedAssets: ['models/tree.glb'],
-        plugin: {
-          assets: ctx => [
-            { name: 'tree', type: 'gltfModel', path: ctx.assetUrl('models/tree.glb') },
-            { name: 'rock', type: 'gltfModel', path: ctx.assetUrl('models/rock.glb') },
-            { name: 'sky', type: 'cubeTexture', path: ['/sky/px.png'] },
-          ],
+      Game.usePlugins([
+        {
+          package: 'forest',
+          options: {},
+          shippedAssets: ['models/tree.glb'],
+          plugin: {
+            assets: ctx => [
+              {
+                name: 'tree',
+                type: 'gltfModel',
+                path: ctx.assetUrl('models/tree.glb'),
+              },
+              {
+                name: 'rock',
+                type: 'gltfModel',
+                path: ctx.assetUrl('models/rock.glb'),
+              },
+              {
+                name: 'sky',
+                type: 'cubeTexture',
+                path: ['/sky/px.png'],
+              },
+            ],
+          },
         },
-      }])
+      ])
 
       void new Game([])
 
@@ -169,7 +246,9 @@ describe('game', () => {
     it('sets plugins up once the world exists and updates them every frame', () => {
       const setup = vi.fn()
       const update = vi.fn()
-      Game.usePlugins([{ name: 'hud', setup, update }])
+      Game.usePlugins([
+        { name: 'hud', setup, update },
+      ])
 
       const game = new Game([])
       game.update(0.016)
@@ -182,11 +261,25 @@ describe('game', () => {
       let toast: ((text: string) => void) | undefined
       const shown: string[] = []
       Game.usePlugins([
-        { package: 'quests', options: {}, plugin: { setup: (ctx) => {
-          toast = ctx.plugin<{ show(text: string): void }>('toasts')?.show
-          expect(ctx.plugin('missing')).toBeUndefined()
-        } } },
-        { package: 'toasts', options: {}, plugin: { api: () => ({ show: (text: string) => void shown.push(text) }) } },
+        {
+          package: 'quests',
+          options: {},
+          plugin: {
+            setup: (ctx) => {
+              toast = ctx.plugin<{ show(text: string): void }>('toasts')?.show
+              expect(ctx.plugin('missing')).toBeUndefined()
+            },
+          },
+        },
+        {
+          package: 'toasts',
+          options: {},
+          plugin: {
+            api: () => ({
+              show: (text: string) => void shown.push(text),
+            }),
+          },
+        },
       ])
 
       void new Game([])
@@ -196,7 +289,18 @@ describe('game', () => {
     })
 
     it('registers plugin prefabs under the plugin', () => {
-      Game.usePlugins([{ package: 'forest', options: {}, plugin: { setup: ctx => ctx.registerPrefab({ name: 'Tree', spawn: vi.fn() }) } }])
+      Game.usePlugins([
+        {
+          package: 'forest',
+          options: {},
+          plugin: {
+            setup: ctx => ctx.registerPrefab({
+              name: 'Tree',
+              spawn: vi.fn(),
+            }),
+          },
+        },
+      ])
 
       void new Game([])
 
@@ -206,9 +310,13 @@ describe('game', () => {
 
     it('runs the editor hook when the editor boots', () => {
       const editorHook = vi.fn()
-      Game.usePlugins([{ editor: editorHook }])
+      Game.usePlugins([
+        { editor: editorHook },
+      ])
       const game = new Game([])
-      const editor = { update: vi.fn() } as any
+      const editor = {
+        update: vi.fn(),
+      } as any
 
       game.editor = editor
       game.trigger('editorBoot', editor)
@@ -255,7 +363,9 @@ describe('game', () => {
 
   it('update() calls editor.update when editor is set', () => {
     const game = new Game([])
-    const mockEditor = { update: vi.fn() }
+    const mockEditor = {
+      update: vi.fn(),
+    }
     ;(game as any).editor = mockEditor
     game.update(0.016)
     expect(mockEditor.update).toHaveBeenCalledWith(0.016)

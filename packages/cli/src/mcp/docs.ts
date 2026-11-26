@@ -64,7 +64,12 @@ export function registerDocsTools(server: McpServer, docs: DocsClient) {
       return await docs.call(tool, args)
     }
     catch (err) {
-      return { isError: true, content: [{ type: 'text', text: (err as Error).message }] }
+      return {
+        isError: true,
+        content: [
+          { type: 'text', text: (err as Error).message },
+        ],
+      }
     }
   }
 
@@ -78,7 +83,9 @@ export function registerDocsTools(server: McpServer, docs: DocsClient) {
   server.registerTool('docs_get_page', {
     title: 'Read a MavonEngine docs page',
     description: 'One page of the MavonEngine documentation as Markdown, by its path from docs_list_pages (e.g. /networking/state-sync).',
-    inputSchema: { path: z.string().min(1).describe('Page path, e.g. /getting-started/installation') },
+    inputSchema: {
+      path: z.string().min(1).describe('Page path, e.g. /getting-started/installation'),
+    },
     annotations: { ...READ_ONLY, openWorldHint: true },
   }, ({ path }) => forward('get-page', { path }))
 }

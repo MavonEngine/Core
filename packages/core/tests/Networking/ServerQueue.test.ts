@@ -10,7 +10,14 @@ import Job from '../../src/Queue/Job'
 import { memoryDb } from '../Plugins/Database/memoryDb'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestClient extends Player {
@@ -40,7 +47,10 @@ class Greet extends Job<{ name: string }> {
 }
 
 function sqlite(db: Kysely<any>): ServerPlugin {
-  return { name: 'sqlite', database: () => db }
+  return {
+    name: 'sqlite',
+    database: () => db,
+  }
 }
 
 describe('server queue', () => {
@@ -64,13 +74,21 @@ describe('server queue', () => {
     await server.start()
 
     expect(server.queue.driverName).toBe('memory')
-    await vi.waitFor(() => expect(ran).toEqual([{ name: 'early' }]))
+    await vi.waitFor(() => expect(ran).toEqual([
+      { name: 'early' },
+    ]))
     await server.stop()
   })
 
   it('migrates its tables and keeps jobs in the database plugin\'s database, also those dispatched before start', async () => {
     const db = memoryDb()
-    const server = startable(new TestServer(logger, undefined, { plugins: [sqlite(db)], stopOnSignals: false, queue: { work: false } }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        sqlite(db),
+      ],
+      stopOnSignals: false,
+      queue: { work: false },
+    }))
     await server.queue.dispatch(new Greet({ name: 'early' }))
 
     await server.start()
@@ -78,7 +96,10 @@ describe('server queue', () => {
 
     expect(server.queue.driverName).toBe('database')
     const rows = await db.selectFrom(JOBS_TABLE).select('payload').orderBy('created_at').execute()
-    expect(rows.map(row => JSON.parse(row.payload))).toEqual([{ name: 'early' }, { name: 'later' }])
+    expect(rows.map(row => JSON.parse(row.payload))).toEqual([
+      { name: 'early' },
+      { name: 'later' },
+    ])
     // Not worked: `work: false`
     expect(ran).toEqual([])
 
@@ -91,18 +112,32 @@ describe('server queue', () => {
   it('runs jobs queued in the database before a restart', async () => {
     const db = memoryDb()
     // destroy() of the first server's database would close it for the second, so it is left open
-    const first = startable(new TestServer(logger, undefined, { plugins: [sqlite(db)], stopOnSignals: false, queue: { work: false } }))
+    const first = startable(new TestServer(logger, undefined, {
+      plugins: [
+        sqlite(db),
+      ],
+      stopOnSignals: false,
+      queue: { work: false },
+    }))
     await first.start()
     await first.queue.dispatch(new Greet({ name: 'before restart' }))
 
     const second = startable(new TestServer(logger, undefined, {
-      plugins: [sqlite(db), { name: 'greeter', setup: ctx => void ctx.queue.register(Greet) }],
+      plugins: [
+        sqlite(db),
+        {
+          name: 'greeter',
+          setup: ctx => void ctx.queue.register(Greet),
+        },
+      ],
       stopOnSignals: false,
       queue: { pollIntervalMs: 10 },
     }))
     await second.start()
 
-    await vi.waitFor(() => expect(ran).toEqual([{ name: 'before restart' }]))
+    await vi.waitFor(() => expect(ran).toEqual([
+      { name: 'before restart' },
+    ]))
     await vi.waitFor(async () => expect(await second.queue.size()).toBe(0))
     await first.queue.stop()
     await second.stop()
@@ -110,7 +145,13 @@ describe('server queue', () => {
 
   it('stays in memory when told to, even with a database', async () => {
     const db = memoryDb()
-    const server = startable(new TestServer(logger, undefined, { plugins: [sqlite(db)], stopOnSignals: false, queue: { driver: 'memory' } }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        sqlite(db),
+      ],
+      stopOnSignals: false,
+      queue: { driver: 'memory' },
+    }))
     await server.start()
     await server.queue.dispatch(new Greet({ name: 'x' }))
 
@@ -121,7 +162,11 @@ describe('server queue', () => {
 
   it('warns when asked for the database without a database plugin', async () => {
     const warn = vi.spyOn(logger, 'warn')
-    const server = startable(new TestServer(logger, undefined, { plugins: [], stopOnSignals: false, queue: { driver: 'database' } }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [],
+      stopOnSignals: false,
+      queue: { driver: 'database' },
+    }))
     await server.start()
 
     expect(server.queue.driverName).toBe('memory')
@@ -131,12 +176,22 @@ describe('server queue', () => {
 
   it('gives plugins the queue', async () => {
     let ctx: ServerPluginContext | undefined
-    const server = startable(new TestServer(logger, undefined, { plugins: [{ name: 'p', setup: c => void (ctx = c) }], stopOnSignals: false }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        {
+          name: 'p',
+          setup: c => void (ctx = c),
+        },
+      ],
+      stopOnSignals: false,
+    }))
     await server.start()
 
     expect(ctx!.queue).toBe(server.queue)
     await ctx!.queue.dispatch(new Greet({ name: 'from a plugin' }))
-    await vi.waitFor(() => expect(ran).toEqual([{ name: 'from a plugin' }]))
+    await vi.waitFor(() => expect(ran).toEqual([
+      { name: 'from a plugin' },
+    ]))
     await server.stop()
   })
 
@@ -154,7 +209,12 @@ describe('server queue', () => {
     }
     const destroy = vi.spyOn(db, 'destroy').mockImplementation(async () => void order.push('db closed'))
 
-    const server = startable(new TestServer(logger, undefined, { plugins: [sqlite(db)], stopOnSignals: false }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        sqlite(db),
+      ],
+      stopOnSignals: false,
+    }))
     await server.start()
     await server.queue.dispatch(new Saving(null))
     await vi.waitFor(() => expect(finish).toBeDefined())

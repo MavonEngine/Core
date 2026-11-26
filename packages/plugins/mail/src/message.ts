@@ -47,7 +47,17 @@ const ADDRESS_RE = /^[^\s@<>",;]+@[^\s",;<>@][^\s",.;<>@]*\.[^\s",;<>@]+$/
 const LINE_BREAK_RE = /[\r\n]/
 const HEADER_NAME_RE = /^[!#$%&'*+\-.^\w`|~]+$/
 /** Headers the transport writes from the message's own fields */
-const RESERVED_HEADERS = new Set(['from', 'to', 'cc', 'bcc', 'reply-to', 'subject', 'content-type', 'content-transfer-encoding', 'mime-version'])
+const RESERVED_HEADERS = new Set([
+  'from',
+  'to',
+  'cc',
+  'bcc',
+  'reply-to',
+  'subject',
+  'content-type',
+  'content-transfer-encoding',
+  'mime-version',
+])
 
 /** `Name <address>` or a bare address, as an object. Throws a MailError for anything else */
 export function parseAddress(address: Address, field = 'address'): MailAddress {
@@ -56,7 +66,12 @@ export function parseAddress(address: Address, field = 'address'): MailAddress {
     parsed = splitNamed(address)
   }
   else if (address && typeof address === 'object' && typeof address.address === 'string') {
-    parsed = { address: address.address.trim(), name: typeof address.name === 'string' && address.name.trim() ? address.name.trim() : undefined }
+    parsed = {
+      address: address.address.trim(),
+      name: typeof address.name === 'string' && address.name.trim()
+        ? address.name.trim()
+        : undefined,
+    }
   }
   else {
     throw new MailError(`${field} is no address: ${JSON.stringify(address)}`)
@@ -67,7 +82,9 @@ export function parseAddress(address: Address, field = 'address'): MailAddress {
   if (parsed.name !== undefined && LINE_BREAK_RE.test(parsed.name))
     throw new MailError(`The name of ${field} has a line break`)
 
-  return parsed.name === undefined ? { address: parsed.address } : parsed
+  return parsed.name === undefined
+    ? { address: parsed.address }
+    : parsed
 }
 
 /** `Name <address>` or `"Name" <address>` into its parts, a bare address as it is. Without a regex: it is player input */
@@ -80,19 +97,26 @@ function splitNamed(value: string): MailAddress {
   let name = text.slice(0, open).trim()
   if (name.length >= 2 && name.startsWith('"') && name.endsWith('"'))
     name = name.slice(1, -1).trim()
-  return { address: text.slice(open + 1, -1).trim(), name: name || undefined }
+  return {
+    address: text.slice(open + 1, -1).trim(),
+    name: name || undefined,
+  }
 }
 
 function addresses(value: Address | Address[] | undefined, field: string): MailAddress[] | undefined {
   if (value === undefined)
     return undefined
-  const list = (Array.isArray(value) ? value : [value]).map(address => parseAddress(address, field))
+  const list = (Array.isArray(value)
+    ? value
+    : [value]).map(address => parseAddress(address, field))
   return list.length ? list : undefined
 }
 
 /** The mailbox as one header value: `"Player One" <player@example.com>` */
 export function formatAddress({ address, name }: MailAddress): string {
-  return name ? `"${name.replace(/["\\]/g, '\\$&')}" <${address}>` : address
+  return name
+    ? `"${name.replace(/["\\]/g, '\\$&')}" <${address}>`
+    : address
 }
 
 /**
@@ -112,8 +136,12 @@ export function toMessage(input: MailInput, defaultFrom?: MailAddress): MailMess
   if (LINE_BREAK_RE.test(input.subject))
     throw new MailError('The subject of a mail can\'t have a line break')
 
-  const text = typeof input.text === 'string' && input.text ? input.text : undefined
-  const html = typeof input.html === 'string' && input.html ? input.html : undefined
+  const text = typeof input.text === 'string' && input.text
+    ? input.text
+    : undefined
+  const html = typeof input.html === 'string' && input.html
+    ? input.html
+    : undefined
   if (text === undefined && html === undefined)
     throw new MailError('A mail needs text or html')
 
@@ -129,8 +157,13 @@ export function toMessage(input: MailInput, defaultFrom?: MailAddress): MailMess
     }
   }
 
-  const message: MailMessage = { to, subject: input.subject.trim() }
-  const from = input.from !== undefined ? parseAddress(input.from, 'from') : defaultFrom
+  const message: MailMessage = {
+    to,
+    subject: input.subject.trim(),
+  }
+  const from = input.from !== undefined
+    ? parseAddress(input.from, 'from')
+    : defaultFrom
   if (from)
     message.from = from
   const cc = addresses(input.cc, 'cc')

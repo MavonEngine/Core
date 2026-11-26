@@ -8,7 +8,12 @@ import plugin, { chat, CHAT_EVENT, sendChat } from '../src/client'
 const said = (text: string, id = 1, from: ChatMessage['from'] = { id: 'a1', name: 'Ada' }): ChatMessage => ({ id, from, text, at: 0 })
 
 function key(target: EventTarget, name: string, init: KeyboardEventInit = {}) {
-  const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...init })
+  const event = new KeyboardEvent('keydown', {
+    key: name,
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  })
   target.dispatchEvent(event)
   return event
 }
@@ -20,7 +25,9 @@ afterEach(() => {
 
 describe('chatBox', () => {
   it('shows who said what, as text', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
 
     box.add(said('hello <b>there</b>'))
     box.add(said('<img src=x onerror=alert(1)>', 2, { id: 'b2', name: '<script>Bob</script>' }))
@@ -33,7 +40,9 @@ describe('chatBox', () => {
   })
 
   it('tells players apart by colour, the same one every time', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
     box.add(said('one'))
     box.add(said('two', 2, { id: 'b2', name: 'Bob' }))
     box.add(said('three', 3))
@@ -45,7 +54,9 @@ describe('chatBox', () => {
   })
 
   it('shows what the server says and notices apart from what players say', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
 
     box.add(said('Ada joined', 1, null))
     box.notice('You are sending messages too fast, wait 3 s')
@@ -57,7 +68,10 @@ describe('chatBox', () => {
   })
 
   it('keeps only the newest lines', () => {
-    const box = new ChatBox({ send: () => {}, maxMessages: 3 })
+    const box = new ChatBox({
+      send: () => {},
+      maxMessages: 3,
+    })
 
     for (let i = 1; i <= 5; i++)
       box.add(said(`message ${i}`, i))
@@ -95,7 +109,9 @@ describe('chatBox', () => {
   })
 
   it('starts typing on the open key, and leaves on Escape', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
 
     const opened = key(document.body, 'Enter')
     expect(document.activeElement).toBe(box.input)
@@ -108,7 +124,9 @@ describe('chatBox', () => {
   })
 
   it('doesn\'t take the keyboard from something else that is being typed in', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
     const other = document.createElement('input')
     document.body.appendChild(other)
     other.focus()
@@ -120,7 +138,9 @@ describe('chatBox', () => {
   })
 
   it('keeps what is typed in the chat away from the game\'s key handlers', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
     const game = vi.fn()
     window.addEventListener('keydown', game)
     window.addEventListener('keyup', game)
@@ -138,7 +158,12 @@ describe('chatBox', () => {
   })
 
   it('takes a different open key, placeholder and length', () => {
-    const box = new ChatBox({ send: () => {}, openKey: 't', placeholder: 'Say something', maxLength: 80 })
+    const box = new ChatBox({
+      send: () => {},
+      openKey: 't',
+      placeholder: 'Say something',
+      maxLength: 80,
+    })
 
     expect(box.input.placeholder).toBe('Say something')
     expect(box.input.maxLength).toBe(80)
@@ -146,11 +171,15 @@ describe('chatBox', () => {
     expect(document.activeElement).not.toBe(box.input)
     key(document.body, 't')
     expect(document.activeElement).toBe(box.input)
-    expect(new ChatBox({ send: () => {} }).input.placeholder).toBe('Press Enter to chat')
+    expect(new ChatBox({
+      send: () => {},
+    }).input.placeholder).toBe('Press Enter to chat')
   })
 
   it('can be hidden, and doesn\'t open while it is', () => {
-    const box = new ChatBox({ send: () => {} })
+    const box = new ChatBox({
+      send: () => {},
+    })
     box.input.focus()
 
     box.hide()
@@ -164,8 +193,12 @@ describe('chatBox', () => {
   })
 
   it('adds its style once, and cleans up after itself', () => {
-    const first = new ChatBox({ send: () => {} })
-    const second = new ChatBox({ send: () => {} })
+    const first = new ChatBox({
+      send: () => {},
+    })
+    const second = new ChatBox({
+      send: () => {},
+    })
     expect(document.querySelectorAll('#mavonengine-chat-style')).toHaveLength(1)
     expect(first.log.getAttribute('role')).toBe('log')
 
@@ -181,9 +214,19 @@ describe('chat client plugin', () => {
   /** A game as far as the chat sees it: events, and a connection that shows up later */
   function game(options: object = {}) {
     const handlers = new Map<string, (data: unknown) => void>()
-    const socket = { on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)), emit: vi.fn() }
-    const instance: any = { trigger: vi.fn() }
-    const ctx = { game: instance, options, package: '@mavonengine/chat', logger: null } as any
+    const socket = {
+      on: vi.fn((event: string, callback: (data: unknown) => void) => void handlers.set(event, callback)),
+      emit: vi.fn(),
+    }
+    const instance: any = {
+      trigger: vi.fn(),
+    }
+    const ctx = {
+      game: instance,
+      options,
+      package: '@mavonengine/chat',
+      logger: null,
+    } as any
 
     plugin.setup!(ctx)
 
@@ -231,15 +274,27 @@ describe('chat client plugin', () => {
     const { connect, receive, instance, log } = game()
     connect()
 
-    receive('chat:history', { messages: [said('earlier', 1)] })
+    receive('chat:history', {
+      messages: [
+        said('earlier', 1),
+      ],
+    })
     receive('chat:message', said('now', 2))
     receive('chat:notice', { text: 'You are muted' })
 
     expect(log()).toEqual(['Adaearlier', 'Adanow', 'You are muted'])
     // What is said right now is a message, e.g. for a bubble over the player. The rest has events of its own
     expect(instance.trigger.mock.calls).toEqual([
-      ['chat:history', [said('earlier', 1)]],
-      [CHAT_EVENT, said('now', 2)],
+      [
+        'chat:history',
+        [
+          said('earlier', 1),
+        ],
+      ],
+      [
+        CHAT_EVENT,
+        said('now', 2),
+      ],
       ['chat:notice', 'You are muted'],
     ])
     expect(CHAT_EVENT).toBe('chat:message')
@@ -252,14 +307,29 @@ describe('chat client plugin', () => {
       // Registered before the game connected
       chat(instance).onMessage(message => heard.push(['message', message.text]))
       chat(instance).onNotice(text => heard.push(['notice', text]))
-      const offHistory = chat(instance).onHistory(messages => heard.push(['history', messages.map(message => message.text)]))
+      const offHistory = chat(instance).onHistory(messages => heard.push([
+        'history',
+        messages.map(message => message.text),
+      ]))
       connect()
 
-      receive('chat:history', { messages: [said('earlier', 1), said('before that', 2)] })
+      receive('chat:history', {
+        messages: [
+          said('earlier', 1),
+          said('before that', 2),
+        ],
+      })
       receive('chat:message', said('now', 3))
       receive('chat:notice', { text: 'You are muted' })
 
-      expect(heard).toEqual([['history', ['earlier', 'before that']], ['message', 'now'], ['notice', 'You are muted']])
+      expect(heard).toEqual([
+        [
+          'history',
+          ['earlier', 'before that'],
+        ],
+        ['message', 'now'],
+        ['notice', 'You are muted'],
+      ])
 
       // What a listener registered returns stops it
       offHistory()
@@ -300,7 +370,9 @@ describe('chat client plugin', () => {
 
     it('keeps going when a listener throws', () => {
       const { connect, receive, instance, ctx } = game({ ui: false })
-      ctx.logger = { error: vi.fn() }
+      ctx.logger = {
+        error: vi.fn(),
+      }
       const heard: string[] = []
       chat(instance).onMessage(() => {
         throw new Error('boom')
@@ -337,7 +409,12 @@ describe('chat client plugin', () => {
   })
 
   it('takes its options from mavonengine.json', () => {
-    const { input } = game({ openKey: 't', placeholder: 'Talk', maxLength: 50, maxMessages: 'lots' })
+    const { input } = game({
+      openKey: 't',
+      placeholder: 'Talk',
+      maxLength: 50,
+      maxMessages: 'lots',
+    })
 
     expect(input().placeholder).toBe('Talk')
     expect(input().maxLength).toBe(50)
@@ -356,7 +433,10 @@ describe('chat client plugin', () => {
   it('follows a new connection', () => {
     const { ctx, instance, connect } = game()
     connect()
-    const reconnected = { on: vi.fn(), emit: vi.fn() }
+    const reconnected = {
+      on: vi.fn(),
+      emit: vi.fn(),
+    }
     instance.network = { socket: reconnected }
 
     plugin.update!(0.016, ctx)

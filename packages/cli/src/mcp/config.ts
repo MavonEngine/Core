@@ -43,11 +43,16 @@ export function writeMcpConfig(dir: string): boolean {
       return false
   }
 
-  const servers = config.mcpServers && typeof config.mcpServers === 'object' ? config.mcpServers : {}
+  const servers = config.mcpServers && typeof config.mcpServers === 'object'
+    ? config.mcpServers
+    : {}
   if (MCP_SERVER_NAME in servers)
     return false
 
-  config.mcpServers = { ...servers, [MCP_SERVER_NAME]: mcpServerEntry() }
+  config.mcpServers = {
+    ...servers,
+    [MCP_SERVER_NAME]: mcpServerEntry(),
+  }
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
   return true
 }

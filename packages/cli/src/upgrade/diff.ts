@@ -5,14 +5,19 @@ const NEWLINE_RE = /\r?\n/
  * unchanged lines around each change and `…` where unchanged lines are left out.
  */
 export function lineDiff(before: string | undefined, after: string, context = 2): string[] {
-  const a = before === undefined ? [] : splitLines(before)
+  const a = before === undefined
+    ? []
+    : splitLines(before)
   const b = splitLines(after)
 
   // Longest common subsequence, from the end
   const lcs = Array.from({ length: a.length + 1 }, () => Array.from<number>({ length: b.length + 1 }).fill(0))
   for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--)
-      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j]
+        ? lcs[i + 1][j + 1] + 1
+        : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    }
   }
 
   const ops: { kind: ' ' | '-' | '+', line: string }[] = []

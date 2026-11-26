@@ -13,7 +13,14 @@ import winston from 'winston'
 import mailPlugin, { mail, Mailable, memoryTransport } from '../src/index'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 // No client connects in these tests
@@ -57,7 +64,11 @@ describe('mail plugin on a game server', () => {
       queue: { pollIntervalMs: 10 },
       plugins: [
         { package: 'shop', options: {}, plugin: shop },
-        { package: '@mavonengine/mail', options: { from: 'shop@example.com' }, plugin: mailPlugin },
+        {
+          package: '@mavonengine/mail',
+          options: { from: 'shop@example.com' },
+          plugin: mailPlugin,
+        },
       ],
     })
     vi.spyOn(server.http, 'start').mockImplementation(() => {})
@@ -85,7 +96,13 @@ describe('mail plugin on a game server', () => {
       const server = new TestServer(logger, undefined, {
         stopOnSignals: false,
         root: project,
-        plugins: [{ package: '@mavonengine/mail', options: { from: 'game@example.com', queued: false }, plugin: mailPlugin }],
+        plugins: [
+          {
+            package: '@mavonengine/mail',
+            options: { from: 'game@example.com', queued: false },
+            plugin: mailPlugin,
+          },
+        ],
       })
       vi.spyOn(server.http, 'start').mockImplementation(() => {})
       await server.start()

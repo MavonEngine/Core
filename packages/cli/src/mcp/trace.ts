@@ -5,7 +5,20 @@ import type { GlCounts, TraceCapture, TraceFrame, TraceProfile, TraceSpan } from
  * their likely causes, hot JS functions, WebGL load) and into a Chrome Trace Event file for flame charts.
  */
 
-const REFRESH_RATES = [30, 50, 60, 75, 90, 100, 120, 144, 165, 180, 240, 360]
+const REFRESH_RATES = [
+  30,
+  50,
+  60,
+  75,
+  90,
+  100,
+  120,
+  144,
+  165,
+  180,
+  240,
+  360,
+]
 /** Heap shrinking this much between frames is taken as a garbage collection */
 const GC_DROP_BYTES = 1024 * 1024
 const MB = 1024 * 1024
@@ -26,7 +39,13 @@ function stats(values: number[]) {
   if (!values.length)
     return null
   const sum = values.reduce((a, b) => a + b, 0)
-  return { avg: round(sum / values.length), p50: round(percentile(values, 50)), p95: round(percentile(values, 95)), p99: round(percentile(values, 99)), max: round(Math.max(...values)) }
+  return {
+    avg: round(sum / values.length),
+    p50: round(percentile(values, 50)),
+    p95: round(percentile(values, 95)),
+    p99: round(percentile(values, 99)),
+    max: round(Math.max(...values)),
+  }
 }
 
 /** The display refresh rate the frame intervals settle at */
@@ -35,7 +54,9 @@ export function refreshRate(intervals: number[]): number | null {
     return null
   // The fast frames show the vsync interval, slow ones are dropped frames
   const hz = 1000 / percentile(intervals, 20)
-  return REFRESH_RATES.reduce((best, rate) => Math.abs(rate - hz) < Math.abs(best - hz) ? rate : best)
+  return REFRESH_RATES.reduce((best, rate) => Math.abs(rate - hz) < Math.abs(best - hz)
+    ? rate
+    : best)
 }
 
 // ---- JS profile
@@ -50,7 +71,9 @@ export function frameLabel(profile: TraceProfile, frameId: number): ProfileFrame
   const frame = profile.frames[frameId]
   if (!frame)
     return { name: '(unknown)', location: null }
-  const resource = frame.resourceId !== undefined ? profile.resources[frame.resourceId] : undefined
+  const resource = frame.resourceId !== undefined
+    ? profile.resources[frame.resourceId]
+    : undefined
   let file: string | null = null
   if (resource) {
     try {
@@ -64,7 +87,13 @@ export function frameLabel(profile: TraceProfile, frameId: number): ProfileFrame
   }
   return {
     name: frame.name || '(anonymous)',
-    location: file ? `${file}${frame.line !== undefined ? `:${frame.line}` : ''}${frame.column !== undefined ? `:${frame.column}` : ''}` : null,
+    location: file
+      ? `${file}${frame.line !== undefined
+        ? `:${frame.line}`
+        : ''}${frame.column !== undefined
+        ? `:${frame.column}`
+        : ''}`
+      : null,
   }
 }
 
@@ -88,8 +117,13 @@ export function stackFrames(profile: TraceProfile, stackId: number | undefined):
 function weightedSamples(profile: TraceProfile) {
   return profile.samples.map((sample, i) => {
     const next = profile.samples[i + 1]
-    const weight = next ? Math.min(next.timestamp - sample.timestamp, profile.sampleIntervalMs * 4) : profile.sampleIntervalMs
-    return { ...sample, weight: Math.max(0, weight) }
+    const weight = next
+      ? Math.min(next.timestamp - sample.timestamp, profile.sampleIntervalMs * 4)
+      : profile.sampleIntervalMs
+    return {
+      ...sample,
+      weight: Math.max(0, weight),
+    }
   })
 }
 
@@ -122,8 +156,14 @@ export function hotFunctions(profile: TraceProfile, limit = 15, from = -Infinity
     const keys = frames.map((frameId) => {
       const label = frameLabel(profile, frameId)
       const key = `${label.name}@${label.location}`
-      if (!byKey.has(key))
-        byKey.set(key, { ...label, selfMs: 0, totalMs: 0, selfPercent: 0 })
+      if (!byKey.has(key)) {
+        byKey.set(key, {
+          ...label,
+          selfMs: 0,
+          totalMs: 0,
+          selfPercent: 0,
+        })
+      }
       return key
     })
     for (const key of new Set(keys))
@@ -131,12 +171,25 @@ export function hotFunctions(profile: TraceProfile, limit = 15, from = -Infinity
     byKey.get(keys.at(-1)!)!.selfMs += sample.weight
   }
 
-  const functions = [...byKey.values()]
+  const functions = [
+    ...byKey.values(),
+  ]
     .sort((a, b) => b.selfMs - a.selfMs)
     .slice(0, limit)
-    .map(fn => ({ ...fn, selfMs: round(fn.selfMs, 1), totalMs: round(fn.totalMs, 1), selfPercent: busyMs ? round((fn.selfMs / busyMs) * 100, 1) : 0 }))
+    .map(fn => ({
+      ...fn,
+      selfMs: round(fn.selfMs, 1),
+      totalMs: round(fn.totalMs, 1),
+      selfPercent: busyMs
+        ? round((fn.selfMs / busyMs) * 100, 1)
+        : 0,
+    }))
 
-  return { busyMs: round(busyMs, 1), idleMs: round(idleMs, 1), functions }
+  return {
+    busyMs: round(busyMs, 1),
+    idleMs: round(idleMs, 1),
+    functions,
+  }
 }
 
 // ---- Analysis
@@ -152,7 +205,11 @@ export interface Hitch {
 }
 
 const sum = (values: number[]) => values.reduce((a, b) => a + b, 0)
-const mean = (values: number[]) => values.length ? sum(values) / values.length : 0
+function mean(values: number[]) {
+  return values.length
+    ? sum(values) / values.length
+    : 0
+}
 
 function overlaps(span: { start: number, duration: number }, from: number, to: number) {
   return span.start < to && span.start + span.duration > from
@@ -162,15 +219,22 @@ function overlaps(span: { start: number, duration: number }, from: number, to: n
 function hitchCauses(capture: TraceCapture, index: number, budgetMs: number): string[] {
   const frame = capture.frames[index]!
   const previous = capture.frames[index - 1]
-  const from = previous ? previous.start : frame.start - (frame.interval ?? 0)
+  const from = previous
+    ? previous.start
+    : frame.start - (frame.interval ?? 0)
   const to = frame.start + frame.cpu
   const causes: string[] = []
   const gl = [previous?.gl, frame.gl].filter(Boolean) as GlCounts[]
 
   const compileMs = sum(gl.map(g => g.shaderCompileMs))
   const compiles = sum(gl.map(g => g.shaderCompiles))
-  if (compileMs >= 1)
-    causes.push(`Shader compilation: ${round(compileMs, 1)}ms${compiles ? ` linking ${compiles} program${compiles === 1 ? '' : 's'}` : ''} (a material or light setup rendered for the first time)`)
+  if (compileMs >= 1) {
+    causes.push(`Shader compilation: ${round(compileMs, 1)}ms${compiles
+      ? ` linking ${compiles} program${compiles === 1
+        ? ''
+        : 's'}`
+      : ''} (a material or light setup rendered for the first time)`)
+  }
 
   const uploadMs = sum(gl.map(g => g.textureUploadMs))
   if (uploadMs >= 1)
@@ -192,7 +256,9 @@ function hitchCauses(capture: TraceCapture, index: number, budgetMs: number): st
   for (const tick of capture.ticks) {
     if (overlaps(tick, from, to) && tick.duration >= Math.max(4, budgetMs / 3)) {
       const parts = [tick.physics !== null && `physics ${round(tick.physics, 1)}ms`, tick.world !== null && `world.update ${round(tick.world, 1)}ms`].filter(Boolean)
-      causes.push(`Game tick took ${round(tick.duration, 1)}ms${parts.length ? ` (${parts.join(', ')})` : ''}`)
+      causes.push(`Game tick took ${round(tick.duration, 1)}ms${parts.length
+        ? ` (${parts.join(', ')})`
+        : ''}`)
     }
   }
 
@@ -205,7 +271,13 @@ function hitchCauses(capture: TraceCapture, index: number, budgetMs: number): st
     .slice(0, 3)
   for (const script of scripts) {
     const detail = script.detail ?? {}
-    causes.push(`Script ${script.name} ran ${round(script.duration, 1)}ms${detail.invoker ? ` (${String(detail.invoker)})` : ''}${detail.source ? ` at ${String(detail.source)}` : ''}${detail.forcedStyleAndLayout ? `, forced layout ${String(detail.forcedStyleAndLayout)}ms` : ''}`)
+    causes.push(`Script ${script.name} ran ${round(script.duration, 1)}ms${detail.invoker
+      ? ` (${String(detail.invoker)})`
+      : ''}${detail.source
+      ? ` at ${String(detail.source)}`
+      : ''}${detail.forcedStyleAndLayout
+      ? `, forced layout ${String(detail.forcedStyleAndLayout)}ms`
+      : ''}`)
   }
 
   const measures = capture.spans.filter(s => s.category === 'measure' && overlaps(s, from, to) && s.duration >= 1)
@@ -215,8 +287,11 @@ function hitchCauses(capture: TraceCapture, index: number, budgetMs: number): st
   if (capture.profile) {
     const { functions } = hotFunctions(capture.profile, 3, from, to)
     const hot = functions.filter(fn => fn.selfMs >= capture.profile!.sampleIntervalMs)
-    if (hot.length)
-      causes.push(`Hot JS in this frame: ${hot.map(fn => `${fn.name} ${fn.selfMs}ms${fn.location ? ` (${fn.location})` : ''}`).join(', ')}`)
+    if (hot.length) {
+      causes.push(`Hot JS in this frame: ${hot.map(fn => `${fn.name} ${fn.selfMs}ms${fn.location
+        ? ` (${fn.location})`
+        : ''}`).join(', ')}`)
+    }
   }
 
   if (!causes.length)
@@ -260,7 +335,9 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
   const maxFps = capture.maxFps ?? 0
   const capped = maxFps > 0 && (display === null || maxFps < display * 1.05)
   const hz = capped ? maxFps : display
-  const budgetMs = hz ? 1000 / hz : null
+  const budgetMs = hz
+    ? 1000 / hz
+    : null
   const medianInterval = percentile(intervals, 50)
   const gpuTimes = frames.map(f => f.gpu).filter((n): n is number => n !== null)
   const cpuTimes = frames.map(f => f.cpu)
@@ -273,8 +350,11 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     notes.push('Fewer than two frames rendered while tracing: the tab is hidden, frozen or stuck before its first frame')
   if (capped)
     notes.push(`Rendering is capped at renderer.maxFps = ${maxFps}: frame times are measured against ${round(1000 / maxFps, 1)}ms. Set it to 0 to see how fast the game can render`)
-  if (!capture.gpuTiming.enabled || capture.gpuTiming.note)
-    notes.push(`GPU timing: ${capture.gpuTiming.enabled ? 'on' : 'off'}${capture.gpuTiming.note ? `, ${capture.gpuTiming.note}` : ''}`)
+  if (!capture.gpuTiming.enabled || capture.gpuTiming.note) {
+    notes.push(`GPU timing: ${capture.gpuTiming.enabled ? 'on' : 'off'}${capture.gpuTiming.note
+      ? `, ${capture.gpuTiming.note}`
+      : ''}`)
+  }
   if (!capture.jsProfile.enabled)
     notes.push(`JS sampling: off, ${capture.jsProfile.note ?? 'not available'}`)
 
@@ -292,11 +372,19 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
   // ---- Passes
   const passes = capture.passes.map((name, i) => {
     const times = frames.map(f => f.passes[i]?.[1]).filter((n): n is number => n !== undefined)
-    return { name, avgMs: round(mean(times)), maxMs: round(times.length ? Math.max(...times) : 0) }
+    return {
+      name,
+      avgMs: round(mean(times)),
+      maxMs: round(times.length
+        ? Math.max(...times)
+        : 0),
+    }
   })
 
   // ---- WebGL load, per frame. The first frame also holds calls from before the trace started, so it's left out when there are others
-  const steady = frames.length > 1 ? frames.slice(1) : frames
+  const steady = frames.length > 1
+    ? frames.slice(1)
+    : frames
   const avg = (pick: (f: TraceFrame) => number) => round(mean(steady.map(pick)), 1)
   const perFrame = {
     drawCalls: avg(f => f.calls),
@@ -324,13 +412,21 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
   }
 
   // ---- JS
-  const js = capture.profile ? hotFunctions(capture.profile, 15) : null
-  const busyPercent = js && js.busyMs + js.idleMs > 0 ? round((js.busyMs / (js.busyMs + js.idleMs)) * 100, 1) : null
+  const js = capture.profile
+    ? hotFunctions(capture.profile, 15)
+    : null
+  const busyPercent = js && js.busyMs + js.idleMs > 0
+    ? round((js.busyMs / (js.busyMs + js.idleMs)) * 100, 1)
+    : null
 
   // ---- Bottleneck
   const cpuP50 = percentile(cpuTimes, 50)
-  const gpuP50 = gpuTimes.length ? percentile(gpuTimes, 50) : null
-  const tickPerFrame = ticks.length && frames.length ? sum(ticks.map(t => t.duration)) / frames.length : 0
+  const gpuP50 = gpuTimes.length
+    ? percentile(gpuTimes, 50)
+    : null
+  const tickPerFrame = ticks.length && frames.length
+    ? sum(ticks.map(t => t.duration)) / frames.length
+    : 0
   let bottleneck: TraceAnalysis['bottleneck']
   if (!budgetMs || frames.length < 5) {
     bottleneck = { verdict: 'unknown', reason: 'Too few frames to tell' }
@@ -338,7 +434,11 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
   else if (medianInterval <= budgetMs * 1.15 && (capped || hz! >= 60 || Math.max(cpuP50 + tickPerFrame, gpuP50 ?? 0) < medianInterval * 0.6)) {
     // Below 60Hz a steady rate is as likely a slow game as a slow display, so only call it vsync with headroom left
     const used = Math.max(cpuP50 + tickPerFrame, gpuP50 ?? 0)
-    bottleneck = { verdict: 'smooth', reason: `Frames keep up with ${capped ? `renderer.maxFps = ${maxFps}` : `the ${hz}Hz display`}: a typical frame uses ${round(used, 1)}ms of the ${round(budgetMs, 1)}ms budget (render CPU ${round(cpuP50, 1)}ms${gpuP50 !== null ? `, GPU ${round(gpuP50, 1)}ms` : ''}, game ticks ~${round(tickPerFrame, 1)}ms per frame)` }
+    bottleneck = { verdict: 'smooth', reason: `Frames keep up with ${capped
+      ? `renderer.maxFps = ${maxFps}`
+      : `the ${hz}Hz display`}: a typical frame uses ${round(used, 1)}ms of the ${round(budgetMs, 1)}ms budget (render CPU ${round(cpuP50, 1)}ms${gpuP50 !== null
+      ? `, GPU ${round(gpuP50, 1)}ms`
+      : ''}, game ticks ~${round(tickPerFrame, 1)}ms per frame)` }
   }
   else if (gpuP50 !== null && gpuP50 >= medianInterval * 0.75 && gpuP50 > cpuP50 + tickPerFrame) {
     bottleneck = { verdict: 'gpu-bound', reason: `The GPU needs ${round(gpuP50, 1)}ms per frame against frames every ${round(medianInterval, 1)}ms, while render CPU time is ${round(cpuP50, 1)}ms` }
@@ -353,7 +453,9 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     bottleneck = { verdict: 'main-thread-busy', reason: `The main thread is busy ${busyPercent}% of the time outside what the render and tick account for: see js.hotFunctions` }
   }
   else {
-    bottleneck = { verdict: 'unknown', reason: `Frames take ${round(medianInterval, 1)}ms against a ${round(budgetMs, 1)}ms budget, but neither render CPU (${round(cpuP50, 1)}ms), GPU (${gpuP50 !== null ? `${round(gpuP50, 1)}ms` : 'not measured'}) nor ticks explain it` }
+    bottleneck = { verdict: 'unknown', reason: `Frames take ${round(medianInterval, 1)}ms against a ${round(budgetMs, 1)}ms budget, but neither render CPU (${round(cpuP50, 1)}ms), GPU (${gpuP50 !== null
+      ? `${round(gpuP50, 1)}ms`
+      : 'not measured'}) nor ticks explain it` }
   }
 
   // ---- Hitches: frames that came at least half a frame late
@@ -369,7 +471,9 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
       at: round(frame.start, 1),
       intervalMs: round(frame.interval!, 1),
       cpuMs: round(frame.cpu, 1),
-      gpuMs: frame.gpu === null ? null : round(frame.gpu, 1),
+      gpuMs: frame.gpu === null
+        ? null
+        : round(frame.gpu, 1),
       causes: hitchCauses(capture, index, budgetMs ?? medianInterval),
     }))
 
@@ -394,8 +498,13 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     if (heavyPasses.length)
       findings.push(`Post-processing passes cost GPU fill rate on every pixel: ${heavyPasses.map(p => p.name).join(', ')}`)
   }
-  if (tickStats && budgetMs && tickStats.p95 > budgetMs / 2)
-    findings.push(`Game ticks are slow (p95 ${tickStats.p95}ms${tickStats.physics ? `, physics p95 ${tickStats.physics.p95}ms` : ''}${tickStats.world ? `, world.update p95 ${tickStats.world.p95}ms` : ''}) and block rendering when they run`)
+  if (tickStats && budgetMs && tickStats.p95 > budgetMs / 2) {
+    findings.push(`Game ticks are slow (p95 ${tickStats.p95}ms${tickStats.physics
+      ? `, physics p95 ${tickStats.physics.p95}ms`
+      : ''}${tickStats.world
+      ? `, world.update p95 ${tickStats.world.p95}ms`
+      : ''}) and block rendering when they run`)
+  }
   const gcHitches = worst.filter(h => h.causes.some(c => c.startsWith('Garbage collection'))).length
   if (gcHitches >= 2)
     findings.push(`${gcHitches} hitches line up with garbage collection: reuse Vector3 / Matrix4 / arrays in update loops instead of allocating each frame`)
@@ -404,9 +513,18 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
 
   // ---- Measures
   const measureMap = new Map<string, number[]>()
-  for (const span of capture.spans.filter(s => s.category === 'measure'))
-    measureMap.set(span.name, [...(measureMap.get(span.name) ?? []), span.duration])
-  const measures = Array.from(measureMap, ([name, durations]) => ({ name, count: durations.length, avgMs: round(mean(durations)), maxMs: round(Math.max(...durations)) }))
+  for (const span of capture.spans.filter(s => s.category === 'measure')) {
+    measureMap.set(span.name, [
+      ...(measureMap.get(span.name) ?? []),
+      span.duration,
+    ])
+  }
+  const measures = Array.from(measureMap, ([name, durations]) => ({
+    name,
+    count: durations.length,
+    avgMs: round(mean(durations)),
+    maxMs: round(Math.max(...durations)),
+  }))
     .sort((a, b) => b.avgMs * b.count - a.avgMs * a.count)
     .slice(0, 20)
 
@@ -449,7 +567,15 @@ interface TraceEvent {
 }
 
 const PID = 1
-const TRACKS = { frames: 1, passes: 2, gpu: 3, ticks: 4, js: 5, gl: 6, browser: 7 } as const
+const TRACKS = {
+  frames: 1,
+  passes: 2,
+  gpu: 3,
+  ticks: 4,
+  js: 5,
+  gl: 6,
+  browser: 7,
+} as const
 const TRACK_NAMES: Record<number, string> = {
   [TRACKS.frames]: 'Frames (render CPU)',
   [TRACKS.passes]: 'Composer passes',
@@ -471,7 +597,18 @@ function profileEvents(profile: TraceProfile): TraceEvent[] {
     while (open.length > depth) {
       const { frameId, start } = open.pop()!
       const label = frameLabel(profile, frameId)
-      events.push({ name: label.name, cat: 'js', ph: 'X', ts: us(start), dur: Math.max(1, us(at - start)), pid: PID, tid: TRACKS.js, args: label.location ? { location: label.location } : undefined })
+      events.push({
+        name: label.name,
+        cat: 'js',
+        ph: 'X',
+        ts: us(start),
+        dur: Math.max(1, us(at - start)),
+        pid: PID,
+        tid: TRACKS.js,
+        args: label.location
+          ? { location: label.location }
+          : undefined,
+      })
     }
   }
 
@@ -486,7 +623,9 @@ function profileEvents(profile: TraceProfile): TraceEvent[] {
       open.push({ frameId: frames[i]!, start: sample.timestamp })
   }
   const last = samples.at(-1)
-  close(0, last ? last.timestamp + last.weight : 0)
+  close(0, last
+    ? last.timestamp + last.weight
+    : 0)
   return events
 }
 
@@ -498,7 +637,9 @@ function spanEvent(span: TraceSpan): TraceEvent {
     ts: us(span.start),
     dur: Math.max(1, us(span.duration)),
     pid: PID,
-    tid: span.category === 'gl' ? TRACKS.gl : TRACKS.browser,
+    tid: span.category === 'gl'
+      ? TRACKS.gl
+      : TRACKS.browser,
     args: span.detail,
   }
 }
@@ -509,10 +650,33 @@ function spanEvent(span: TraceSpan): TraceEvent {
  */
 export function toTraceEvents(capture: TraceCapture, label = 'MavonEngine game tab'): { traceEvents: TraceEvent[], displayTimeUnit: 'ms', metadata: Record<string, unknown> } {
   const events: TraceEvent[] = [
-    { name: 'process_name', ph: 'M', ts: 0, pid: PID, tid: 0, args: { name: label } },
+    {
+      name: 'process_name',
+      ph: 'M',
+      ts: 0,
+      pid: PID,
+      tid: 0,
+      args: { name: label },
+    },
     ...Object.entries(TRACK_NAMES).flatMap(([tid, name]) => [
-      { name: 'thread_name', ph: 'M' as const, ts: 0, pid: PID, tid: Number(tid), args: { name } },
-      { name: 'thread_sort_index', ph: 'M' as const, ts: 0, pid: PID, tid: Number(tid), args: { sort_index: Number(tid) } },
+      {
+        name: 'thread_name',
+        ph: 'M' as const,
+        ts: 0,
+        pid: PID,
+        tid: Number(tid),
+        args: { name },
+      },
+      {
+        name: 'thread_sort_index',
+        ph: 'M' as const,
+        ts: 0,
+        pid: PID,
+        tid: Number(tid),
+        args: {
+          sort_index: Number(tid),
+        },
+      },
     ]),
   ]
 
@@ -525,26 +689,77 @@ export function toTraceEvents(capture: TraceCapture, label = 'MavonEngine game t
       dur: Math.max(1, us(frame.cpu)),
       pid: PID,
       tid: TRACKS.frames,
-      args: { intervalMs: frame.interval, cpuMs: frame.cpu, gpuMs: frame.gpu, drawCalls: frame.calls, triangles: frame.triangles, gl: frame.gl },
+      args: {
+        intervalMs: frame.interval,
+        cpuMs: frame.cpu,
+        gpuMs: frame.gpu,
+        drawCalls: frame.calls,
+        triangles: frame.triangles,
+        gl: frame.gl,
+      },
     })
     frame.passes.forEach((pass, i) => {
       const [start, duration] = pass ?? []
-      if (start !== undefined && duration !== undefined)
-        events.push({ name: capture.passes[i] ?? `Pass ${i}`, cat: 'pass', ph: 'X', ts: us(start), dur: Math.max(1, us(duration)), pid: PID, tid: TRACKS.passes })
+      if (start !== undefined && duration !== undefined) {
+        events.push({
+          name: capture.passes[i] ?? `Pass ${i}`,
+          cat: 'pass',
+          ph: 'X',
+          ts: us(start),
+          dur: Math.max(1, us(duration)),
+          pid: PID,
+          tid: TRACKS.passes,
+        })
+      }
     })
-    if (frame.gpu !== null)
-      events.push({ name: `GPU frame ${index}`, cat: 'gpu', ph: 'X', ts: us(frame.start), dur: Math.max(1, us(frame.gpu)), pid: PID, tid: TRACKS.gpu })
+    if (frame.gpu !== null) {
+      events.push({
+        name: `GPU frame ${index}`,
+        cat: 'gpu',
+        ph: 'X',
+        ts: us(frame.start),
+        dur: Math.max(1, us(frame.gpu)),
+        pid: PID,
+        tid: TRACKS.gpu,
+      })
+    }
 
     const counters: Record<string, number> = { drawCalls: frame.calls, glDraws: frame.gl.draws }
     if (frame.interval)
       counters.fps = round(1000 / frame.interval, 1)
-    events.push({ name: 'Frame', ph: 'C', ts: us(frame.start), pid: PID, tid: 0, args: counters })
-    if (frame.heap !== null)
-      events.push({ name: 'JS heap (MB)', ph: 'C', ts: us(frame.start), pid: PID, tid: 0, args: { used: round(frame.heap / MB) } })
+    events.push({
+      name: 'Frame',
+      ph: 'C',
+      ts: us(frame.start),
+      pid: PID,
+      tid: 0,
+      args: counters,
+    })
+    if (frame.heap !== null) {
+      events.push({
+        name: 'JS heap (MB)',
+        ph: 'C',
+        ts: us(frame.start),
+        pid: PID,
+        tid: 0,
+        args: {
+          used: round(frame.heap / MB),
+        },
+      })
+    }
   })
 
   for (const tick of capture.ticks) {
-    events.push({ name: 'tick', cat: 'tick', ph: 'X', ts: us(tick.start), dur: Math.max(1, us(tick.duration)), pid: PID, tid: TRACKS.ticks, args: { physicsMs: tick.physics, worldMs: tick.world } })
+    events.push({
+      name: 'tick',
+      cat: 'tick',
+      ph: 'X',
+      ts: us(tick.start),
+      dur: Math.max(1, us(tick.duration)),
+      pid: PID,
+      tid: TRACKS.ticks,
+      args: { physicsMs: tick.physics, worldMs: tick.world },
+    })
   }
 
   events.push(...capture.spans.map(spanEvent))

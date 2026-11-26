@@ -14,8 +14,21 @@ function tempDir() {
 }
 
 function context(options: Record<string, unknown> = {}, projectRoot = tempDir()) {
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  return { ctx: { package: '@mavonengine/sqlite', options, projectRoot, logger } as unknown as ServerPluginContext, logger, projectRoot }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
+  return {
+    ctx: {
+      package: '@mavonengine/sqlite',
+      options,
+      projectRoot,
+      logger,
+    } as unknown as ServerPluginContext,
+    logger,
+    projectRoot,
+  }
 }
 
 const open: Kysely<any>[] = []
@@ -41,12 +54,22 @@ describe('openSqlite', () => {
       .execute()
 
     const inserted = await db.insertInto('players')
-      .values({ name: 'ada', banned: true, seen: new Date('2026-01-02T03:04:05Z'), score: 10 })
+      .values({
+        name: 'ada',
+        banned: true,
+        seen: new Date('2026-01-02T03:04:05Z'),
+        score: 10,
+      })
       .returning(['id', 'name'])
       .executeTakeFirst()
     expect(inserted).toEqual({ id: 1, name: 'ada' })
 
-    const result = await db.insertInto('players').values({ name: 'bob', banned: false, seen: undefined, score: 30 }).executeTakeFirst()
+    const result = await db.insertInto('players').values({
+      name: 'bob',
+      banned: false,
+      seen: undefined,
+      score: 30,
+    }).executeTakeFirst()
     expect(result.insertId).toBe(2n)
 
     expect(await db.selectFrom('players').select(['name', 'banned', 'seen']).orderBy('score', 'desc').execute()).toEqual([
@@ -57,7 +80,9 @@ describe('openSqlite', () => {
     const updated = await db.updateTable('players').set({ score: sql`score + 5` }).where('name', '=', 'ada').executeTakeFirst()
     expect(updated.numUpdatedRows).toBe(1n)
     expect(await db.selectFrom('players').select(eb => eb.fn.sum('score').as('total')).executeTakeFirst()).toEqual({ total: 45 })
-    expect((await sql<{ n: number }>`select count(*) as n from players`.execute(db)).rows).toEqual([{ n: 2 }])
+    expect((await sql<{ n: number }>`select count(*) as n from players`.execute(db)).rows).toEqual([
+      { n: 2 },
+    ])
   })
 
   it('rolls back a transaction that fails', async () => {
@@ -81,7 +106,9 @@ describe('openSqlite', () => {
 
     const raw = new DatabaseSync(path)
     expect(raw.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' })
-    expect(raw.prepare('select n from t').all()).toEqual([{ n: 7 }])
+    expect(raw.prepare('select n from t').all()).toEqual([
+      { n: 7 },
+    ])
     raw.close()
   })
 
@@ -146,6 +173,8 @@ describe('the plugin', () => {
 
     const second = track(plugin.database!(context({}, root).ctx)!)
     expect(await runPluginMigrations(second, '@mavonengine/chat', migrations)).toEqual([])
-    expect(await second.selectFrom('chat_mutes').selectAll().execute()).toEqual([{ player: 'p1' }])
+    expect(await second.selectFrom('chat_mutes').selectAll().execute()).toEqual([
+      { player: 'p1' },
+    ])
   })
 })

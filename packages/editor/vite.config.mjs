@@ -24,9 +24,15 @@ async function findParticleFiles(projectRoot) {
     searchRoots.push(projectRoot)
 
   const results = await Promise.all(
-    searchRoots.map(cwd => glob('**/*.ts', { cwd, ignore: ['**/node_modules/**', '**/*.d.ts'], absolute: true })),
+    searchRoots.map(cwd => glob('**/*.ts', {
+      cwd,
+      ignore: ['**/node_modules/**', '**/*.d.ts'],
+      absolute: true,
+    })),
   )
-  const files = [...new Set(results.flat())]
+  const files = [
+    ...new Set(results.flat()),
+  ]
 
   return files.filter((f) => {
     try {
@@ -41,7 +47,9 @@ async function findParticleFiles(projectRoot) {
 export default defineConfig(({ command }) => ({
   resolve: {
     alias: command === 'serve'
-      ? { '@mavonengine/core': resolve(coreRoot, 'src') }
+      ? {
+          '@mavonengine/core': resolve(coreRoot, 'src'),
+        }
       : {},
   },
   plugins: [
@@ -74,7 +82,9 @@ export default defineConfig(({ command }) => ({
                 return
             }
             catch { return }
-            const mod = [...server.moduleGraph.fileToModulesMap.values()]
+            const mod = [
+              ...server.moduleGraph.fileToModulesMap.values(),
+            ]
               .flat()
               .find(m => ASSETS_RE.test(m.id ?? ''))
             if (mod)
@@ -94,7 +104,12 @@ export default defineConfig(({ command }) => ({
       formats: ['es'],
     },
     rolldownOptions: {
-      external: id => ['react', 'react-dom', 'react/jsx-runtime', 'three'].includes(id) || id.startsWith('react/') || id.startsWith('react-dom/') || id.startsWith('three/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
+      external: id => [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'three',
+      ].includes(id) || id.startsWith('react/') || id.startsWith('react-dom/') || id.startsWith('three/') || id.startsWith('@mavonengine/core') || id.startsWith(coreRoot),
       plugins: [
         {
           name: 'inject-css-into-mount-chunk',

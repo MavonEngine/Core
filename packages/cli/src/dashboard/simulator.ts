@@ -34,7 +34,16 @@ const SIMULATED_PLUGINS: PluginLine[] = [
     declaredPrefabs: ['Tree', 'Rock'],
     usedPrefabs: ['Tree'],
   },
-  { package: 'chat', enabled: false, installed: true, runningOnServer: false, version: '1.0.0', target: 'both', declaredPrefabs: [], usedPrefabs: [] },
+  {
+    package: 'chat',
+    enabled: false,
+    installed: true,
+    runningOnServer: false,
+    version: '1.0.0',
+    target: 'both',
+    declaredPrefabs: [],
+    usedPrefabs: [],
+  },
   {
     package: '@mavonengine/sqlite',
     enabled: true,
@@ -57,20 +66,67 @@ const SIMULATED_TABLES = [
     name: 'chat_messages',
     plugin: '@mavonengine/chat',
     columns: [
-      { name: 'id', type: 'INTEGER', nullable: false, autoIncrement: true, hasDefault: false },
-      { name: 'player', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
-      { name: 'text', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
-      { name: 'sent_at', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
+      {
+        name: 'id',
+        type: 'INTEGER',
+        nullable: false,
+        autoIncrement: true,
+        hasDefault: false,
+      },
+      {
+        name: 'player',
+        type: 'TEXT',
+        nullable: false,
+        autoIncrement: false,
+        hasDefault: false,
+      },
+      {
+        name: 'text',
+        type: 'TEXT',
+        nullable: false,
+        autoIncrement: false,
+        hasDefault: false,
+      },
+      {
+        name: 'sent_at',
+        type: 'TEXT',
+        nullable: false,
+        autoIncrement: false,
+        hasDefault: false,
+      },
     ],
-    rows: Array.from({ length: 137 }, (_, i) => ({ id: i + 1, player: `sim-0${(i % 3) + 1}`, text: ['gg', 'anyone near the tower?', 'brb'][i % 3], sent_at: new Date(Date.UTC(2026, 10, 14, 12, 0, i * 7)).toISOString() })),
+    rows: Array.from({ length: 137 }, (_, i) => ({
+      id: i + 1,
+      player: `sim-0${(i % 3) + 1}`,
+      text: ['gg', 'anyone near the tower?', 'brb'][i % 3],
+      sent_at: new Date(Date.UTC(2026, 10, 14, 12, 0, i * 7)).toISOString(),
+    })),
   },
   {
     name: 'game_scores',
     plugin: null,
     columns: [
-      { name: 'player', type: 'TEXT', nullable: false, autoIncrement: false, hasDefault: false },
-      { name: 'score', type: 'INTEGER', nullable: false, autoIncrement: false, hasDefault: true },
-      { name: 'guild', type: 'TEXT', nullable: true, autoIncrement: false, hasDefault: false },
+      {
+        name: 'player',
+        type: 'TEXT',
+        nullable: false,
+        autoIncrement: false,
+        hasDefault: false,
+      },
+      {
+        name: 'score',
+        type: 'INTEGER',
+        nullable: false,
+        autoIncrement: false,
+        hasDefault: true,
+      },
+      {
+        name: 'guild',
+        type: 'TEXT',
+        nullable: true,
+        autoIncrement: false,
+        hasDefault: false,
+      },
     ],
     rows: [
       { player: 'sim-01', score: 1200, guild: 'Wolves' },
@@ -81,16 +137,85 @@ const SIMULATED_TABLES = [
 ]
 
 const SIMULATED_ROUTES: RouteLine[] = [
-  { method: 'GET', path: '/api/game/health', source: 'engine', params: {}, devOnly: false, summary: 'Whether the server is up' },
-  { method: 'GET', path: '/api/game/metrics', source: 'engine', params: {}, devOnly: false, summary: 'Server statistics' },
-  { method: 'GET', path: '/api/game/logs', source: 'engine', params: {}, devOnly: false, summary: 'Recent server log entries' },
-  { method: 'GET', path: '/api/game/requests', source: 'engine', params: {}, devOnly: false, summary: 'Recent HTTP requests to this server' },
-  { method: 'GET', path: '/api/game/routes', source: 'engine', params: {}, devOnly: false, summary: 'Every HTTP endpoint of this server' },
-  { method: 'GET', path: '/api/game/dev/scene', source: 'engine', params: {}, devOnly: true, summary: 'The active scene' },
-  { method: 'GET', path: '/api/scores', source: 'game', params: {}, devOnly: false, summary: 'The high scores' },
-  { method: 'POST', path: '/api/scores/:player', source: 'game', params: { player: 'Id of the player' }, devOnly: false },
-  { method: 'GET', path: '/monitoring', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
-  { method: 'GET', path: '/monitoring/api/metrics', source: 'plugin', plugin: '@mavonengine/http-monitoring', params: {}, devOnly: false },
+  {
+    method: 'GET',
+    path: '/api/game/health',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+    summary: 'Whether the server is up',
+  },
+  {
+    method: 'GET',
+    path: '/api/game/metrics',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+    summary: 'Server statistics',
+  },
+  {
+    method: 'GET',
+    path: '/api/game/logs',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+    summary: 'Recent server log entries',
+  },
+  {
+    method: 'GET',
+    path: '/api/game/requests',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+    summary: 'Recent HTTP requests to this server',
+  },
+  {
+    method: 'GET',
+    path: '/api/game/routes',
+    source: 'engine',
+    params: {},
+    devOnly: false,
+    summary: 'Every HTTP endpoint of this server',
+  },
+  {
+    method: 'GET',
+    path: '/api/game/dev/scene',
+    source: 'engine',
+    params: {},
+    devOnly: true,
+    summary: 'The active scene',
+  },
+  {
+    method: 'GET',
+    path: '/api/scores',
+    source: 'game',
+    params: {},
+    devOnly: false,
+    summary: 'The high scores',
+  },
+  {
+    method: 'POST',
+    path: '/api/scores/:player',
+    source: 'game',
+    params: { player: 'Id of the player' },
+    devOnly: false,
+  },
+  {
+    method: 'GET',
+    path: '/monitoring',
+    source: 'plugin',
+    plugin: '@mavonengine/http-monitoring',
+    params: {},
+    devOnly: false,
+  },
+  {
+    method: 'GET',
+    path: '/monitoring/api/metrics',
+    source: 'plugin',
+    plugin: '@mavonengine/http-monitoring',
+    params: {},
+    devOnly: false,
+  },
 ]
 
 /**
@@ -135,11 +260,25 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
   let previousPlayers = 0
   const joinedAt: number[] = []
   const log = (level: string, message: string) => {
-    logs.push({ id: logs.length + 1, timestamp: now, level, message })
+    logs.push({
+      id: logs.length + 1,
+      timestamp: now,
+      level,
+      message,
+    })
   }
   const requests: RequestLine[] = []
   const request = (method: string, path: string, status: number | null, bytes: number, address: string) => {
-    requests.push({ id: requests.length + 1, timestamp: now, method, path, status, durationMs: Math.round((1 + random() * 20) * 100) / 100, bytes, address })
+    requests.push({
+      id: requests.length + 1,
+      timestamp: now,
+      method,
+      path,
+      status,
+      durationMs: Math.round((1 + random() * 20) * 100) / 100,
+      bytes,
+      address,
+    })
   }
 
   // The game socket's traffic, in the shape of GET /api/game/dev/net/packets
@@ -148,7 +287,12 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
   let tick = 0
   let syncPlayers: Record<string, unknown>[] = []
   const record = (entry: Record<string, unknown>, offsetMs = 0) => {
-    packets.push({ id: ++packetId, timestamp: now + offsetMs, hasPayload: entry.kind === 'packet', ...entry })
+    packets.push({
+      id: ++packetId,
+      timestamp: now + offsetMs,
+      hasPayload: entry.kind === 'packet',
+      ...entry,
+    })
     if (packets.length > PACKET_LIMIT)
       packets.shift()
   }
@@ -203,8 +347,21 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         request('POST', '/.wrtc/v2/connections', 200, 2900, address)
         request('POST', `/.wrtc/v2/connections/${players[i].id}/additional-candidates`, 200, 600, address)
         record({ kind: 'event', type: 'connect', peer: players[i].id })
-        record({ kind: 'packet', direction: 'in', type: 'cl_init', peer: players[i].id, bytes: 24, reliable: true })
-        record({ kind: 'event', type: 'sync_enter', peer: players[i].id, tick, info: { count: players[i].trackedEntities } })
+        record({
+          kind: 'packet',
+          direction: 'in',
+          type: 'cl_init',
+          peer: players[i].id,
+          bytes: 24,
+          reliable: true,
+        })
+        record({
+          kind: 'event',
+          type: 'sync_enter',
+          peer: players[i].id,
+          tick,
+          info: { count: players[i].trackedEntities },
+        })
         log('info', `Connected: ${players[i].id}`)
         log('info', `${i + 1} total players connected`)
       }
@@ -222,22 +379,75 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
         tick += tickRate / STATES_PER_SECOND
         for (const player of players) {
           const bytes = 180 + player.trackedEntities * 96 + Math.floor(random() * 40)
-          if (state % 2 === 0)
-            record({ kind: 'packet', direction: 'in', type: 'command', peer: player.id, bytes: 58, sequenceId: player.lastProcessedSequenceId, info: { command: 'cl_move' } }, offset)
-          record({ kind: 'packet', direction: 'out', type: 'sv_state', peer: player.id, bytes, tick, info: { entities: player.trackedEntities, ack: player.lastProcessedSequenceId } }, offset + 2)
+          if (state % 2 === 0) {
+            record({
+              kind: 'packet',
+              direction: 'in',
+              type: 'command',
+              peer: player.id,
+              bytes: 58,
+              sequenceId: player.lastProcessedSequenceId,
+              info: { command: 'cl_move' },
+            }, offset)
+          }
+          record({
+            kind: 'packet',
+            direction: 'out',
+            type: 'sv_state',
+            peer: player.id,
+            bytes,
+            tick,
+            info: { entities: player.trackedEntities, ack: player.lastProcessedSequenceId },
+          }, offset + 2)
           lastStates.set(player.id, { tick, bytes, entities: player.trackedEntities })
         }
       }
       for (const player of players) {
-        record({ kind: 'packet', direction: 'in', type: 'ping', peer: player.id, bytes: 0 })
-        record({ kind: 'packet', direction: 'out', type: 'pong', peer: player.id, bytes: 0 })
+        record({
+          kind: 'packet',
+          direction: 'in',
+          type: 'ping',
+          peer: player.id,
+          bytes: 0,
+        })
+        record({
+          kind: 'packet',
+          direction: 'out',
+          type: 'pong',
+          peer: player.id,
+          bytes: 0,
+        })
       }
-      if (step % 9 === 0)
-        record({ kind: 'event', type: 'sync_leave', peer: players[0].id, tick, info: { count: 2, entities: ['rock-12', 'rock-40'] } })
-      if (step % 13 === 0)
-        record({ kind: 'event', type: 'dropped', peer: players.at(-1)!.id, info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' } })
-      if (step % 4 === 0)
-        record({ kind: 'packet', direction: 'out', type: 'sv_chat', peer: players[0].id, bytes: 74, reliable: true })
+      if (step % 9 === 0) {
+        record({
+          kind: 'event',
+          type: 'sync_leave',
+          peer: players[0].id,
+          tick,
+          info: {
+            count: 2,
+            entities: ['rock-12', 'rock-40'],
+          },
+        })
+      }
+      if (step % 13 === 0) {
+        record({
+          kind: 'event',
+          type: 'dropped',
+          peer: players.at(-1)!.id,
+          info: { reason: 'DROPPED_FROM_BUFFERING', message: 'sv_state' },
+        })
+      }
+      if (step % 4 === 0) {
+        record({
+          kind: 'packet',
+          direction: 'out',
+          type: 'sv_chat',
+          peer: players[0].id,
+          bytes: 74,
+          reliable: true,
+        })
+      }
 
       syncPlayers = players.map(player => ({
         id: player.id,
@@ -266,14 +476,18 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
 
       // Occasional spike so the max line has something to show
       const avgMs = 2 + playerCount * 0.6 + random() * 1.5
-      const maxMs = avgMs + random() * 3 + (step % 17 === 0 ? 25 : 0)
+      const maxMs = avgMs + random() * 3 + (step % 17 === 0
+        ? 25
+        : 0)
       if (maxMs > budgetMs)
         log('warn', `Slow tick: ${maxMs.toFixed(1)} ms (budget ${budgetMs} ms)`)
       const commandsPerSecond = playerCount * tickRate
       push(tickHistory, {
         timestamp: now,
         ticks: tickRate,
-        ticksPerSecond: tickRate - (maxMs > budgetMs ? 1 : 0),
+        ticksPerSecond: tickRate - (maxMs > budgetMs
+          ? 1
+          : 0),
         avgMs: Math.round(avgMs * 100) / 100,
         maxMs: Math.round(maxMs * 100) / 100,
         commandsPerSecond,
@@ -282,13 +496,26 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
 
       // Jobs come in bursts, e.g. rewards at the end of a round, and are worked off a few a second. Made from the
       // step rather than random(), which would change what the rest of the simulation draws
-      const dispatched = Math.round(playerCount * 0.3) + (step % 20 === 0 ? 25 : 0)
+      const dispatched = Math.round(playerCount * 0.3) + (step % 20 === 0
+        ? 25
+        : 0)
       const processed = Math.min(queued + dispatched, 4 + (step % 3))
-      const failed = processed > 0 && step % 13 === 0 ? 1 : 0
+      const failed = processed > 0 && step % 13 === 0
+        ? 1
+        : 0
       queued = queued + dispatched - processed
       if (failed)
         log('error', 'Job grant-reward failed all 3 tries: Error: reward service unavailable')
-      push(queueHistory, { timestamp: now, size: queued, running: Math.min(queued, 1), processed: processed - failed, retried: step % 7 === 0 ? 1 : 0, failed })
+      push(queueHistory, {
+        timestamp: now,
+        size: queued,
+        running: Math.min(queued, 1),
+        processed: processed - failed,
+        retried: step % 7 === 0
+          ? 1
+          : 0,
+        failed,
+      })
 
       const average = (ms: number) => {
         const recent = cpuHistory.slice(-Math.max(1, Math.round(ms / sampleIntervalMs)))
@@ -331,20 +558,36 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
           external: 5e6,
         },
         latencySimulation: null,
-        queue: { driver: 'database', working: true, latest: queueHistory.at(-1)!, history: [...queueHistory] },
+        queue: {
+          driver: 'database',
+          working: true,
+          latest: queueHistory.at(-1)!,
+          history: [...queueHistory],
+        },
       }
 
       return snapshot
     },
     async fetchLogs(afterId) {
-      return { entries: logs.filter(entry => entry.id > afterId), latestId: logs.length }
+      return {
+        entries: logs.filter(entry => entry.id > afterId),
+        latestId: logs.length,
+      }
     },
     async fetchRequests(afterId) {
-      return { entries: requests.filter(entry => entry.id > afterId), latestId: requests.length }
+      return {
+        entries: requests.filter(entry => entry.id > afterId),
+        latestId: requests.length,
+      }
     },
     async fetchPackets(afterId) {
       const records = packets.filter(entry => (entry.id as number) > afterId)
-      return { enabled: true, latestId: packetId, matched: records.length, records }
+      return {
+        enabled: true,
+        latestId: packetId,
+        matched: records.length,
+        records,
+      }
     },
     async fetchPacket(id) {
       const found = packets.find(entry => entry.id === id)
@@ -362,28 +605,59 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
             serverTime: found.timestamp,
             ack: info.ack,
             entities: Array.from({ length: info.entities ?? 0 }, (_, i) => ({
-              id: i === 0 ? found.peer : `entity-${i}`,
-              $typeName: i === 0 ? 'player' : 'rock',
+              id: i === 0
+                ? found.peer
+                : `entity-${i}`,
+              $typeName: i === 0
+                ? 'player'
+                : 'rock',
               position: { x: i * 3, y: 0, z: -i * 2 },
               rotation: { x: 0, y: (i % 6) / 2, z: 0 },
               scale: { x: 1, y: 1, z: 1 },
             })),
           }
         : found.type === 'command'
-          ? { type: 'cl_move', sequenceId: found.sequenceId, keys: ['KeyW'], yaw: 1.57 }
+          ? {
+              type: 'cl_move',
+              sequenceId: found.sequenceId,
+              keys: ['KeyW'],
+              yaw: 1.57,
+            }
           : found.type === 'cl_init'
             ? { name: `Player ${String(found.peer).slice(-2)}` }
             : { playerId: found.peer, playerName: 'Player 1', message: 'hello' }
 
-      return { record: { ...found, payload } }
+      return {
+        record: { ...found, payload },
+      }
     },
     async fetchSync() {
       const entities = [
-        ...syncPlayers.map(player => ({ id: player.id, type: 'player', player: true, trackedBy: syncPlayers.length })),
+        ...syncPlayers.map(player => ({
+          id: player.id,
+          type: 'player',
+          player: true,
+          trackedBy: syncPlayers.length,
+        })),
         // The last few are out of every player's range
-        ...Array.from({ length: 140 }, (_, i) => ({ id: `entity-${i}`, type: 'rock', player: false, trackedBy: i < 134 ? 1 + (i % syncPlayers.length) : 0 })),
+        ...Array.from({ length: 140 }, (_, i) => ({
+          id: `entity-${i}`,
+          type: 'rock',
+          player: false,
+          trackedBy: i < 134
+            ? 1 + (i % syncPlayers.length)
+            : 0,
+        })),
       ]
-      return { tick, serverTime: now, tickRate, syncDistance: 200, players: syncPlayers, editors: [], entities }
+      return {
+        tick,
+        serverTime: now,
+        tickRate,
+        syncDistance: 200,
+        players: syncPlayers,
+        editors: [],
+        entities,
+      }
     },
     async fetchRoutes() {
       return { routes: SIMULATED_ROUTES }
@@ -395,14 +669,29 @@ export function simulatedSource(seed = 1, sampleIntervalMs = 1000): MetricsSourc
       return {
         provider: '@mavonengine/sqlite',
         tables: SIMULATED_TABLES.map(({ rows, ...table }) => ({ ...table, rows: rows.length })),
-        migrations: [{ plugin: '@mavonengine/chat', table: 'chat__migrations', applied: [{ name: '001_init', executedAt: '2026-11-14T12:00:00.000Z' }] }],
+        migrations: [
+          {
+            plugin: '@mavonengine/chat',
+            table: 'chat__migrations',
+            applied: [
+              { name: '001_init', executedAt: '2026-11-14T12:00:00.000Z' },
+            ],
+          },
+        ],
       }
     },
     async fetchTable(name: string, offset: number, limit: number) {
       const table = SIMULATED_TABLES.find(t => t.name === name)
       if (!table)
         throw new MetricsSourceError(`No table ${name}`, 'disabled')
-      return { table: name, columns: table.columns, rows: table.rows.slice(offset, offset + limit), total: table.rows.length, offset, limit }
+      return {
+        table: name,
+        columns: table.columns,
+        rows: table.rows.slice(offset, offset + limit),
+        total: table.rows.length,
+        offset,
+        limit,
+      }
     },
   }
 }

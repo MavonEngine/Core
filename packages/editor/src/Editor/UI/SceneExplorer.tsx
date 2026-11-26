@@ -85,7 +85,9 @@ function SceneNode({ item, selectedUuid, depth, onSelect }: NodeProps) {
       >
         <span
           className={styles.arrow}
-          style={{ visibility: hasChildren ? 'visible' : 'hidden' }}
+          style={{
+            visibility: hasChildren ? 'visible' : 'hidden',
+          }}
           onClick={(e) => {
             e.stopPropagation()
             setExpanded(v => !v)

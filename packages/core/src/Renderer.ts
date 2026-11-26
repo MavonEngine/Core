@@ -80,7 +80,12 @@ export default class Renderer {
         renderer: this.instance,
       })
 
-      renderDebug.addBinding(this, 'maxFps', { label: 'max fps (0 = off)', min: 0, max: 240, step: 1 })
+      renderDebug.addBinding(this, 'maxFps', {
+        label: 'max fps (0 = off)',
+        min: 0,
+        max: 240,
+        step: 1,
+      })
 
       renderDebug.addBinding(this.options, 'wireframe').on('change', () => {
         Game.instance().scene.traverse((object) => {
@@ -115,7 +120,17 @@ export default class Renderer {
     }
   }
 
+  /** Whether a WebXR session is rendering to a headset */
+  get xrPresenting(): boolean {
+    return this.instance.xr.isPresenting
+  }
+
   resize() {
+    // The XR session owns the framebuffer size, and three.js ignores setSize while presenting.
+    // The game resizes again once the session ends
+    if (this.xrPresenting)
+      return
+
     this.instance.setSize(
       Game.instance().sizes.width,
       Game.instance().sizes.height,
@@ -133,12 +148,30 @@ export default class Renderer {
    * @returns whether this frame should be rendered under `maxFps`
    */
   shouldRender(now: number): boolean {
+    // The headset sets the frame rate, and skipping its frames judders the view
+    if (this.xrPresenting)
+      return true
+
     return this.frameLimiter.shouldRender(now)
   }
 
   update(delta: number) {
     this.perf?.begin()
-    this.composer.render(delta)
+    // Before rendering so uniforms holding it (rain, smoke) see this frame's camera
+    Game.instance().camera.updateWorldPosition()
+    if (this.xrPresenting) {
+      // EffectComposer renders a single view, so in XR render straight to the headset's stereo cameras.
+      // The renderer's toneMapping and outputColorSpace stand in for the OutputPass
+      this.instance.render(Game.instance().scene, Game.instance().camera.instance)
+      // The browser window otherwise stays on its last frame (black, mostly) while the headset plays
+      const xr = Game.instance().xr
+      if (xr?.mirror)
+        xr.renderMirror()
+    }
+    else {
+      this.composer.render(delta)
+    }
+    Game.instance().camera.afterRender()
     this.perf?.end()
 
     this._fpsFrameCount++

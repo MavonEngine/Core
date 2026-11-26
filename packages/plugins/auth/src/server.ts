@@ -95,7 +95,9 @@ function linkTemplate(value: unknown): string | undefined {
     return undefined
   try {
     const url = new URL(value.replace('{token}', 'token'))
-    return url.protocol === 'https:' || url.protocol === 'http:' ? value : undefined
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? value
+      : undefined
   }
   catch {
     return undefined
@@ -103,10 +105,16 @@ function linkTemplate(value: unknown): string | undefined {
 }
 
 export function parseOptions(raw: Record<string, unknown> = {}): AuthOptions {
-  const positive = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+  const positive = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : fallback
   const options: AuthOptions = {
-    path: typeof raw.path === 'string' && raw.path.startsWith('/') ? raw.path.replace(TRAILING_SLASHES_RE, '') : DEFAULT_OPTIONS.path,
-    registration: typeof raw.registration === 'boolean' ? raw.registration : DEFAULT_OPTIONS.registration,
+    path: typeof raw.path === 'string' && raw.path.startsWith('/')
+      ? raw.path.replace(TRAILING_SLASHES_RE, '')
+      : DEFAULT_OPTIONS.path,
+    registration: typeof raw.registration === 'boolean'
+      ? raw.registration
+      : DEFAULT_OPTIONS.registration,
     sessionDays: positive(raw.sessionDays, DEFAULT_OPTIONS.sessionDays),
     guests: raw.guests === true,
     guestDays: positive(raw.guestDays, DEFAULT_OPTIONS.guestDays),
@@ -114,7 +122,9 @@ export function parseOptions(raw: Record<string, unknown> = {}): AuthOptions {
     devGuests: raw.devGuests === true,
     loginAttempts: Math.floor(positive(raw.loginAttempts, DEFAULT_OPTIONS.loginAttempts)),
     loginWindowMinutes: positive(raw.loginWindowMinutes, DEFAULT_OPTIONS.loginWindowMinutes),
-    verifyEmail: typeof raw.verifyEmail === 'boolean' ? raw.verifyEmail : DEFAULT_OPTIONS.verifyEmail,
+    verifyEmail: typeof raw.verifyEmail === 'boolean'
+      ? raw.verifyEmail
+      : DEFAULT_OPTIONS.verifyEmail,
     resetsPerHour: Math.floor(positive(raw.resetsPerHour, DEFAULT_OPTIONS.resetsPerHour)),
   }
   const verifyUrl = linkTemplate(raw.verifyUrl)
@@ -153,7 +163,11 @@ function stateOf(server: object): AuthState {
   const registry = ((globalThis as Record<symbol, unknown>)[STATES] ??= new WeakMap()) as WeakMap<object, AuthState>
   let state = registry.get(server)
   if (!state) {
-    state = { options: DEFAULT_OPTIONS, channels: new Map(), ...limits(DEFAULT_OPTIONS) }
+    state = {
+      options: DEFAULT_OPTIONS,
+      channels: new Map(),
+      ...limits(DEFAULT_OPTIONS),
+    }
     registry.set(server, state)
   }
   return state
@@ -186,12 +200,18 @@ function running(state: AuthState): AuthStore {
 
 /** What the game server and its plugins may know of an account: its identity. No email */
 function publicAccount(account: Account): AccountInfo {
-  return account.guest ? { id: account.id, name: account.name, guest: true } : { id: account.id, name: account.name }
+  return account.guest
+    ? { id: account.id, name: account.name, guest: true }
+    : { id: account.id, name: account.name }
 }
 
 /** What the player itself is told of its account: with its email, and whether it confirmed it */
 function ownAccount(account: Account): AccountInfo {
-  return { ...publicAccount(account), email: account.email, emailVerified: !!account.email && !!account.emailVerifiedAt }
+  return {
+    ...publicAccount(account),
+    email: account.email,
+    emailVerified: !!account.email && !!account.emailVerifiedAt,
+  }
 }
 
 /** An email from a request or a provider, trimmed, or undefined for none. Throws a 400 for one that can't be used */
@@ -212,7 +232,11 @@ function cleanName(name: string | undefined): string {
 
 async function startSession(state: AuthState, store: AuthStore, account: Account): Promise<SessionResponse> {
   const { token, expiresAt } = await store.createSession(account.id, lifetimeOf(state)(account))
-  return { token, account: ownAccount(account), expiresAt }
+  return {
+    token,
+    account: ownAccount(account),
+    expiresAt,
+  }
 }
 
 /** Close the game connections of an account: it reconnects only with a session that still works */
@@ -285,9 +309,13 @@ export function auth(server: object): AuthHooks {
 
       const store = running(state)
       // A provider's email that can't be used is left out rather than failing the login
-      const email = emailProblem(profile.email) ? undefined : profile.email!.trim()
+      const email = emailProblem(profile.email)
+        ? undefined
+        : profile.email!.trim()
       return store.transaction(async (tx) => {
-        const freeEmail = async (accountId?: string) => email && !await tx.emailTaken(email, accountId) ? email : undefined
+        const freeEmail = async (accountId?: string) => email && !await tx.emailTaken(email, accountId)
+          ? email
+          : undefined
         const known = await tx.identity(provider, externalId)
         let account: Account | undefined
         if (known) {
@@ -299,13 +327,20 @@ export function auth(server: object): AuthHooks {
           account = await tx.account(options.linkTo)
           if (!account)
             throw new AuthError(404, 'There is no account to link to')
-          await tx.addIdentity({ provider, externalId, accountId: account.id, secret: null })
+          await tx.addIdentity({
+            provider,
+            externalId,
+            accountId: account.id,
+            secret: null,
+          })
           if (account.guest) {
             const name = cleanName(profile.name)
             await tx.upgradeGuest(account.id, name)
             account = { ...account, name, guest: false }
           }
-          const linkedEmail = account.email ? undefined : await freeEmail(account.id)
+          const linkedEmail = account.email
+            ? undefined
+            : await freeEmail(account.id)
           if (linkedEmail) {
             await tx.setEmail(account.id, linkedEmail, { verified: profile.emailVerified === true })
             account = { ...account, email: linkedEmail }
@@ -313,7 +348,12 @@ export function auth(server: object): AuthHooks {
         }
         else {
           account = await tx.createAccount(cleanName(profile.name), { email: await freeEmail(), emailVerified: profile.emailVerified === true })
-          await tx.addIdentity({ provider, externalId, accountId: account.id, secret: null })
+          await tx.addIdentity({
+            provider,
+            externalId,
+            accountId: account.id,
+            secret: null,
+          })
         }
 
         if (!account)
@@ -374,7 +414,9 @@ function readJson(req: Request): Promise<Record<string, unknown>> {
     })
     req.on('end', () => {
       try {
-        const parsed: unknown = body ? JSON.parse(body) : {}
+        const parsed: unknown = body
+          ? JSON.parse(body)
+          : {}
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
           throw new Error('not an object')
         resolve(parsed as Record<string, unknown>)
@@ -430,7 +472,10 @@ async function readBody(req: Request): Promise<{ body: Record<string, unknown>, 
         req.destroy()
       }
     })
-    req.on('end', () => resolve({ body: Object.fromEntries(new URLSearchParams(raw)), form: true }))
+    req.on('end', () => resolve({
+      body: Object.fromEntries(new URLSearchParams(raw)),
+      form: true,
+    }))
     req.on('error', reject)
   })
 }
@@ -459,15 +504,22 @@ function appUrlFor(state: AuthState, req: Request): string {
 
 /** Throw the 503 linkFor() would, before anything is made for a link that can't be mailed */
 function checkLinks(state: AuthState, req: Request, kind: 'verify' | 'reset') {
-  if (!(kind === 'verify' ? state.options.verifyUrl : state.options.resetUrl))
+  if (!(kind === 'verify'
+    ? state.options.verifyUrl
+    : state.options.resetUrl)) {
     appUrlFor(state, req)
+  }
 }
 
 function linkFor(state: AuthState, req: Request, kind: 'verify' | 'reset', token: string): string {
-  const template = kind === 'verify' ? state.options.verifyUrl : state.options.resetUrl
+  const template = kind === 'verify'
+    ? state.options.verifyUrl
+    : state.options.resetUrl
   if (template)
     return template.replace('{token}', encodeURIComponent(token))
-  const page = kind === 'verify' ? 'verify-email' : 'reset-password'
+  const page = kind === 'verify'
+    ? 'verify-email'
+    : 'reset-password'
   return `${appUrlFor(state, req)}${state.options.path}/${page}?token=${encodeURIComponent(token)}`
 }
 
@@ -487,8 +539,11 @@ async function sendVerification(state: AuthState, req: Request, account: Account
     throw new AuthError(409, 'This email is confirmed already')
   const mail = mailer(state)
   const wait = mailWait(state, 'verify', account.email)
-  if (wait !== undefined)
-    throw Object.assign(new AuthError(429, `A confirmation mail went out a moment ago, ask again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`), { retryAfter: wait })
+  if (wait !== undefined) {
+    throw Object.assign(new AuthError(429, `A confirmation mail went out a moment ago, ask again in ${Math.ceil(wait / 60)} minute${wait > 60
+      ? 's'
+      : ''}`), { retryAfter: wait })
+  }
 
   checkLinks(state, req, 'verify')
   const token = await running(state).createToken(account.id, 'verify-email', account.email, VERIFY_EMAIL_HOURS * HOUR_MS)
@@ -531,8 +586,12 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     const secret = await hashPassword(password as string)
     // A guest who registers keeps its account, and so what the game kept for it
     const token = bearer(req.headers.authorization)
-    const current = token ? await store.useSession(token, lifetimeOf(state)) : undefined
-    const guest = current?.guest && !current.disabledAt ? current : undefined
+    const current = token
+      ? await store.useSession(token, lifetimeOf(state))
+      : undefined
+    const guest = current?.guest && !current.disabledAt
+      ? current
+      : undefined
 
     const session = await store.transaction(async (tx) => {
       if (await tx.identity(PASSWORD_PROVIDER, key))
@@ -544,12 +603,23 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
         await tx.upgradeGuest(guest.id, username as string)
         if (email)
           await tx.setEmail(guest.id, email)
-        account = { ...guest, name: username as string, guest: false, email: email ?? null, emailVerifiedAt: null }
+        account = {
+          ...guest,
+          name: username as string,
+          guest: false,
+          email: email ?? null,
+          emailVerifiedAt: null,
+        }
       }
       else {
         account = await tx.createAccount(username as string, { email: email ?? null })
       }
-      await tx.addIdentity({ provider: PASSWORD_PROVIDER, externalId: key, accountId: account.id, secret })
+      await tx.addIdentity({
+        provider: PASSWORD_PROVIDER,
+        externalId: key,
+        accountId: account.id,
+        secret,
+      })
       return startSession(state, tx, account)
     }).catch(async (err: unknown) => {
       // Two registrations of one name or email at once: the second insert breaks the unique key
@@ -560,7 +630,9 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
       throw err
     })
 
-    ctx.logger?.info(`Auth: ${session.account.name} registered${guest ? `, was guest ${guest.name}` : ''}`)
+    ctx.logger?.info(`Auth: ${session.account.name} registered${guest
+      ? `, was guest ${guest.name}`
+      : ''}`)
     if (email) {
       const account = await store.account(session.account.id)
       if (account)
@@ -581,7 +653,9 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     const wait = state.guestsMade.blocked(address)
     if (wait !== undefined) {
       res.setHeader('Retry-After', String(wait))
-      throw new AuthError(429, `Too many guests from this address, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`)
+      throw new AuthError(429, `Too many guests from this address, try again in ${Math.ceil(wait / 60)} minute${wait > 60
+        ? 's'
+        : ''}`)
     }
 
     const store = running(state)
@@ -605,7 +679,9 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     const wait = state.failedLogins.blocked(limitKey)
     if (wait !== undefined) {
       res.setHeader('Retry-After', String(wait))
-      throw new AuthError(429, `Too many failed logins, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`)
+      throw new AuthError(429, `Too many failed logins, try again in ${Math.ceil(wait / 60)} minute${wait > 60
+        ? 's'
+        : ''}`)
     }
 
     const store = running(state)
@@ -652,7 +728,9 @@ export function mountAuthApi(app: Express, ctx: ServerPluginContext, state: Auth
     response: '`{ account }` with its id, name and email, 401 when not logged in',
   }), route(state, async (req, res) => {
     const { account } = await requireSession(state, req)
-    res.json({ account: ownAccount(account) })
+    res.json({
+      account: ownAccount(account),
+    })
   }))
 
   app.post(`${path}/password`, describe({
@@ -702,13 +780,17 @@ function mountEmailApi(app: Express, state: AuthState) {
     if (account.guest)
       throw new AuthError(409, 'Register to give the account an email')
     const { email: raw } = await readJson(req)
-    const email = raw === null ? null : emailFrom(raw)
+    const email = raw === null
+      ? null
+      : emailFrom(raw)
     if (email === undefined)
       throw new AuthError(400, 'That is no email address')
 
     const store = running(state)
     if (email && emailKey(email) === (account.email && emailKey(account.email))) {
-      res.json({ account: ownAccount(account) })
+      res.json({
+        account: ownAccount(account),
+      })
       return
     }
     if (email && await store.emailTaken(email, account.id))
@@ -722,7 +804,9 @@ function mountEmailApi(app: Express, state: AuthState) {
 
     const changed = (await store.account(account.id))!
     await sendVerificationQuietly(state, req, changed)
-    res.json({ account: ownAccount(changed) })
+    res.json({
+      account: ownAccount(changed),
+    })
   }))
 
   app.post(`${path}/verify-email/send`, describe({
@@ -739,7 +823,9 @@ function mountEmailApi(app: Express, state: AuthState) {
     summary: 'The page a confirmation link opens',
     description: 'Asks before confirming, as mail scanners open links in mails. Its button posts to `POST /verify-email`.',
   }), route(state, async (req, res) => {
-    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    const token = typeof req.query.token === 'string'
+      ? req.query.token
+      : ''
     const found = token && await running(state).token(token, 'verify-email')
     if (!found) {
       sendPage(res, 400, 'Confirm your email', text(LINK_GONE, 'error'))
@@ -755,7 +841,9 @@ function mountEmailApi(app: Express, state: AuthState) {
   }), route(state, async (req, res) => {
     const { body, form } = await readBody(req)
     const store = running(state)
-    const found = typeof body.token === 'string' && body.token ? await store.useToken(body.token, 'verify-email') : undefined
+    const found = typeof body.token === 'string' && body.token
+      ? await store.useToken(body.token, 'verify-email')
+      : undefined
     const verified = found && await store.markEmailVerified(found.accountId, found.email)
     if (!verified) {
       if (form)
@@ -767,10 +855,14 @@ function mountEmailApi(app: Express, state: AuthState) {
 
     const account = (await store.account(found.accountId))!
     state.ctx?.logger?.info(`Auth: ${account.name} confirmed their email`)
-    if (form)
+    if (form) {
       sendPage(res, 200, 'Email confirmed', text(`Thanks, ${found.email} is confirmed. You can close this page and go back to the game.`))
-    else
-      res.json({ account: ownAccount(account) } satisfies TokenResponse)
+    }
+    else {
+      res.json({
+        account: ownAccount(account),
+      } satisfies TokenResponse)
+    }
   }))
 
   app.post(`${path}/forgot-password`, describe({
@@ -785,8 +877,11 @@ function mountEmailApi(app: Express, state: AuthState) {
 
     const address = addressOf(req)
     const wait = state.resetRequests.blocked(address)
-    if (wait !== undefined)
-      throw Object.assign(new AuthError(429, `Too many password resets asked for, try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}`), { retryAfter: wait })
+    if (wait !== undefined) {
+      throw Object.assign(new AuthError(429, `Too many password resets asked for, try again in ${Math.ceil(wait / 60)} minute${wait > 60
+        ? 's'
+        : ''}`), { retryAfter: wait })
+    }
 
     const store = running(state)
     const mail = mailer(state)
@@ -816,7 +911,9 @@ function mountEmailApi(app: Express, state: AuthState) {
     summary: 'The page a password reset link opens',
     description: 'A form for the new password, posting to `POST /reset-password`.',
   }), route(state, async (req, res) => {
-    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    const token = typeof req.query.token === 'string'
+      ? req.query.token
+      : ''
     if (!token || !await running(state).token(token, 'reset-password')) {
       sendPage(res, 400, 'Reset your password', text(LINK_GONE, 'error'))
       return
@@ -831,11 +928,15 @@ function mountEmailApi(app: Express, state: AuthState) {
   }), route(state, async (req, res) => {
     const { body, form } = await readBody(req)
     const store = running(state)
-    const token = typeof body.token === 'string' ? body.token : ''
+    const token = typeof body.token === 'string'
+      ? body.token
+      : ''
     const fail = (status: number, message: string, again: boolean) => {
       if (!form)
         throw new AuthError(status, message)
-      sendPage(res, status, 'Reset your password', again ? resetPasswordPage(`${path}/reset-password`, token, MIN_PASSWORD_LENGTH, message) : text(message, 'error'))
+      sendPage(res, status, 'Reset your password', again
+        ? resetPasswordPage(`${path}/reset-password`, token, MIN_PASSWORD_LENGTH, message)
+        : text(message, 'error'))
     }
 
     // Checked before using the token up, so a password that can't be used leaves the link working
@@ -942,7 +1043,10 @@ async function authorizeConnection(state: AuthState, authorization: string | und
   if (account.disabledAt)
     return 403
   // `session` tells this account's connections apart, to close those of a session that logs out
-  return { ...publicAccount(account), session: sessionKey(token) } satisfies Identity
+  return {
+    ...publicAccount(account),
+    session: sessionKey(token),
+  } satisfies Identity
 }
 
 /** Forget sessions that ran out and the guest accounts nobody can reach any more */
@@ -954,8 +1058,13 @@ async function sweep(state: AuthState) {
     const expired = await store.deleteExpiredSessions()
     await store.deleteExpiredTokens()
     const guests = await store.deleteAbandonedGuests()
-    if (expired || guests)
-      state.ctx?.logger?.info(`Auth: forgot ${expired} expired session${expired === 1 ? '' : 's'} and ${guests} guest account${guests === 1 ? '' : 's'}`)
+    if (expired || guests) {
+      state.ctx?.logger?.info(`Auth: forgot ${expired} expired session${expired === 1
+        ? ''
+        : 's'} and ${guests} guest account${guests === 1
+        ? ''
+        : 's'}`)
+    }
   }
   catch (err) {
     state.ctx?.logger?.error(`Auth: could not clean up sessions: ${(err as Error)?.message ?? err}`)
@@ -1012,7 +1121,9 @@ export default {
         enable: id => hooks.enable(id),
         endSessions: id => hooks.endSessions(id),
         online: id => state.channels.get(id)?.size ?? 0,
-        onlineTotal: () => [...state.channels.values()].reduce((sum, channels) => sum + channels.size, 0),
+        onlineTotal: () => [
+          ...state.channels.values(),
+        ].reduce((sum, channels) => sum + channels.size, 0),
         logger: ctx.logger,
       })
     }

@@ -1,13 +1,23 @@
 import type { Object3D } from 'three'
 import type GameObject from '../World/GameObject'
 import type GameObjectInterface from '../World/GameObjectInterface'
+import type { TextLabelOptions } from './TextLabel'
 import { Vector3 } from 'three'
 import Game from '../Game'
+import TextLabel from './TextLabel'
 
+/**
+ * An HTML label kept over a 3D object on screen. Call `update()` every tick.
+ *
+ * A VR headset doesn't show the page, so while one plays the label is drawn in the scene instead (TextLabel), with
+ * the text `xrText()` gives: by default the element's text. Return `undefined` from it to show nothing in VR.
+ */
 export default abstract class ObjectLabel implements GameObjectInterface {
   protected entity: Object3D | GameObject
   public domElement!: HTMLDivElement
   public offset: Vector3
+  /** The label in the scene while a headset plays */
+  protected xrLabel?: TextLabel
 
   constructor(entity: Object3D | GameObject, offset: Vector3 = new Vector3(0)) {
     this.entity = entity
@@ -20,11 +30,27 @@ export default abstract class ObjectLabel implements GameObjectInterface {
 
   protected abstract createElement(): HTMLDivElement
 
+  /**
+   * What the label reads in VR, lines split on `\n`: by default all the element's text, run together, hidden parts
+   * too. Override it to give what shows, line by line
+   */
+  protected xrText(): string | undefined {
+    return this.domElement.textContent?.trim() || undefined
+  }
+
+  /** How the label in VR looks: overridden to style it */
+  protected xrLabelOptions(): TextLabelOptions {
+    return { angularSize: 1.6, depthTest: true }
+  }
+
   update(_delta: number): void {
     const worldPosition
       = 'getWorldPosition' in this.entity
         ? this.entity.getWorldPosition(new Vector3())
         : this.entity.position.clone()
+
+    if (this.updateXR(worldPosition))
+      return
 
     const screenPosition = worldPosition.clone().add(this.offset)
     screenPosition.project(Game.instance().camera.instance)
@@ -51,7 +77,7 @@ export default abstract class ObjectLabel implements GameObjectInterface {
       this.domElement.style.transform
         = `translateX(${translateX}px) translateY(${translateY}px) translate(-50%, -50%)`
 
-      const cameraPos = Game.instance().camera.instance.position
+      const cameraPos = Game.instance().camera.worldPosition
       const distance = worldPosition.distanceTo(cameraPos)
 
       const maxDistance = 40
@@ -73,7 +99,31 @@ export default abstract class ObjectLabel implements GameObjectInterface {
     }
   }
 
+  /** In VR, the label in the scene instead of the element: whether it took over */
+  private updateXR(worldPosition: Vector3) {
+    const game = Game.instance()
+    const text = game.renderer.xrPresenting
+      ? this.xrText()
+      : undefined
+    if (text === undefined) {
+      this.xrLabel?.removeFromParent()
+      return false
+    }
+
+    this.domElement.remove()
+    if (!this.xrLabel)
+      this.xrLabel = new TextLabel(text, this.xrLabelOptions())
+    if (!this.xrLabel.parent)
+      game.scene.add(this.xrLabel)
+    this.xrLabel.setText(text)
+    this.xrLabel.position.copy(worldPosition).add(this.offset)
+    this.xrLabel.update(game.camera.instance)
+    return true
+  }
+
   destroy(): void {
     this.domElement.remove()
+    this.xrLabel?.dispose()
+    this.xrLabel = undefined
   }
 }

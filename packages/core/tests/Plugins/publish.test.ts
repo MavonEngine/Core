@@ -36,8 +36,16 @@ describe('publishing a plugin\'s files', () => {
     const dir = join(root, 'resources', '@mavonengine', 'mail')
     expect(publishedDir(root, '@mavonengine/mail')).toBe(dir)
     expect(published).toEqual([
-      { path: 'layout.html', to: join(dir, 'layout.html'), status: 'published' },
-      { path: 'partials/footer.html', to: join(dir, 'partials', 'footer.html'), status: 'published' },
+      {
+        path: 'layout.html',
+        to: join(dir, 'layout.html'),
+        status: 'published',
+      },
+      {
+        path: 'partials/footer.html',
+        to: join(dir, 'partials', 'footer.html'),
+        status: 'published',
+      },
     ])
     expect(readFileSync(join(dir, 'layout.html'), 'utf8')).toBe('<html>{{{ content }}}</html>')
   })

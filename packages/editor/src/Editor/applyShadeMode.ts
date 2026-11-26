@@ -34,7 +34,9 @@ export function applyShadeMode(
 
       const color = flatColors.get(child.uuid)
       const mat = new MeshBasicMaterial(
-        mode === 'wireframe' ? { wireframe: true, color } : { color },
+        mode === 'wireframe'
+          ? { wireframe: true, color }
+          : { color },
       )
       shadeOverrideMaterials.set(child.uuid, mat)
       child.material = mat

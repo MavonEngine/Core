@@ -130,7 +130,9 @@ export function httpSource({ url, token, timeoutMs = 3000, fetch = globalThis.fe
 
     try {
       res = await fetch(target, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : {},
         signal: AbortSignal.timeout(timeoutMs),
       })
     }
@@ -312,23 +314,48 @@ export default class MetricsClient {
       return
     }
 
-    const previous = this.state.tableDetail?.table === table ? this.state.tableDetail.page : undefined
+    const previous = this.state.tableDetail?.table === table
+      ? this.state.tableDetail.page
+      : undefined
     if (!this.source.fetchTable) {
-      this.state.tableDetail = { table, offset, status: 'error', error: 'This source does not serve database tables' }
+      this.state.tableDetail = {
+        table,
+        offset,
+        status: 'error',
+        error: 'This source does not serve database tables',
+      }
       this.notify()
       return
     }
 
-    this.state.tableDetail = { table, offset, status: 'loading', page: previous }
+    this.state.tableDetail = {
+      table,
+      offset,
+      status: 'loading',
+      page: previous,
+    }
     this.notify()
 
     let detail: TableDetail
     try {
-      detail = { table, offset, status: 'ready', page: normalizeTablePage(await this.source.fetchTable(table, offset, limit)) }
+      detail = {
+        table,
+        offset,
+        status: 'ready',
+        page: normalizeTablePage(await this.source.fetchTable(table, offset, limit)),
+      }
     }
     catch (err) {
       const gone = err instanceof MetricsSourceError && err.status === 'disabled'
-      detail = { table, offset, status: 'error', page: previous, error: gone ? `The database has no table ${table} (any more)` : tableError(err) }
+      detail = {
+        table,
+        offset,
+        status: 'error',
+        page: previous,
+        error: gone
+          ? `The database has no table ${table} (any more)`
+          : tableError(err),
+      }
     }
 
     // Another table or page was opened, or it was closed, while it loaded
@@ -351,7 +378,12 @@ export default class MetricsClient {
     }
 
     if (!this.source.fetchPacket) {
-      this.state.packetDetail = { id, status: 'error', lines: [], error: 'This source does not serve packet contents' }
+      this.state.packetDetail = {
+        id,
+        status: 'error',
+        lines: [],
+        error: 'This source does not serve packet contents',
+      }
       this.notify()
       return
     }
@@ -364,7 +396,12 @@ export default class MetricsClient {
       detail = normalizePacketDetail(id, await this.source.fetchPacket(id))
     }
     catch (err) {
-      detail = { id, status: 'error', lines: [], error: (err as Error).message }
+      detail = {
+        id,
+        status: 'error',
+        lines: [],
+        error: (err as Error).message,
+      }
     }
 
     // Another packet was opened, or this one closed, while it loaded
@@ -426,14 +463,21 @@ export default class MetricsClient {
       this.state.error = null
       this.state.failures = 0
 
-      await Promise.all([this.logs.poll(), this.requests.poll(), this.pollProject()])
+      await Promise.all([
+        this.logs.poll(),
+        this.requests.poll(),
+        this.pollProject(),
+      ])
       this.state.logs = this.logs.entries
       this.state.logsAvailable = this.logs.available
       this.state.requests = this.requests.entries
       this.state.requestsAvailable = this.requests.available
 
       if (this.watchNetwork) {
-        await Promise.all([this.packets.poll(), this.pollSync()])
+        await Promise.all([
+          this.packets.poll(),
+          this.pollSync(),
+        ])
         this.state.packets = this.packets.entries
         this.state.packetsAvailable = this.packets.available
       }
@@ -442,7 +486,9 @@ export default class MetricsClient {
         await this.pollDatabase()
     }
     catch (err) {
-      this.state.status = err instanceof MetricsSourceError ? err.status : 'unreachable'
+      this.state.status = err instanceof MetricsSourceError
+        ? err.status
+        : 'unreachable'
       this.state.error = (err as Error).message
       this.state.failures++
     }

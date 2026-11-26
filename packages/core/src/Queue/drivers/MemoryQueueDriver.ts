@@ -50,14 +50,24 @@ export default class MemoryQueueDriver implements QueueDriver {
 
   async fail(job: QueuedJob, error: string, failedAt: number): Promise<void> {
     this.jobs.delete(job.id)
-    this.failedJobs.unshift({ id: job.id, queue: job.queue, name: job.name, payload: job.payload, attempts: job.attempts, error, failedAt })
+    this.failedJobs.unshift({
+      id: job.id,
+      queue: job.queue,
+      name: job.name,
+      payload: job.payload,
+      attempts: job.attempts,
+      error,
+      failedAt,
+    })
     this.failedJobs.length = Math.min(this.failedJobs.length, MEMORY_FAILED_LIMIT)
   }
 
   async size(queue?: string): Promise<number> {
     if (queue === undefined)
       return this.jobs.size
-    return [...this.jobs.values()].filter(job => job.queue === queue).length
+    return [
+      ...this.jobs.values(),
+    ].filter(job => job.queue === queue).length
   }
 
   async failed(limit: number): Promise<FailedJob[]> {
@@ -69,7 +79,15 @@ export default class MemoryQueueDriver implements QueueDriver {
     if (index < 0)
       return false
     const [failed] = this.failedJobs.splice(index, 1)
-    this.jobs.set(id, { id, queue: failed.queue, name: failed.name, payload: failed.payload, attempts: 0, availableAt: now, createdAt: now })
+    this.jobs.set(id, {
+      id,
+      queue: failed.queue,
+      name: failed.name,
+      payload: failed.payload,
+      attempts: 0,
+      availableAt: now,
+      createdAt: now,
+    })
     return true
   }
 

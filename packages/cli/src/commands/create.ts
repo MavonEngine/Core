@@ -56,7 +56,10 @@ export function parseCreateArgs(args: string[], cwd = process.cwd(), env: Record
   if (projectName)
     checkProjectName(projectName)
 
-  return { ...toDevOptions(values, cwd, env), projectName }
+  return {
+    ...toDevOptions(values, cwd, env),
+    projectName,
+  }
 }
 
 function checkProjectName(name: string) {
@@ -81,7 +84,9 @@ async function promptProjectName(): Promise<string> {
 export function gatedSource(source: MetricsSource, ready: () => boolean): MetricsSource {
   return {
     ...source,
-    fetch: () => ready() ? source.fetch() : Promise.reject(new MetricsSourceError('Creating the project', 'connecting')),
+    fetch: () => ready()
+      ? source.fetch()
+      : Promise.reject(new MetricsSourceError('Creating the project', 'connecting')),
   }
 }
 
@@ -110,7 +115,12 @@ export async function runCreateWithDashboard(projectName: string, parentDir: str
   const done = new AbortController()
 
   const work = (async () => {
-    const dir = await createProject({ projectName, parentDir, report, signal: setup.signal })
+    const dir = await createProject({
+      projectName,
+      parentDir,
+      report,
+      signal: setup.signal,
+    })
     setup.signal.throwIfAborted()
 
     engineVersion = installedEngineVersion(dir)
@@ -121,12 +131,24 @@ export async function runCreateWithDashboard(projectName: string, parentDir: str
   work.then(() => done.abort(), () => done.abort())
 
   const startup = () => dev
-    ? { engineVersion, output: dev.output() }
-    : { engineVersion, label, output, outputTitle: 'Setup' }
+    ? {
+        engineVersion,
+        output: dev.output(),
+      }
+    : {
+        engineVersion,
+        label,
+        output,
+        outputTitle: 'Setup',
+      }
 
   let quit = false
   try {
-    await runDashboard({ ...dashboard, source: gatedSource(dashboard.source, () => dev !== undefined), startup }, done.signal)
+    await runDashboard({
+      ...dashboard,
+      source: gatedSource(dashboard.source, () => dev !== undefined),
+      startup,
+    }, done.signal)
   }
   finally {
     quit = !done.signal.aborted

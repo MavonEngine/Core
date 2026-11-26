@@ -6,6 +6,7 @@ import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
 import type IEditor from './Types/IEditor'
 import type GameObject from './World/GameObject'
+import type { XROptions } from './XR'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
 import Camera from './Camera'
@@ -25,6 +26,7 @@ import Logger from './Utils/Logger'
 import Resources from './Utils/Resources'
 import Sizes from './Utils/Sizes'
 import ClientGameWorld from './World/World'
+import XR from './XR'
 import './style.css'
 
 const LEADING_SLASHES_RE = /^\/+/
@@ -99,7 +101,9 @@ export default class Game extends BaseGame {
   ) {
     super(
       // eslint-disable-next-line node/prefer-global/process
-      new Logger(process.env.NODE_ENV === 'production' ? 'error' : 'debug'),
+      new Logger(process.env.NODE_ENV === 'production'
+        ? 'error'
+        : 'debug'),
       physicsWorld,
     )
 
@@ -116,7 +120,10 @@ export default class Game extends BaseGame {
     })
 
     this.plugins = this.createPluginHost()
-    this.resources = new Resources([...sources, ...this.pluginAssets()])
+    this.resources = new Resources([
+      ...sources,
+      ...this.pluginAssets(),
+    ])
 
     this.loadingScreen = new LoadingScreen(this.resources)
 
@@ -153,21 +160,35 @@ export default class Game extends BaseGame {
       Game.devModeHook?.()
     }
 
-    // The tick and physics run on their own interval, so skipping frames here for `renderer.maxFps` doesn't affect them
-    const render = (now: number) => {
+    // The tick and physics run on their own interval, so skipping frames here for `renderer.maxFps` doesn't affect them.
+    // The renderer's animation loop, not window.requestAnimationFrame, so frames keep coming during a WebXR session,
+    // which only hands them out through the session
+    this.renderer.instance.setAnimationLoop((now: number) => {
       if (this.renderer.shouldRender(now)) {
         // Measured since the last rendered frame, so the skipped frames' time isn't lost
         const delta = this.clock.getDelta()
 
         this.particleSystem.update(delta)
+        // For what has to move every displayed frame rather than every tick, like the view in VR: moving the camera
+        // rig at the tick rate while a headset shows 72 - 120 frames a second makes the world judder
+        this.trigger('beforeRender', delta)
         this.renderer.update(delta)
       }
-
-      window.requestAnimationFrame(render)
-    }
-
-    render(performance.now())
+    })
   }
+
+  /**
+   * Let the game be played in a VR headset through WebXR. Adds an "Enter VR" button unless `button` is false,
+   * then call `xr.enter()` from your own UI instead.
+   * Triggers `xrSessionStart` and `xrSessionEnd` on the game.
+   */
+  enableXR(options: XROptions = {}): XR {
+    this.xr ??= new XR(this.renderer, this, options)
+    return this.xr
+  }
+
+  /** Set once `enableXR()` was called */
+  xr?: XR
 
   private createPluginHost() {
     // eslint-disable-next-line ts/no-this-alias
@@ -205,7 +226,9 @@ export default class Game extends BaseGame {
           return true
 
         const base = pluginAssetBase(pkg)
-        const paths = Array.isArray(asset.path) ? asset.path : [asset.path]
+        const paths = Array.isArray(asset.path)
+          ? asset.path
+          : [asset.path]
         const missing = paths.some(path => path.startsWith(base) && !files.has(path.slice(base.length)))
         if (missing)
           this.logger?.debug(`Plugin ${pkg}: skipping asset ${asset.name}, it is not part of this release`)
@@ -224,6 +247,14 @@ export default class Game extends BaseGame {
     this.canvas.setAttribute('draggable', 'false')
     this.canvas.addEventListener('mousedown', (e) => {
       e.preventDefault()
+      // preventDefault also cancels the browser's default focus handling, so do
+      // it by hand: blur whatever had focus (e.g. a chat input) and focus this
+      // window, otherwise clicking back into an embedded iframe never
+      // returns keyboard input to the game.
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body)
+        active.blur()
+      window.focus()
     })
     document.getElementsByTagName('body')[0].setAttribute('onContextMenu', 'return false;')
 
@@ -255,7 +286,9 @@ export default class Game extends BaseGame {
     }
 
     const isName = SCENE_NAME_RE.test(scene)
-    const url = isName ? `/${SCENES_DIR}/${scene}.json` : scene
+    const url = isName
+      ? `/${SCENES_DIR}/${scene}.json`
+      : scene
     const response = await fetch(url, { cache: 'no-store' })
     if (!response.ok)
       throw new Error(`Could not load scene ${url}: ${response.status} ${response.statusText}`)
@@ -263,8 +296,12 @@ export default class Game extends BaseGame {
     const data: unknown = await response.json()
     await this.resourcesReady()
 
-    const source = isName ? scene : url.split('/').pop()?.replace(JSON_EXT_RE, '')
-    return this.loadScene(data, source && SCENE_NAME_RE.test(source) ? source : undefined)
+    const source = isName
+      ? scene
+      : url.split('/').pop()?.replace(JSON_EXT_RE, '')
+    return this.loadScene(data, source && SCENE_NAME_RE.test(source)
+      ? source
+      : undefined)
   }
 
   /** Resolves once every resource has loaded */
@@ -280,7 +317,9 @@ export default class Game extends BaseGame {
     else if (this.scene.background instanceof THREE.Color)
       this.scene.background = null
 
-    this.scene.fog = settings.fog ? new THREE.FogExp2(settings.fog.color, settings.fog.density) : null
+    this.scene.fog = settings.fog
+      ? new THREE.FogExp2(settings.fog.color, settings.fog.density)
+      : null
   }
 
   private resize() {

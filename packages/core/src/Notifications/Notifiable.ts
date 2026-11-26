@@ -47,7 +47,9 @@ export function currentNotifier(): Notifier | undefined {
  * Resolves once the notification is queued, or sent when it isn't queued.
  */
 export function notify(to: Notifiable | Notifiable[], notification: NotificationLike): Promise<void> {
-  const recipients = Array.isArray(to) ? to : [to]
+  const recipients = Array.isArray(to)
+    ? to
+    : [to]
   if (!notifier) {
     if (!warned) {
       warned = true
@@ -60,7 +62,10 @@ export function notify(to: Notifiable | Notifiable[], notification: Notification
 
 /** An account as a recipient, for one that isn't connected: `notify(account(id), new SeasonEnded())` */
 export function account(id: string): Notifiable {
-  return { notifiableType: 'account', notifiableId: () => id }
+  return {
+    notifiableType: 'account',
+    notifiableId: () => id,
+  }
 }
 
 type AbstractConstructor<T = object> = abstract new (...args: any[]) => T

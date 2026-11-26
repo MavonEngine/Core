@@ -12,7 +12,9 @@ import AssetStats from './AssetStats'
 import styles from './ModelViewer.module.css'
 
 function fmt(n: number) {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  return n >= 1000
+    ? `${(n / 1000).toFixed(1)}k`
+    : String(n)
 }
 
 export default ({ model, animations }: { model: Object3D, animations?: AnimationClip[] }) => {
@@ -57,15 +59,29 @@ export default ({ model, animations }: { model: Object3D, animations?: Animation
       triangles += geo.index
         ? geo.index.count / 3
         : (geo.attributes.position?.count ?? 0) / 3
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+      const mats = Array.isArray(obj.material)
+        ? obj.material
+        : [obj.material]
       mats.forEach(m => materials.add(m.uuid))
     })
 
     return [
-      { label: 'Triangles', value: fmt(Math.round(triangles)) },
-      { label: 'Vertices', value: fmt(vertices) },
-      { label: 'Meshes', value: String(meshes) },
-      { label: 'Materials', value: String(materials.size) },
+      {
+        label: 'Triangles',
+        value: fmt(Math.round(triangles)),
+      },
+      {
+        label: 'Vertices',
+        value: fmt(vertices),
+      },
+      {
+        label: 'Meshes',
+        value: String(meshes),
+      },
+      {
+        label: 'Materials',
+        value: String(materials.size),
+      },
     ]
   }, [model])
 

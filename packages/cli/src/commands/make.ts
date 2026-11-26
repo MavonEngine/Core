@@ -77,12 +77,21 @@ export function parseMakePluginArgs(args: string[], cwd = process.cwd()): MakePl
   if (!TARGETS.includes(target))
     throw new UsageError(`--target must be one of ${TARGETS.join(', ')}`)
 
-  return { cwd: resolve(cwd, values.cwd ?? '.'), name, target, register: values.register, install: values.install }
+  return {
+    cwd: resolve(cwd, values.cwd ?? '.'),
+    name,
+    target,
+    register: values.register,
+    install: values.install,
+  }
 }
 
 const terminalIO: MakeIO = {
   run: (command, args, cwd) => runCommand(command, args, cwd, {
-    report: { step: () => {}, output: chunk => process.stdout.write(chunk) },
+    report: {
+      step: () => {},
+      output: chunk => process.stdout.write(chunk),
+    },
   }),
   write: text => process.stdout.write(text),
 }
@@ -104,7 +113,13 @@ export async function runMakePluginCommand(options: MakePluginOptions, io: MakeI
 
   const dir = pluginDirFor(options.name)
   const engineVersion = installedEngineVersion(root)
-  const files = pluginFiles({ name: options.name, target: options.target, engine: engineVersion ? `>=${engineVersion}` : undefined })
+  const files = pluginFiles({
+    name: options.name,
+    target: options.target,
+    engine: engineVersion
+      ? `>=${engineVersion}`
+      : undefined,
+  })
 
   let written: string[]
   try {

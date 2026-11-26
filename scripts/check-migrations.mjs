@@ -35,6 +35,12 @@ const WATCHED = [
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
 const ADDED_ID_RE = /^\+\s*id:\s*['"`]/m
 const WHITESPACE_RE = /\s+/g
+const TRAILING_COMMA_RE = /,\s*([\])}])/g
+
+/** A config file's code without the formatting a linter changes: whitespace and trailing commas */
+function normalizeCode(text) {
+  return text.replace(TRAILING_COMMA_RE, '$1').replace(WHITESPACE_RE, '')
+}
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 
@@ -77,8 +83,8 @@ function differences(path, before, after) {
       .map(key => DEPENDENCY_FIELDS.includes(key) ? `${key} added or removed a package` : `"${key}" changed`)
   }
 
-  // Whitespace alone isn't something a project has to follow
-  return before.replace(WHITESPACE_RE, ' ').trim() === after.replace(WHITESPACE_RE, ' ').trim() ? [] : ['changed']
+  // Formatting alone (whitespace, trailing commas) isn't something a project has to follow
+  return normalizeCode(before) === normalizeCode(after) ? [] : ['changed']
 }
 
 function main() {

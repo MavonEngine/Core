@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // The dev entry runs in the client's Vite dev server, for the tools AI assistants get through `mavonengine mcp`
+  entry: { index: 'src/index.ts', dev: 'src/dev.ts' },
   format: ['esm'],
   platform: 'node',
   target: 'node24',

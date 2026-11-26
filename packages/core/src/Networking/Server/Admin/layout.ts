@@ -1,6 +1,12 @@
 import type { AdminPageContent } from './types'
 
-const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  '\'': '&#39;',
+}
 const HTML_ESCAPE_RE = /[&<>"']/g
 const DATA_KEY_RE = /^[a-z][a-z0-9-]*$/
 
@@ -73,7 +79,9 @@ function renderNav(groups: LayoutNavGroup[]): string {
             <a class="adm-link" href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${iconHtml(item.icon, item.label)}<span>${escapeHtml(item.label)}</span></a>${item.current && item.children.length
               ? `
             <ul class="adm-subnav">${item.children.map(child => `
-              <li><a href="${escapeHtml(child.href)}"${child.hash ? ` data-hash="${escapeHtml(child.hash)}"` : ''}${child.current ? ' aria-current="page"' : ''}>${escapeHtml(child.label)}</a></li>`).join('')}
+              <li><a href="${escapeHtml(child.href)}"${child.hash
+                ? ` data-hash="${escapeHtml(child.hash)}"`
+                : ''}${child.current ? ' aria-current="page"' : ''}>${escapeHtml(child.label)}</a></li>`).join('')}
             </ul>`
               : ''}
           </li>`).join('')}

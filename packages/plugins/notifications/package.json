@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/notifications",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: notifications for players and anything else notifiable, in the game and by mail",
   "license": "MIT",
   "repository": {
@@ -52,10 +52,10 @@
     "@mavonengine/mail": "*",
     "@types/node": "^24.0.0",
     "kysely": "^0.29.8",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typescript": "7.0.2",
-    "vitest": "^5.1.0",
-    "winston": "^3.17.0"
+    "vitest": "^5.1.1",
+    "winston": "^3.19.0"
   },
   "mavonengine": {
     "target": "both",

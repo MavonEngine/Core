@@ -103,7 +103,9 @@ export default function CanvasToolbar() {
         <button
           key={mode}
           title={label}
-          className={`${styles.toolBtn}${activeMode === mode ? ` ${styles.active}` : ''}`}
+          className={`${styles.toolBtn}${activeMode === mode
+            ? ` ${styles.active}`
+            : ''}`}
           onClick={() => setMode(mode)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -127,7 +129,9 @@ export default function CanvasToolbar() {
       <div style={{ position: 'relative' }} ref={overlaysRef}>
         <button
           title="Viewport Overlays"
-          className={`${styles.toolBtn}${overlaysOpen ? ` ${styles.active}` : ''}`}
+          className={`${styles.toolBtn}${overlaysOpen
+            ? ` ${styles.active}`
+            : ''}`}
           onClick={() => setOverlaysOpen(o => !o)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

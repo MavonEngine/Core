@@ -4,7 +4,9 @@ import { WithEditorHelper } from '../../src/Editor/WithEditorHelper'
 import Game from '../../src/Game'
 
 vi.mock('../../src/Game', () => ({
-  default: { instance: vi.fn() },
+  default: {
+    instance: vi.fn(),
+  },
 }))
 
 vi.mock('../../src/Editor/EditorHelper', () => ({
@@ -30,7 +32,10 @@ function createMockEditor() {
 function createMockGame(editor?: ReturnType<typeof createMockEditor>) {
   return {
     editor,
-    scene: { add: vi.fn(), remove: vi.fn() },
+    scene: {
+      add: vi.fn(),
+      remove: vi.fn(),
+    },
   }
 }
 
@@ -76,7 +81,9 @@ describe('withEditorHelper', () => {
 
     it('passes the attachment to EditorHelper', () => {
       const obj = new TestObject()
-      const attachment = { addBindings: vi.fn() }
+      const attachment = {
+        addBindings: vi.fn(),
+      }
 
       obj.registerEditorHelper(new Vector3(), 'WithAttachment', attachment)
 

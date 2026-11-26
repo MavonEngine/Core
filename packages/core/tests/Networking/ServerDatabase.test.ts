@@ -10,7 +10,14 @@ import { memoryDb } from '../Plugins/Database/memoryDb'
 import { installPlugin, tempProject, writeConfig } from '../Plugins/fixtures'
 
 vi.mock('@geckos.io/server', () => ({
-  default: vi.fn(() => ({ onConnection: vi.fn(), connectionsManager: { connections: new Map() }, emit: vi.fn(), listen: vi.fn() })),
+  default: vi.fn(() => ({
+    onConnection: vi.fn(),
+    connectionsManager: {
+      connections: new Map(),
+    },
+    emit: vi.fn(),
+    listen: vi.fn(),
+  })),
 }))
 
 class TestClient extends Player {
@@ -31,7 +38,11 @@ class TestServer extends Server<TestClient> {
 }
 
 function provider(db: Kysely<any>, extra: Partial<ServerPlugin> = {}): ServerPlugin {
-  return { name: 'sqlite', database: () => db, ...extra }
+  return {
+    name: 'sqlite',
+    database: () => db,
+    ...extra,
+  }
 }
 
 describe('server database', () => {
@@ -58,7 +69,16 @@ describe('server database', () => {
     const warn = vi.spyOn(logger, 'warn')
     const contexts: ServerPluginContext[] = []
     const server = startable(new TestServer(logger, undefined, {
-      plugins: [{ package: 'chat', options: {}, plugin: { migrations: mutes, setup: ctx => void contexts.push(ctx) } }],
+      plugins: [
+        {
+          package: 'chat',
+          options: {},
+          plugin: {
+            migrations: mutes,
+            setup: ctx => void contexts.push(ctx),
+          },
+        },
+      ],
     }))
 
     await server.start()
@@ -72,7 +92,12 @@ describe('server database', () => {
 
   it('starts synchronously when no plugin has migrations', () => {
     const setup = vi.fn()
-    const server = startable(new TestServer(logger, undefined, { plugins: [provider(memoryDb()), { setup }] }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        provider(memoryDb()),
+        { setup },
+      ],
+    }))
 
     void server.start()
 
@@ -86,15 +111,23 @@ describe('server database', () => {
     let ctxDb: unknown
     const server = startable(new TestServer(logger, undefined, {
       plugins: [
-        { package: '@mavonengine/chat', options: {}, plugin: {
-          migrations: mutes,
-          setup: (ctx) => {
-            ctxDb = ctx.db
-            void ctx.db!.selectFrom(ctx.table('mutes')).selectAll().execute().then(result => (rows = result))
+        {
+          package: '@mavonengine/chat',
+          options: {},
+          plugin: {
+            migrations: mutes,
+            setup: (ctx) => {
+              ctxDb = ctx.db
+              void ctx.db!.selectFrom(ctx.table('mutes')).selectAll().execute().then(result => (rows = result))
+            },
           },
-        } },
+        },
         // The database plugin may come after the plugins that use it
-        { package: '@mavonengine/sqlite', options: {}, plugin: provider(db) },
+        {
+          package: '@mavonengine/sqlite',
+          options: {},
+          plugin: provider(db),
+        },
       ],
     }))
 
@@ -120,12 +153,24 @@ describe('server database', () => {
     const server = startable(new TestServer(logger, undefined, {
       plugins: [
         provider(memoryDb()),
-        { package: 'broken', options: {}, plugin: {
-          migrations: { '001': { up: async () => { throw new Error('nope') } } },
-          setup: brokenSetup,
-          tick: brokenTick,
-        } },
-        { package: 'chat', options: {}, plugin: { migrations: mutes, setup: okSetup } },
+        {
+          package: 'broken',
+          options: {},
+          plugin: {
+            migrations: {
+              '001': {
+                up: async () => { throw new Error('nope') },
+              },
+            },
+            setup: brokenSetup,
+            tick: brokenTick,
+          },
+        },
+        {
+          package: 'chat',
+          options: {},
+          plugin: { migrations: mutes, setup: okSetup },
+        },
       ],
     }))
 
@@ -143,8 +188,16 @@ describe('server database', () => {
     const a = memoryDb()
     const b = memoryDb()
     const plugins = [
-      { package: 'db-a', options: {}, plugin: provider(a) },
-      { package: 'db-b', options: {}, plugin: provider(b) },
+      {
+        package: 'db-a',
+        options: {},
+        plugin: provider(a),
+      },
+      {
+        package: 'db-b',
+        options: {},
+        plugin: provider(b),
+      },
     ]
 
     const warn = vi.spyOn(logger, 'warn')
@@ -178,7 +231,10 @@ describe('server database', () => {
   it('only asks the picked database plugin for its database', async () => {
     const unused = vi.fn(() => memoryDb())
     const server = startable(new TestServer(logger, undefined, {
-      plugins: [provider(memoryDb()), { name: 'other', database: unused }],
+      plugins: [
+        provider(memoryDb()),
+        { name: 'other', database: unused },
+      ],
     }))
 
     await server.start()
@@ -190,7 +246,12 @@ describe('server database', () => {
   it('runs without a database when the database plugin gives none or throws', async () => {
     const error = vi.spyOn(logger, 'error')
     const server = startable(new TestServer(logger, undefined, {
-      plugins: [{ name: 'sqlite', database: () => { throw new Error('cannot open file') } }],
+      plugins: [
+        {
+          name: 'sqlite',
+          database: () => { throw new Error('cannot open file') },
+        },
+      ],
     }))
 
     await server.start()
@@ -207,14 +268,21 @@ describe('server database', () => {
     const server = startable(new TestServer(logger, undefined, {
       plugins: [
         provider(db),
-        { package: 'chat', options: {}, plugin: {
-          migrations: mutes,
-          async destroy(ctx) {
-            await ctx.db!.insertInto(ctx.table('mutes')).values({ player: 'p1' }).execute()
-            order.push('saved')
+        {
+          package: 'chat',
+          options: {},
+          plugin: {
+            migrations: mutes,
+            async destroy(ctx) {
+              await ctx.db!.insertInto(ctx.table('mutes')).values({ player: 'p1' }).execute()
+              order.push('saved')
+            },
           },
-        } },
-        { name: 'failing', destroy: async () => { throw new Error('save failed') } },
+        },
+        {
+          name: 'failing',
+          destroy: async () => { throw new Error('save failed') },
+        },
       ],
     }))
     destroy.mockImplementation(async () => {
@@ -235,9 +303,13 @@ describe('server database', () => {
     installPlugin(root, 'fake-sqlite', { target: 'server', server: './server.mjs' }, {
       'server.mjs': `export default { database: () => ({ marker: 'db', destroy: async () => {} }) }`,
     })
-    writeConfig(root, { plugins: { 'fake-sqlite': {} } })
+    writeConfig(root, {
+      plugins: { 'fake-sqlite': {} },
+    })
 
-    const server = startable(new TestServer(logger, undefined, { plugins: { root } }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: { root },
+    }))
     await server.start()
 
     expect(server.db).toEqual(expect.objectContaining({ marker: 'db' }))
@@ -268,9 +340,22 @@ describe('stopping on signals', () => {
     const before = listeners()
 
     const a = startable(new TestServer(logger, undefined, {
-      plugins: [provider(db), { name: 'saver', destroy: async () => void order.push('a saved') }],
+      plugins: [
+        provider(db),
+        {
+          name: 'saver',
+          destroy: async () => void order.push('a saved'),
+        },
+      ],
     }))
-    const b = startable(new TestServer(logger, undefined, { plugins: [{ name: 'other', destroy: () => void order.push('b stopped') }] }))
+    const b = startable(new TestServer(logger, undefined, {
+      plugins: [
+        {
+          name: 'other',
+          destroy: () => void order.push('b stopped'),
+        },
+      ],
+    }))
     await a.start()
     await b.start()
     // One listener for both
@@ -310,7 +395,14 @@ describe('stopping on signals', () => {
   it('exits anyway when stopping takes too long', async () => {
     vi.useFakeTimers()
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never)
-    const server = startable(new TestServer(logger, undefined, { plugins: [{ name: 'stuck', destroy: () => new Promise<void>(() => {}) }] }))
+    const server = startable(new TestServer(logger, undefined, {
+      plugins: [
+        {
+          name: 'stuck',
+          destroy: () => new Promise<void>(() => {}),
+        },
+      ],
+    }))
     await server.start()
 
     process.emit('SIGINT', 'SIGINT')

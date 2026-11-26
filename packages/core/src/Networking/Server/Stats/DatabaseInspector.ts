@@ -120,7 +120,10 @@ export default class DatabaseInspector {
     return {
       table: table.name,
       columns: table.columns.map(column),
-      rows: rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, jsonValue(value)]))),
+      rows: rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [
+        key,
+        jsonValue(value),
+      ]))),
       total: (await count(db, table.name)) ?? rows.length,
       offset: start,
       limit: size,
@@ -132,7 +135,10 @@ export default class DatabaseInspector {
     const owners: { package: string, prefix: string }[] = []
     for (const pkg of new Set(this.source.databasePlugins())) {
       try {
-        owners.push({ package: pkg, prefix: tablePrefix(pkg) })
+        owners.push({
+          package: pkg,
+          prefix: tablePrefix(pkg),
+        })
       }
       catch {
         // A package name that gives no prefix has no tables
@@ -144,7 +150,12 @@ export default class DatabaseInspector {
   private async applied(db: Kysely<any>, table: string) {
     try {
       const rows = await db.selectFrom(table).selectAll().orderBy('name').execute()
-      return rows.map(row => ({ name: String(row.name), executedAt: typeof row.executed_at === 'string' ? row.executed_at : null }))
+      return rows.map(row => ({
+        name: String(row.name),
+        executedAt: typeof row.executed_at === 'string'
+          ? row.executed_at
+          : null,
+      }))
     }
     catch {
       // Named like the engine's, but not one of them
@@ -162,7 +173,9 @@ async function count(db: Kysely<any>, table: string): Promise<number | null> {
     const row = await db.selectFrom(table).select(eb => eb.fn.countAll().as('n')).executeTakeFirst()
     // Postgres counts in bigint, which its driver gives as a string
     const n = Number(row?.n)
-    return Number.isFinite(n) ? n : null
+    return Number.isFinite(n)
+      ? n
+      : null
   }
   catch {
     return null
@@ -170,13 +183,22 @@ async function count(db: Kysely<any>, table: string): Promise<number | null> {
 }
 
 function column(c: { name: string, dataType: string, isNullable: boolean, isAutoIncrementing: boolean, hasDefaultValue: boolean }): DatabaseColumn {
-  return { name: c.name, type: c.dataType, nullable: c.isNullable, autoIncrement: c.isAutoIncrementing, hasDefault: c.hasDefaultValue }
+  return {
+    name: c.name,
+    type: c.dataType,
+    nullable: c.isNullable,
+    autoIncrement: c.isAutoIncrementing,
+    hasDefault: c.hasDefaultValue,
+  }
 }
 
 /** A value as JSON can carry it */
 export function jsonValue(value: unknown): unknown {
-  if (typeof value === 'bigint')
-    return Number.isSafeInteger(Number(value)) ? Number(value) : value.toString()
+  if (typeof value === 'bigint') {
+    return Number.isSafeInteger(Number(value))
+      ? Number(value)
+      : value.toString()
+  }
   if (value instanceof Date)
     return value.toISOString()
   if (value instanceof Uint8Array)

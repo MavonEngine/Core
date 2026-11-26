@@ -6,7 +6,9 @@ export function formatBytes(bytes: number | undefined): string {
     return ''
   if (bytes < 1024)
     return `${bytes} B`
-  return `${(bytes / 1024).toFixed(bytes < 10240 ? 2 : 1)} kB`
+  return `${(bytes / 1024).toFixed(bytes < 10240
+    ? 2
+    : 1)} kB`
 }
 
 /** Local time with milliseconds, e.g. 14:02:11.123 */
@@ -29,7 +31,9 @@ export function describeRecord(record: NetRecord): string {
   for (const [key, value] of Object.entries(record.info ?? {})) {
     if (value === undefined || value === null)
       continue
-    parts.push(`${key} ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+    parts.push(`${key} ${Array.isArray(value)
+      ? value.join(', ')
+      : String(value)}`)
   }
 
   return parts.join(' · ')

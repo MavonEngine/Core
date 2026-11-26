@@ -29,7 +29,9 @@ export interface PrefabDefinition {
 const registry = new Map<string, PrefabDefinition>()
 
 export function prefabKey(prefab: Pick<PrefabDefinition, 'name' | 'plugin'>): string {
-  return prefab.plugin ? `${prefab.plugin}:${prefab.name}` : prefab.name
+  return prefab.plugin
+    ? `${prefab.plugin}:${prefab.name}`
+    : prefab.name
 }
 
 /**
@@ -46,7 +48,10 @@ export function unregisterPrefab(key: string): void {
 /** Built-in prefabs first, then plugin prefabs grouped by plugin, each in registration order */
 export function getPrefabs(): (PrefabDefinition & { key: string })[] {
   const all = Array.from(registry.entries(), ([key, prefab]) => ({ ...prefab, key }))
-  return [...all.filter(p => !p.plugin), ...all.filter(p => p.plugin).sort((a, b) => a.plugin!.localeCompare(b.plugin!))]
+  return [
+    ...all.filter(p => !p.plugin),
+    ...all.filter(p => p.plugin).sort((a, b) => a.plugin!.localeCompare(b.plugin!)),
+  ]
 }
 
 export function getPrefab(key: string): PrefabDefinition | undefined {
@@ -62,5 +67,7 @@ export function spawnPrefab(key: string, position: Vector3): PrefabSpawnResult |
     return null
 
   const result = prefab.spawn(position)
-  return result === null ? null : (result ?? {})
+  return result === null
+    ? null
+    : (result ?? {})
 }

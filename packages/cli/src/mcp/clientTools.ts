@@ -9,9 +9,21 @@ import { z } from 'zod'
 import { READ_ONLY, run, vec3 } from './result'
 import { analyzeTrace, toTraceEvents } from './trace'
 
-const CLIENT_LOG_LEVELS = ['error', 'warn', 'info', 'log', 'debug'] as const
+const CLIENT_LOG_LEVELS = [
+  'error',
+  'warn',
+  'info',
+  'log',
+  'debug',
+] as const
 /** Severity of a console level, lower is more severe. `log` and `info` print alike */
-const SEVERITY: Record<string, number> = { error: 0, warn: 1, info: 2, log: 2, debug: 3 }
+const SEVERITY: Record<string, number> = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  log: 2,
+  debug: 3,
+}
 
 const clientId = z.string().optional().describe('Tab id from list_clients. Default: the only open tab, or the only one not running the editor')
 
@@ -20,7 +32,10 @@ interface Entity { id: string, position: Vec3, rotation: Vec3, scale: Vec3, seri
 
 function delta(a: Vec3, b: Vec3) {
   const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }
-  return { ...d, length: Math.hypot(d.x, d.y, d.z) }
+  return {
+    ...d,
+    length: Math.hypot(d.x, d.y, d.z),
+  }
 }
 
 /**
@@ -43,7 +58,12 @@ export function compareEntities(id: string, server: Entity | null, client: Entit
 
   const serverFields = (server.serialized ?? {}) as Record<string, unknown>
   const clientFields = (client.serialized ?? {}) as Record<string, unknown>
-  const differentFields = [...new Set([...Object.keys(serverFields), ...Object.keys(clientFields)])]
+  const differentFields = [
+    ...new Set([
+      ...Object.keys(serverFields),
+      ...Object.keys(clientFields),
+    ]),
+  ]
     .filter(field => !['id', 'position', 'rotation', 'scale'].includes(field))
     .filter(field => JSON.stringify(serverFields[field]) !== JSON.stringify(clientFields[field]))
     .map(field => ({ field, server: serverFields[field], client: clientFields[field] }))
@@ -53,7 +73,9 @@ export function compareEntities(id: string, server: Entity | null, client: Entit
 
   return {
     id,
-    clientId: client.id === id ? undefined : client.id,
+    clientId: client.id === id
+      ? undefined
+      : client.id,
     positionDelta: delta(server.position, client.position),
     rotationDelta: delta(server.rotation, client.rotation),
     scaleDelta: delta(server.scale, client.scale),
@@ -78,7 +100,13 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
     annotations: READ_ONLY,
   }, () => run(async () => {
     const { clients } = await client.clients()
-    return { devServer: client.clientUrl, clients, ...(clients.length ? {} : { note: 'No game tab is open. Open the game in a browser' }) }
+    return {
+      devServer: client.clientUrl,
+      clients,
+      ...(clients.length
+        ? {}
+        : { note: 'No game tab is open. Open the game in a browser' }),
+    }
   }))
 
   server.registerTool('client_status', {
@@ -107,7 +135,10 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
   server.registerTool('client_entity', {
     title: 'One entity on a client',
     description: 'One entity in a tab\'s world with its serialized state. The server id of the tab\'s own player finds its local player.',
-    inputSchema: { id: z.string().min(1), clientId },
+    inputSchema: {
+      id: z.string().min(1),
+      clientId,
+    },
     annotations: READ_ONLY,
   }, ({ id, clientId }) => run(async () => {
     const { entity } = await client.client('entity', { id }, clientId)
@@ -119,7 +150,10 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
   server.registerTool('client_scene', {
     title: 'Scene on a client',
     description: 'The scene loaded in a tab, in the same shape as get_scene: objects with `built` telling whether the client built them.',
-    inputSchema: { clientId, includeObjects: z.boolean().default(true) },
+    inputSchema: {
+      clientId,
+      includeObjects: z.boolean().default(true),
+    },
     annotations: READ_ONLY,
   }, ({ clientId, includeObjects }) => run(async () => {
     const { scene } = await client.client('scene', {}, clientId)
@@ -162,7 +196,10 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
     return {
       latestId,
       matched: matches.length,
-      entries: matches.slice(-limit).map(({ timestamp, ...entry }) => ({ ...entry, time: new Date(timestamp).toISOString() })),
+      entries: matches.slice(-limit).map(({ timestamp, ...entry }) => ({
+        ...entry,
+        time: new Date(timestamp).toISOString(),
+      })),
     }
   }))
 
@@ -186,7 +223,12 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
       }
     }
     catch (err) {
-      return { isError: true, content: [{ type: 'text', text: (err as Error).message }] }
+      return {
+        isError: true,
+        content: [
+          { type: 'text', text: (err as Error).message },
+        ],
+      }
     }
   })
 
@@ -210,12 +252,19 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
     },
     annotations: { ...READ_ONLY, idempotentHint: false },
   }, ({ clientId, durationMs, jsProfile, sampleIntervalMs, gpu, maxHitches, savePath, save }) => run(async () => {
-    const capture = await client.client('trace', { durationMs, jsProfile: String(jsProfile), sampleIntervalMs, gpu: String(gpu) }, clientId) as TraceCapture
+    const capture = await client.client('trace', {
+      durationMs,
+      jsProfile: String(jsProfile),
+      sampleIntervalMs,
+      gpu: String(gpu),
+    }, clientId) as TraceCapture
     const analysis = analyzeTrace(capture, { maxHitches })
 
     let traceFile: string | undefined
     if (save) {
-      traceFile = savePath ? resolve(savePath) : defaultTracePath(clientId ?? 'auto')
+      traceFile = savePath
+        ? resolve(savePath)
+        : defaultTracePath(clientId ?? 'auto')
       await mkdir(dirname(traceFile), { recursive: true })
       await writeFile(traceFile, JSON.stringify(toTraceEvents(capture)))
     }
@@ -231,10 +280,16 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
     title: 'Compare an entity on server and client',
     description: 'One entity as the server has it next to a tab\'s copy: position / rotation / scale deltas and the serialized fields that '
       + 'differ. For the tab\'s own player pass its server id (playerId from list_clients). Needs the server in development too.',
-    inputSchema: { id: z.string().min(1).describe('Entity id on the server'), clientId },
+    inputSchema: {
+      id: z.string().min(1).describe('Entity id on the server'),
+      clientId,
+    },
     annotations: READ_ONLY,
   }, ({ id, clientId }) => run(async () => {
-    const [onServer, onClient] = await Promise.all([client.entity(id), client.client('entity', { id }, clientId)])
+    const [onServer, onClient] = await Promise.all([
+      client.entity(id),
+      client.client('entity', { id }, clientId),
+    ])
     return compareEntities(id, onServer.entity, onClient.entity)
   }))
 }

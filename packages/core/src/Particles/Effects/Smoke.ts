@@ -46,7 +46,9 @@ export class SmokeEmitter extends Emitter {
     cameraTarget: [0, 3, 0] as [number, number, number],
     create: () => {
       const tex = Game.instance().resources.items.smokeTexture as Texture | undefined
-      return tex ? new SmokeEmitter(tex, new Vector3(0, 0, 0)) : null
+      return tex
+        ? new SmokeEmitter(tex, new Vector3(0, 0, 0))
+        : null
     },
   }
 
@@ -62,7 +64,7 @@ export class SmokeEmitter extends Emitter {
       depthWrite: false,
       uniforms: {
         uTime: { value: 0 },
-        uCameraPosition: { value: Game.instance().camera.instance.position },
+        uCameraPosition: { value: Game.instance().camera.worldPosition },
         uTexture: { value: smokeTexture },
         uAlpha: { value: 0.5 },
       },

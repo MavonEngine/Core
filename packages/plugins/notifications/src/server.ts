@@ -131,11 +131,15 @@ export interface NotificationsOptions {
 export function parseOptions(raw: Record<string, unknown> = {}): NotificationsOptions {
   return {
     verifiedEmailOnly: raw.verifiedEmailOnly === true,
-    tries: typeof raw.tries === 'number' && raw.tries >= 1 ? Math.floor(raw.tries) : 3,
+    tries: typeof raw.tries === 'number' && raw.tries >= 1
+      ? Math.floor(raw.tries)
+      : 3,
     backoffMs: typeof raw.backoffMs === 'number' || (Array.isArray(raw.backoffMs) && raw.backoffMs.every(ms => typeof ms === 'number'))
       ? raw.backoffMs as number | number[]
       : [10_000, 60_000],
-    keepReadDays: typeof raw.keepReadDays === 'number' && raw.keepReadDays >= 0 ? raw.keepReadDays : 90,
+    keepReadDays: typeof raw.keepReadDays === 'number' && raw.keepReadDays >= 0
+      ? raw.keepReadDays
+      : 90,
   }
 }
 
@@ -181,7 +185,9 @@ export function notifications(server: object): NotificationsApi | undefined {
 /** The name of a notification's class, or what it set as its type */
 export function notificationType(notification: NotificationLike): string {
   const ctor = notification.constructor as { notificationType?: string, name?: string }
-  return ctor.notificationType ?? (ctor.name && ctor.name !== 'Object' ? ctor.name : 'notification')
+  return ctor.notificationType ?? (ctor.name && ctor.name !== 'Object'
+    ? ctor.name
+    : 'notification')
 }
 
 function warnOnce(state: NotificationsState, key: string, message: string) {
@@ -194,9 +200,16 @@ function warnOnce(state: NotificationsState, key: string, message: string) {
 /** The `game` channel: to the open game connections of the recipient's account, or the accounts it routes to */
 function gameChannel(state: NotificationsState): NotificationChannel {
   return {
-    route: (_to, recipient) => recipient.type === 'account' ? recipient.id : undefined,
+    route: (_to, recipient) => recipient.type === 'account'
+      ? recipient.id
+      : undefined,
     send(delivery) {
-      const message: GameNotification = { id: delivery.id, type: delivery.type, data: delivery.payload, sentAt: delivery.sentAt }
+      const message: GameNotification = {
+        id: delivery.id,
+        type: delivery.type,
+        data: delivery.payload,
+        sentAt: delivery.sentAt,
+      }
       for (const accountId of [delivery.route].flat()) {
         for (const channel of state.connections.get(accountId) ?? [])
           channel.emit(NOTIFICATION_MESSAGE, message, { reliable: true })
@@ -228,7 +241,9 @@ function mailChannel(state: NotificationsState): NotificationChannel<Notificatio
         return
       }
       // The mail plugin queues and retries the mail itself
-      await mail.send({ ...delivery.payload, to: delivery.route }, delivery.queued === false ? { queued: false } : undefined)
+      await mail.send({ ...delivery.payload, to: delivery.route }, delivery.queued === false
+        ? { queued: false }
+        : undefined)
     },
   }
 }
@@ -252,7 +267,12 @@ function databaseChannel(state: NotificationsState): NotificationChannel {
         warnOnce(state, 'no-database', 'a notification goes to the database channel, but the project has no database plugin such as @mavonengine/sqlite, so it isn\'t kept')
         return
       }
-      await state.store.add(delivery.recipient, { notificationId: delivery.id, type: delivery.type, data: delivery.payload, createdAt: delivery.sentAt })
+      await state.store.add(delivery.recipient, {
+        notificationId: delivery.id,
+        type: delivery.type,
+        data: delivery.payload,
+        createdAt: delivery.sentAt,
+      })
       if (delivery.recipient.type === 'account')
         await pushUnread(state, delivery.recipient.id)
     },
@@ -286,7 +306,13 @@ function capitalized(name: string) {
 }
 
 function createState(ctx: ServerPluginContext): NotificationsState {
-  const state = { ctx, options: parseOptions(ctx.options), channels: new Map(), connections: new Map(), warned: new Set() } as unknown as NotificationsState
+  const state = {
+    ctx,
+    options: parseOptions(ctx.options),
+    channels: new Map(),
+    connections: new Map(),
+    warned: new Set(),
+  } as unknown as NotificationsState
   state.channels.set('game', gameChannel(state))
   state.channels.set('mail', mailChannel(state))
   state.channels.set('database', databaseChannel(state))
@@ -314,20 +340,37 @@ function createState(ctx: ServerPluginContext): NotificationsState {
 
       for (const name of new Set(notification.via(notifiable))) {
         const channel = state.channels.get(name)
-        if (!channel)
-          throw new Error(`${type} goes to the ${name} channel, which doesn't exist. Channels: ${[...state.channels.keys()].join(', ')}`)
+        if (!channel) {
+          throw new Error(`${type} goes to the ${name} channel, which doesn't exist. Channels: ${[
+            ...state.channels.keys(),
+          ].join(', ')}`)
+        }
 
         const method = `to${capitalized(name)}`
         const render = (notification as unknown as Record<string, unknown>)[method]
         if (typeof render !== 'function')
-          throw new Error(`${type} goes to the ${name} channel, but has no ${method}()`)
+          throw new TypeError(`${type} goes to the ${name} channel, but has no ${method}()`)
 
         const route = notifiable.routeNotificationFor?.(name) ?? await channel.route?.(notifiable, recipient)
         if (route === undefined || (Array.isArray(route) && route.length === 0))
           continue
 
         const payload = render.call(notification, notifiable)
-        deliveries.push({ channel, delivery: { id, channel: name, type, recipient, route, payload, ...(queued !== undefined ? { queued } : {}), sentAt } })
+        deliveries.push({
+          channel,
+          delivery: {
+            id,
+            channel: name,
+            type,
+            recipient,
+            route,
+            payload,
+            ...(queued !== undefined
+              ? { queued }
+              : {}),
+            sentAt,
+          },
+        })
       }
     }
 
@@ -348,17 +391,27 @@ function createState(ctx: ServerPluginContext): NotificationsState {
   }
 
   state.api = {
-    send: (to, notification) => send(Array.isArray(to) ? to : [to], notification),
+    send: (to, notification) => send(Array.isArray(to)
+      ? to
+      : [to], notification),
     channel: (name, channel) => void state.channels.set(name, channel),
-    stored: async (to, options) => state.store ? state.store.list(ownerOf(to), options) : [],
-    unreadCount: async to => state.store ? state.store.unreadCount(ownerOf(to)) : 0,
+    stored: async (to, options) => state.store
+      ? state.store.list(ownerOf(to), options)
+      : [],
+    unreadCount: async to => state.store
+      ? state.store.unreadCount(ownerOf(to))
+      : 0,
     markRead: async (to, ids) => {
       const owner = ownerOf(to)
-      return state.store ? changed(owner, await state.store.markRead(owner, ids)) : 0
+      return state.store
+        ? changed(owner, await state.store.markRead(owner, ids))
+        : 0
     },
     forget: async (to, ids) => {
       const owner = ownerOf(to)
-      return state.store ? changed(owner, await state.store.forget(owner, ids)) : 0
+      return state.store
+        ? changed(owner, await state.store.forget(owner, ids))
+        : 0
     },
   }
   return state
@@ -387,8 +440,12 @@ function answer(state: NotificationsState, channel: Channel, accountId: string, 
 
   const run = async () => {
     if (kind === 'list') {
-      const limit = typeof request.limit === 'number' ? Math.min(MAX_PAGE, request.limit) : undefined
-      const offset = typeof request.offset === 'number' ? request.offset : undefined
+      const limit = typeof request.limit === 'number'
+        ? Math.min(MAX_PAGE, request.limit)
+        : undefined
+      const offset = typeof request.offset === 'number'
+        ? request.offset
+        : undefined
       const notifications = await store.list(owner, { unread: request.unread === true, limit, offset })
       reply({ notifications, unread: await store.unreadCount(owner) })
       return

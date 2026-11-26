@@ -8,7 +8,13 @@ export const LAYOUT_FILE = 'layout.html'
 /** The plugin's own layout, used until the project published one */
 export const DEFAULT_LAYOUT_PATH = fileURLToPath(new URL(`../publish/${LAYOUT_FILE}`, import.meta.url))
 
-const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  '\'': '&#39;',
+}
 const HTML_SPECIAL_RE = /[&<>"']/g
 /** `{{{ name }}}` first, so it isn't read as `{{ name }}` with braces around */
 const PLACEHOLDER_RE = /\{\{\{\s*([\w.-]+)\s*\}\}\}|\{\{\s*([\w.-]+)\s*\}\}/g
@@ -30,7 +36,9 @@ export function escapeHtml(text: string): string {
 export function renderLayout(layout: string, values: Record<string, string | undefined>): string {
   const fill = (part: string) => part.replace(PLACEHOLDER_RE, (_match, raw: string | undefined, escaped: string | undefined) => {
     const value = values[raw ?? escaped!] ?? ''
-    return raw !== undefined ? value : escapeHtml(value)
+    return raw !== undefined
+      ? value
+      : escapeHtml(value)
   })
 
   let html = ''

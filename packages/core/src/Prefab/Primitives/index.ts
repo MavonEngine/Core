@@ -51,7 +51,12 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
       onMove: (delta: Vector3) => this.instance.position.add(delta),
       properties: mat
         ? [
-            { type: 'color', label: 'color', getValue: () => `#${mat.color.getHexString()}`, setValue: (v: string) => mat.color.set(v) },
+            {
+              type: 'color',
+              label: 'color',
+              getValue: () => `#${mat.color.getHexString()}`,
+              setValue: (v: string) => mat.color.set(v),
+            },
             {
               type: 'checkbox',
               label: 'wireframe',
@@ -61,8 +66,24 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
                 mat.needsUpdate = true
               },
             },
-            { type: 'slider', label: 'roughness', min: 0, max: 1, step: 0.01, getValue: () => mat.roughness, setValue: (v: number) => { mat.roughness = v } },
-            { type: 'slider', label: 'metalness', min: 0, max: 1, step: 0.01, getValue: () => mat.metalness, setValue: (v: number) => { mat.metalness = v } },
+            {
+              type: 'slider',
+              label: 'roughness',
+              min: 0,
+              max: 1,
+              step: 0.01,
+              getValue: () => mat.roughness,
+              setValue: (v: number) => { mat.roughness = v },
+            },
+            {
+              type: 'slider',
+              label: 'metalness',
+              min: 0,
+              max: 1,
+              step: 0.01,
+              getValue: () => mat.metalness,
+              setValue: (v: number) => { mat.metalness = v },
+            },
           ]
         : [],
     })
@@ -196,7 +217,20 @@ export class PlanePrimitive extends Primitive {
 
 export class PolyhedronPrimitive extends Primitive {
   constructor(position: Vector3) {
-    const vertices = [1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1]
+    const vertices = [
+      1,
+      1,
+      1,
+      -1,
+      -1,
+      1,
+      -1,
+      1,
+      -1,
+      1,
+      -1,
+      -1,
+    ]
     const indices = [2, 1, 0, 0, 3, 2, 1, 3, 0, 2, 3, 1]
     super(position, mesh(new PolyhedronGeometry(vertices, indices, 0.8, 2)), 'Polyhedron')
   }

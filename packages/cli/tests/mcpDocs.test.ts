@@ -8,27 +8,58 @@ import { DEFAULT_DOCS_URL, DocsClient } from '../src/mcp/docs'
 import GameServerClient from '../src/mcp/GameServerClient'
 import { createMcpServer } from '../src/mcp/server'
 
-const pages = [{ path: '/networking/state-sync', title: 'State Sync' }]
+const pages = [
+  { path: '/networking/state-sync', title: 'State Sync' },
+]
 
 /** Stands in for the docs site's MCP server: the same two tools mavonengine.com/mcp has */
 async function fakeDocsSite(): Promise<Client> {
   const site = new McpServer({ name: 'MavonEngine docs', version: '1.0.0' })
-  site.registerTool('list-pages', {}, () => ({ content: [{ type: 'text', text: JSON.stringify(pages) }] }))
-  site.registerTool('get-page', { inputSchema: { path: z.string() } }, ({ path }) => path === '/networking/state-sync'
-    ? { content: [{ type: 'text', text: '# State Sync\n\nHow entity state is broadcast.' }] }
-    : { isError: true, content: [{ type: 'text', text: `Page not found: ${path}` }] })
+  site.registerTool('list-pages', {}, () => ({
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(pages),
+      },
+    ],
+  }))
+  site.registerTool('get-page', {
+    inputSchema: {
+      path: z.string(),
+    },
+  }, ({ path }) => path === '/networking/state-sync'
+    ? {
+        content: [
+          { type: 'text', text: '# State Sync\n\nHow entity state is broadcast.' },
+        ],
+      }
+    : {
+        isError: true,
+        content: [
+          { type: 'text', text: `Page not found: ${path}` },
+        ],
+      })
 
   const client = new Client({ name: 'test', version: '0' })
   const [a, b] = InMemoryTransport.createLinkedPair()
-  await Promise.all([site.connect(a), client.connect(b)])
+  await Promise.all([
+    site.connect(a),
+    client.connect(b),
+  ])
   return client
 }
 
 async function connect(docs?: DocsClient) {
-  const server = createMcpServer(new GameServerClient({ url: 'http://localhost:8050', fetch: (async () => new Response('', { status: 404 })) as any }), docs)
+  const server = createMcpServer(new GameServerClient({
+    url: 'http://localhost:8050',
+    fetch: (async () => new Response('', { status: 404 })) as any,
+  }), docs)
   const client = new Client({ name: 'test', version: '0' })
   const [a, b] = InMemoryTransport.createLinkedPair()
-  await Promise.all([server.connect(a), client.connect(b)])
+  await Promise.all([
+    server.connect(a),
+    client.connect(b),
+  ])
   return client
 }
 
@@ -39,10 +70,16 @@ describe('docs tools', () => {
     const list = await client.callTool({ name: 'docs_list_pages', arguments: {} }) as any
     expect(JSON.parse(list.content[0].text)).toEqual(pages)
 
-    const page = await client.callTool({ name: 'docs_get_page', arguments: { path: '/networking/state-sync' } }) as any
+    const page = await client.callTool({
+      name: 'docs_get_page',
+      arguments: { path: '/networking/state-sync' },
+    }) as any
     expect(page.content[0].text).toContain('# State Sync')
 
-    const missing = await client.callTool({ name: 'docs_get_page', arguments: { path: '/nope' } }) as any
+    const missing = await client.callTool({
+      name: 'docs_get_page',
+      arguments: { path: '/nope' },
+    }) as any
     expect(missing.isError).toBe(true)
     expect(missing.content[0].text).toBe('Page not found: /nope')
   })

@@ -19,8 +19,16 @@ export function bootBanner({ version, threeRevision, rapierVersion, mode }: Boot
     '│              MavonEngine                │',
     '│                                         │',
     row('Version', version),
-    ...(threeRevision ? [row('Three.js', `r${threeRevision}`)] : []),
-    ...(rapierVersion ? [row('Rapier', rapierVersion)] : []),
+    ...(threeRevision
+      ? [
+          row('Three.js', `r${threeRevision}`),
+        ]
+      : []),
+    ...(rapierVersion
+      ? [
+          row('Rapier', rapierVersion),
+        ]
+      : []),
     row('Mode', mode),
     '│                                         │',
     '│  https://github.com/MavonEngine/core    │',

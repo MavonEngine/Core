@@ -16,7 +16,9 @@ const MAX_MEMORY = 128 * 1024 * 1024
 
 function derive(password: BinaryLike, salt: Buffer, options: ScryptOptions): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    scrypt(password, salt, KEY_LENGTH, { ...options, maxmem: MAX_MEMORY }, (err, key) => err ? reject(err) : resolve(key))
+    scrypt(password, salt, KEY_LENGTH, { ...options, maxmem: MAX_MEMORY }, (err, key) => err
+      ? reject(err)
+      : resolve(key))
   })
 }
 

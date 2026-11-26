@@ -36,7 +36,11 @@ export default class PluginHost<P extends { name?: string }, C> {
     private logger: winston.Logger | Logger | null | undefined,
     side: 'client' | 'server',
   ) {
-    this.entries = plugins.map(loaded => ({ loaded, ctx: makeContext(loaded), failed: new Set() }))
+    this.entries = plugins.map(loaded => ({
+      loaded,
+      ctx: makeContext(loaded),
+      failed: new Set(),
+    }))
 
     for (const { loaded } of this.entries)
       this.logger?.info(`Plugin loaded: ${PluginHost.label(loaded)} (${side})`)
@@ -44,7 +48,9 @@ export default class PluginHost<P extends { name?: string }, C> {
 
   static label(loaded: LoadedPlugin<{ name?: string }>): string {
     const name = loaded.plugin.name
-    return name && name !== loaded.package ? `${name} (${loaded.package})` : loaded.package
+    return name && name !== loaded.package
+      ? `${name} (${loaded.package})`
+      : loaded.package
   }
 
   get size(): number {
