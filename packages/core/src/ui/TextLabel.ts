@@ -35,6 +35,9 @@ const DEFAULTS = {
 
 const temp = new Vector3()
 
+/** A picture drawn before the text, e.g. a status icon beside a name */
+export type TextLabelIcon = HTMLCanvasElement | HTMLImageElement | ImageBitmap
+
 /**
  * Text drawn in the scene, always facing the viewer: a sprite with the text on a canvas texture. For what a VR
  * headset has to show, where the page's HTML can't be seen, like a player's name over their head.
@@ -49,6 +52,7 @@ export default class TextLabel extends Sprite {
   declare material: SpriteMaterial
   private texture: CanvasTexture
   private _text = ''
+  private _icon?: TextLabelIcon
   /** The text's width over its height, for the sprite's shape */
   private aspect = 1
 
@@ -91,6 +95,21 @@ export default class TextLabel extends Sprite {
     this.draw()
   }
 
+  get icon() {
+    return this._icon
+  }
+
+  /**
+   * A picture left of the text, as tall as the font, or `undefined` for none; redrawn only when it changes. An image
+   * must have loaded
+   */
+  setIcon(icon: TextLabelIcon | undefined) {
+    if (icon === this._icon)
+      return
+    this._icon = icon
+    this.draw()
+  }
+
   private draw() {
     const ctx = this.canvas.getContext('2d')
     if (!ctx)
@@ -104,8 +123,17 @@ export default class TextLabel extends Sprite {
     const padding = this.options.padding ?? Math.round(size / 3)
     const radius = this.options.radius ?? padding / 2
     const textWidth = Math.max(1, ...lines.map(line => Math.ceil(ctx.measureText(line).width)))
+    const icon = this._icon && this._icon.height > 0
+      ? this._icon
+      : undefined
+    const iconWidth = icon
+      ? Math.round(icon.width / icon.height * size)
+      : 0
+    const iconSpace = icon
+      ? iconWidth + Math.round(padding / 2)
+      : 0
 
-    this.canvas.width = textWidth + padding * 2
+    this.canvas.width = iconSpace + textWidth + padding * 2
     this.canvas.height = lineHeight * lines.length + padding * 2
     // Resizing the canvas resets its state
     ctx.font = font
@@ -116,10 +144,12 @@ export default class TextLabel extends Sprite {
       ctx.roundRect(0, 0, this.canvas.width, this.canvas.height, radius)
       ctx.fill()
     }
+    if (icon && this._text)
+      ctx.drawImage(icon, padding, (this.canvas.height - size) / 2, iconWidth, size)
     ctx.fillStyle = color
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    lines.forEach((line, i) => ctx.fillText(line, this.canvas.width / 2, padding + lineHeight * (i + 0.5)))
+    lines.forEach((line, i) => ctx.fillText(line, padding + iconSpace + textWidth / 2, padding + lineHeight * (i + 0.5)))
 
     this.aspect = this.canvas.width / this.canvas.height
     // A new size needs a new GPU texture

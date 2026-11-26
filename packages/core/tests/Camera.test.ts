@@ -121,6 +121,26 @@ describe('camera', () => {
       expectClose(camera.worldPosition, position)
     })
 
+    it('keeps a pinned view at the position however the head moves, turned to the heading', () => {
+      camera.afterRender()
+      const position = new Vector3(0, 5, 10)
+      camera.place(position, new Vector3(10, 5, 10), { pinHead: true })
+      camera.updateWorldPosition()
+      expectClose(camera.worldPosition, position)
+
+      // The player leans and crouches: the view stays on the position
+      camera.instance.position.set(0.8, 1.2, -0.3)
+      camera.place(position, new Vector3(10, 5, 10), { pinHead: true })
+      camera.updateWorldPosition()
+      expectClose(camera.worldPosition, position)
+    })
+
+    it('pins to a standing eye height until the headset\'s pose is measured', () => {
+      camera.place(new Vector3(0, 5, 10), new Vector3(0, 5, 0), { pinHead: true })
+
+      expectClose(camera.rig.position, new Vector3(0, 3.4, 10))
+    })
+
     it('measures the head again in the next session', () => {
       camera.afterRender()
       mockGame.renderer.xrPresenting = false

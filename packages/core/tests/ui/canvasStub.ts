@@ -15,6 +15,7 @@ export function stubCanvas() {
     fill: vi.fn(),
     fillRect: vi.fn(),
     fillText: vi.fn((text: string) => drawn.push(text)),
+    drawImage: vi.fn(),
   }
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ctx as any)
   return { ctx, drawn }

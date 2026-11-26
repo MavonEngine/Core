@@ -40,6 +40,20 @@ describe('textLabel', () => {
     expect(label.visible).toBe(true)
   })
 
+  it('draws an icon as tall as the font left of the text, and widens for it', () => {
+    const label = new TextLabel('Bob', { font: '40px sans-serif', padding: 10 })
+    const without = label.canvas.width
+    const icon = Object.assign(document.createElement('canvas'), { width: 80, height: 40 })
+    label.setIcon(icon)
+    // 80 px wide at 40 tall, and half the padding between it and the text
+    expect(label.canvas.width).toBe(without + 80 + 5)
+    expect(canvas.ctx.drawImage).toHaveBeenCalledWith(icon, 10, (label.canvas.height - 40) / 2, 80, 40)
+    expect(canvas.ctx.fillText).toHaveBeenLastCalledWith('Bob', 10 + 85 + 30, expect.any(Number))
+
+    label.setIcon(undefined)
+    expect(label.canvas.width).toBe(without)
+  })
+
   it('keeps its angular size whatever the distance', () => {
     const camera = new PerspectiveCamera()
     const label = new TextLabel('x', { angularSize: 2 })
