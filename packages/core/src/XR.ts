@@ -1,12 +1,14 @@
 import type { Matrix4, WebGLRenderer, WebGLRenderTarget } from 'three'
 import type Game from './Game'
 import type Renderer from './Renderer'
+import type XRPanel from './ui/XRPanel'
 import type { XRInputOptions } from './XRInput'
 import type { XRLocomotionOptions } from './XRLocomotion'
 import { PerspectiveCamera } from 'three'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
 import XRInput from './XRInput'
 import XRLocomotion from './XRLocomotion'
+import XRPointer from './XRPointer'
 
 export interface XROptions {
   /**
@@ -46,6 +48,12 @@ export default class XR {
 
   /** The controllers, also at `game.input.xr` */
   readonly input?: XRInput
+
+  /** The controllers pointing at panels (addPanel), unless `input: false` was passed */
+  readonly pointer?: XRPointer
+
+  /** The panels added with `addPanel()` */
+  readonly panels = new Set<XRPanel>()
 
   /** Thumbstick movement, once `enableLocomotion()` was called */
   locomotion?: XRLocomotion
@@ -108,7 +116,19 @@ export default class XR {
     if (options.input !== false) {
       this.input = new XRInput(xr, game.camera.rig, options.input)
       game.input.xr = this.input
+      this.pointer = new XRPointer(this.input, () => this.panels)
     }
+
+    // The panels every rendered frame: shown while in VR and open, kept in front of the head, pointed at
+    game.on('beforeRender', (delta: number) => {
+      if (!this.panels.size)
+        return
+      const presenting = this.presenting
+      for (const panel of this.panels)
+        panel.update(game.camera.instance, presenting, delta)
+      if (presenting)
+        this.pointer?.update()
+    })
 
     if (options.button !== false) {
       this.button = VRButton.createButton(renderer.instance, options.sessionInit)
@@ -133,6 +153,21 @@ export default class XR {
       this.locomotion = locomotion
     }
     return this.locomotion
+  }
+
+  /**
+   * Show a panel in VR (see XRPanel): placed in the camera rig, so it moves with the player, and pointed at with
+   * the controllers. It shows while presenting and `panel.open()`
+   */
+  addPanel(panel: XRPanel): XRPanel {
+    this.panels.add(panel)
+    this.game.camera.rig.add(panel.mesh)
+    return panel
+  }
+
+  removePanel(panel: XRPanel) {
+    this.panels.delete(panel)
+    panel.mesh.removeFromParent()
   }
 
   /**
@@ -204,6 +239,9 @@ export default class XR {
 
   dispose() {
     this.button?.remove()
+    this.pointer?.dispose()
+    for (const panel of this.panels)
+      this.removePanel(panel)
   }
 }
 

@@ -41,6 +41,16 @@ export default class PlayerLabel extends ObjectLabel {
     return container
   }
 
+  /** In VR (drawn in the scene, see ObjectLabel): the chat bubble while it shows, over the name */
+  protected xrText() {
+    const chat = this.chatDiv && !this.chatDiv.classList.contains('hidden')
+      ? this.chatDiv.textContent
+      : ''
+    return chat
+      ? `${chat}\n${this._name}`
+      : this._name
+  }
+
   setName(name: string) {
     this._name = name
     if (this.nameDiv) {

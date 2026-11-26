@@ -21,6 +21,15 @@ vi.mock('../src/XRLocomotion', () => ({
   }),
 }))
 
+vi.mock('../src/XRPointer', () => ({
+  default: vi.fn(function () {
+    return {
+      update: vi.fn(),
+      dispose: vi.fn(),
+    }
+  }),
+}))
+
 vi.mock('../src/XRInput', () => ({
   default: vi.fn(function () {
     return {
@@ -196,14 +205,40 @@ describe('xr', () => {
     const { instance, game, xr } = setup()
     const locomotion = instance.enableLocomotion()
     expect(instance.enableLocomotion()).toBe(locomotion)
-    expect(game.callbacks.beforeRender).toHaveLength(1)
+    // after the panels' own
+    expect(game.callbacks.beforeRender).toHaveLength(2)
+    const frame = game.callbacks.beforeRender[1]
 
-    game.callbacks.beforeRender[0](0.016)
+    frame(0.016)
     expect(locomotion.update).not.toHaveBeenCalled()
 
     xr.isPresenting = true
-    game.callbacks.beforeRender[0](0.016)
+    frame(0.016)
     expect(locomotion.update).toHaveBeenCalledWith(0.016)
+  })
+
+  it('puts panels in the camera rig and updates them every rendered frame, pointing at them only in VR', () => {
+    const { instance, game, xr } = setup()
+    const panel = {
+      mesh: new Group(),
+      update: vi.fn(),
+    }
+    expect(instance.addPanel(panel as any)).toBe(panel)
+    expect(panel.mesh.parent).toBe(game.camera.rig)
+    const frame = game.callbacks.beforeRender[0]
+
+    frame(0.016)
+    expect(panel.update).toHaveBeenLastCalledWith(game.camera.instance, false, 0.016)
+    expect(instance.pointer!.update).not.toHaveBeenCalled()
+
+    xr.isPresenting = true
+    frame(0.02)
+    expect(panel.update).toHaveBeenLastCalledWith(game.camera.instance, true, 0.02)
+    expect(instance.pointer!.update).toHaveBeenCalledTimes(1)
+
+    instance.removePanel(panel as any)
+    expect(panel.mesh.parent).toBeNull()
+    expect(instance.panels.size).toBe(0)
   })
 
   it('needs the controllers for locomotion', () => {
