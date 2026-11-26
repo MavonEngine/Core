@@ -14,6 +14,13 @@ export default class UILabel extends ObjectLabel {
     this.init()
   }
 
+  /** In VR: the label over the text */
+  protected xrText() {
+    return this.label
+      ? `${this.label}\n${this.text}`
+      : this.text
+  }
+
   protected createElement(): HTMLDivElement {
     const domElement = document.createElement('div')
     domElement.classList.add('point')
