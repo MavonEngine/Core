@@ -2,8 +2,9 @@ import type { OrthographicCamera } from 'three'
 import type { Font } from 'three/examples/jsm/Addons.js'
 import type GameObject from '../World/GameObject'
 import type GameObjectInterface from '../World/GameObjectInterface'
-import { Mesh, MeshBasicMaterial, Vector3, WebGLRenderer } from 'three'
+import { Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import { TextGeometry } from 'three/examples/jsm/Addons.js'
+import { WebGPURenderer } from 'three/webgpu'
 import Game from '../Game'
 
 export const MINIMAP_LAYER = 31
@@ -11,7 +12,8 @@ export const MINIMAP_LAYER = 31
 export default class MinimapComponent implements GameObjectInterface {
   minimapElement: HTMLCanvasElement
   camera: OrthographicCamera
-  renderer: WebGLRenderer
+  /** Its own renderer, drawing the game's scene into the minimap's canvas */
+  renderer: WebGPURenderer
 
   target?: GameObject
   northIcon?: Mesh
@@ -23,11 +25,14 @@ export default class MinimapComponent implements GameObjectInterface {
     this.camera.lookAt(0, 0, 0)
     this.camera.layers.set(MINIMAP_LAYER)
 
-    this.renderer = new WebGLRenderer({
+    this.renderer = new WebGPURenderer({
       canvas: this.minimapElement,
       antialias: true,
       alpha: true,
+      // The same backend as the game's renderer
+      forceWebGL: !Game.instance().renderer.isWebGPU,
     })
+    void this.renderer.init()
     this.renderer.setPixelRatio(Game.instance().sizes.pixelRatio)
     this.renderer.setSize(250, 250)
     this.camera.up.set(0, 0, 1)
@@ -70,7 +75,9 @@ export default class MinimapComponent implements GameObjectInterface {
       this.northIcon.position.copy(northPos)
     }
 
-    this.renderer.render(Game.instance().scene, this.camera)
+    // Starts drawing once the backend is up, a frame or two in
+    if (this.renderer.hasInitialized())
+      this.renderer.render(Game.instance().scene, this.camera)
   }
 
   destroy() {

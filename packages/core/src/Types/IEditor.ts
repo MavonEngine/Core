@@ -17,6 +17,8 @@ export interface EditorPanel {
   location: EditorPanelLocation
   /** Lower comes first. Built-in panels are 0 */
   order?: number
+  /** false to fill the dock edge to edge, without the panel body's padding */
+  padded?: boolean
   /** A React function component. Typed loosely so core does not depend on React */
   component?(props: { editor: IEditor }): unknown
   /** Render into `container`, return a cleanup function. Called each time the panel's tab is shown */

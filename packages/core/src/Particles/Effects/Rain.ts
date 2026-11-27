@@ -1,7 +1,6 @@
-import { BufferAttribute, BufferGeometry, Points, ShaderMaterial } from 'three'
+import { float, mod, uniform, vec3, vec4 } from 'three/tsl'
+import { PointsNodeMaterial } from 'three/webgpu'
 import Game from '../../Game'
-import RainFragmentShader from '../Shaders/Rain/Fragment.glsl'
-import RainVertextShader from '../Shaders/Rain/Vertex.glsl'
 import Emitter from '../System/Emitter'
 import ParticleEffect from '../System/ParticleEffect'
 import { registerParticle } from '../System/ParticlePreviewRegistry'
@@ -13,41 +12,35 @@ export class RainEmitter extends Emitter {
     create: () => new RainEmitter(),
   }
 
-  declare geometry: BufferGeometry
-  declare mesh: Points
-  declare material: ShaderMaterial
+  readonly uniforms = {
+    uTime: uniform(0),
+  }
 
   constructor() {
-    super(Game.instance().camera.worldPosition, new ShaderMaterial({
+    super(Game.instance().camera.worldPosition, new PointsNodeMaterial({
       transparent: true,
-      vertexShader: RainVertextShader,
-      fragmentShader: RainFragmentShader,
-      uniforms: {
-        uTime: { value: 0 },
-        uCameraPosition: { value: Game.instance().camera.worldPosition },
-      },
+      sizeAttenuation: false,
     }), 1000, 20)
-
-    this.geometry = new BufferGeometry()
-    this.mesh = new Points(this.geometry, this.material)
-
-    const positions = new Float32Array(this.maxParticles * 3)
+    // The drops are placed around the world's origin
+    this.mesh.position.set(0, 0, 0)
 
     for (let i = 0; i < this.maxParticles; i++) {
       const i3 = i * 3
-      positions[i3] = (Math.random() - 0.5) * 20
-      positions[i3 + 1] = (Math.random() - 0.5) * 20
-      positions[i3 + 2] = (Math.random() - 0.5) * 20
+      this.positions[i3] = (Math.random() - 0.5) * 20
+      this.positions[i3 + 1] = (Math.random() - 0.5) * 20
+      this.positions[i3 + 2] = (Math.random() - 0.5) * 20
     }
 
-    this.geometry.setAttribute('position', new BufferAttribute(positions, 3))
-
-    Game.instance().scene.add(this.mesh)
+    // Falling, and back to the top once below the 20 unit box
+    const start = this.positionNode
+    const y = mod(start.y.sub(this.uniforms.uTime.mul(7)).add(20), 20).sub(10)
+    this.material.positionNode = vec3(start.x, y, start.z)
+    this.material.sizeNode = float(2)
+    this.material.colorNode = vec4(1, 1, 1, 0.8)
   }
 
   update(delta: number): void {
-    this.material.uniforms.uTime.value += delta
-    this.material.uniforms.uCameraPosition.value = Game.instance().camera.worldPosition
+    this.uniforms.uTime.value += delta
   }
 }
 

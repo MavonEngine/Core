@@ -235,7 +235,7 @@ export function registerClientTools(server: McpServer, client: GameServerClient)
   server.registerTool('client_trace', {
     title: 'Trace client rendering',
     description: 'Record a tab for a few seconds and analyse its performance: frame time distribution, render CPU vs GPU time per '
-      + 'frame, time per composer pass, game tick time (physics, world.update), WebGL work per frame (draw calls, program / texture / '
+      + 'frame, time in the render pipeline, game tick time (physics, world.update), WebGL work per frame (draw calls, program / texture / '
       + 'framebuffer switches, uniform calls, uploads), the bottleneck, and the worst hitches with their likely causes (shader '
       + 'compiles, texture uploads, GPU syncs, GC, slow ticks, long scripts, hot JS functions). JS sampling uses the browser\'s JS '
       + 'Self-Profiling API (Chromium) and GPU time EXT_disjoint_timer_query_webgl2. Also saves a Chrome Trace Event file to open '

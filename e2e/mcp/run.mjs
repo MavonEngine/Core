@@ -223,7 +223,7 @@ async function main() {
     // A CI runner without a GPU renders a few frames a second, so the count only has to show that frames were recorded
     const traced = await data('client_trace', { durationMs: 3000, savePath: join(screenshots, 'trace.json') })
     check(traced.frames >= 3 && traced.renderCpu?.p50 > 0 && traced.perFrame.drawCalls > 0, `client_trace records frames (${traced.frames} frames, render CPU p50 ${traced.renderCpu?.p50}ms, ${traced.perFrame.drawCalls} draw calls, ${traced.bottleneck.verdict})`)
-    check(traced.passes.some(p => p.name === 'RenderPass'), 'and times the composer passes')
+    check(traced.passes.some(p => p.name === 'RenderPipeline'), 'and times the render pipeline')
     check(traced.js?.hotFunctions.length > 0, `and samples JS stacks through the Document-Policy header (${traced.notes.join('; ') || 'no notes'})`)
     check(JSON.parse(readFileSync(traced.traceFile, 'utf8')).traceEvents.length > traced.frames, `and saves a trace file (${traced.traceFile})`)
 

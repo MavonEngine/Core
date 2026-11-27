@@ -48,10 +48,10 @@ class FakeGL {
 function fakeGame(gl: FakeGL) {
   const info = {
     autoReset: true,
-    render: { calls: 0, triangles: 0 },
-    programs: [{}],
+    render: { drawCalls: 0, triangles: 0 },
+    memory: { programs: 1 },
     reset() {
-      info.render.calls = 0
+      info.render.drawCalls = 0
       info.render.triangles = 0
     },
   }
@@ -63,29 +63,24 @@ function fakeGame(gl: FakeGL) {
       gl.uniformMatrix4fv()
       gl.drawElements()
       gl.drawArraysInstanced()
-      info.render.calls += 2
+      info.render.drawCalls += 2
       info.render.triangles += 100
     },
   }
-  const perf = {
-    begin: vi.fn(),
-    end: vi.fn(),
-  }
+  // The inspector turned on the backend's GPU timing
+  const backend = { trackTimestamp: true }
   const renderer = {
     instance: {
       getContext: () => gl,
       getPixelRatio: () => 1,
       info,
+      backend,
     },
-    composer: {
-      passes: [pass],
-      render: () => pass.render(),
-    },
-    perf: perf as typeof perf | undefined,
+    isWebGPU: false,
+    pipeline: pass,
     maxFps: 0,
     update(this: any, _delta: number) {
-      this.perf?.begin()
-      this.composer.render()
+      this.pipeline.render()
     },
   }
   const world = {
@@ -103,7 +98,7 @@ function fakeGame(gl: FakeGL) {
       this.world.update(0.03)
     },
   }
-  return { game, renderer, info, perf }
+  return { game, renderer, info, backend }
 }
 
 describe('recordTrace', () => {
@@ -121,7 +116,7 @@ describe('recordTrace', () => {
 
   it('records frames, passes, WebGL work and ticks, then puts everything back', async () => {
     const gl = new FakeGL()
-    const { game, renderer, info, perf } = fakeGame(gl)
+    const { game, renderer, info, backend } = fakeGame(gl)
     const originalUpdate = renderer.update
     const originalTick = game.tick
 
@@ -143,12 +138,12 @@ describe('recordTrace', () => {
       jsProfile: true,
       sampleIntervalMs: 10,
     })
-    expect(renderer.perf).toBeUndefined()
+    expect(backend.trackTimestamp).toBe(false)
     await vi.advanceTimersByTimeAsync(400)
     const capture = await done
 
     expect(capture.frames.length).toBeGreaterThan(8)
-    expect(capture.passes).toEqual(['Object'])
+    expect(capture.passes).toEqual(['RenderPipeline'])
     const frame = capture.frames[3]!
     expect(frame).toMatchObject({ calls: 2, triangles: 100, gpu: 4 })
     expect(frame.interval).toBeCloseTo(16, 0)
@@ -179,7 +174,7 @@ describe('recordTrace', () => {
 
     expect(capture.gpuTiming).toEqual({
       enabled: true,
-      note: expect.stringContaining('three-perf'),
+      note: expect.stringContaining('inspector'),
     })
     expect(capture.jsProfile).toEqual({
       enabled: false,
@@ -189,7 +184,7 @@ describe('recordTrace', () => {
     // Restored
     expect(renderer.update).toBe(originalUpdate)
     expect(game.tick).toBe(originalTick)
-    expect(renderer.perf).toBe(perf)
+    expect(backend.trackTimestamp).toBe(true)
     expect(info.autoReset).toBe(true)
     expect(Object.getOwnPropertyNames(gl)).not.toContain('drawElements')
   })

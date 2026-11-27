@@ -36,13 +36,12 @@ function fakeGame() {
     autoReset: true,
     reset: vi.fn(),
     render: {
-      calls: 12,
+      drawCalls: 12,
       triangles: 3400,
       points: 0,
       lines: 2,
     },
-    memory: { geometries: 5, textures: 3 },
-    programs: [{}, {}],
+    memory: { geometries: 5, textures: 3, programs: 2 },
   }
   return {
     world,
@@ -56,9 +55,7 @@ function fakeGame() {
         info,
         getPixelRatio: () => 2,
       },
-      composer: {
-        render: vi.fn(),
-      },
+      render: vi.fn(),
     },
     camera: {
       instance: {
@@ -124,8 +121,7 @@ describe('answer', () => {
       entities: 3,
       scene: null,
     })
-    // renderer.info is put back to resetting every render
-    expect((window as any).Game.renderer.instance.info.autoReset).toBe(true)
+    expect(res.data.frame).toMatchObject({ calls: 12, triangles: 3400 })
   })
 
   it('lists entities with the local player marked, using the server filters', async () => {

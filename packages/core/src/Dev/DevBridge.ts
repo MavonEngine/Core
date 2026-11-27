@@ -177,22 +177,19 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
     const current = game()
     const renderer = current.renderer.instance
 
-    // The composer renders several passes per frame and renderer.info resets on each, so count one whole frame
-    renderer.info.autoReset = false
-    renderer.info.reset()
+    // The renderer resets renderer.info at the start of every frame, so after one it holds that whole frame
     // Ends as soon as a frame rendered, so the limit only matters for a tab that renders slowly or not at all (hidden)
     const waitMs = document.visibilityState === 'visible'
       ? 4000
       : 500
     const measured = await nextFrame(waitMs)
-    const { render, memory, programs } = renderer.info
+    const { render, memory } = renderer.info
     const frame = {
-      calls: render.calls,
+      calls: render.drawCalls,
       triangles: render.triangles,
       points: render.points,
       lines: render.lines,
     }
-    renderer.info.autoReset = true
 
     const heap = (performance as { memory?: { usedJSHeapSize: number, totalJSHeapSize: number, jsHeapSizeLimit: number } }).memory
     const camera = current.camera.instance as { position: { x: number, y: number, z: number }, rotation: { x: number, y: number, z: number }, fov?: number, near?: number, far?: number }
@@ -206,7 +203,7 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
         : document.visibilityState === 'visible'
           ? `No frame was rendered within ${Math.round(waitMs)}ms`
           : 'The tab is in the background, so the browser does not render it',
-      gpuMemory: { geometries: memory.geometries, textures: memory.textures, programs: programs?.length ?? 0 },
+      gpuMemory: { geometries: memory.geometries, textures: memory.textures, programs: memory.programs },
       jsHeap: heap
         ? { used: heap.usedJSHeapSize, total: heap.totalJSHeapSize, limit: heap.jsHeapSizeLimit }
         : null,
@@ -321,7 +318,7 @@ const QUERIES: Record<BridgeQuery, (params: Record<string, string>) => unknown> 
       : 'image/jpeg'
 
     // Without preserveDrawingBuffer the canvas is cleared after each frame: render one now and copy it in the same task
-    current.renderer.composer.render()
+    current.renderer.render()
     const source = current.canvas
     const scale = Math.min(1, width / source.width)
     const copy = document.createElement('canvas')

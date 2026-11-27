@@ -1,6 +1,8 @@
-import type { Material, Object3D, Vector3 } from 'three'
+import type { Vector3 } from 'three'
+import type { Node, PointsNodeMaterial } from 'three/webgpu'
 import type Particle from './Particle'
-import { BufferAttribute, BufferGeometry, Points } from 'three'
+import { instancedBufferAttribute } from 'three/tsl'
+import { BufferGeometry, InstancedBufferAttribute, Sprite } from 'three/webgpu'
 import Game from '../../Game'
 import GameObject from '../../World/GameObject'
 
@@ -10,6 +12,12 @@ export interface EmitterPreviewConfig {
   create(): InstanceType<typeof Emitter> | null
 }
 
+/**
+ * Draws its particles as camera facing quads, one instance per particle (WebGPU only draws points 1px wide).
+ * Fill `positions`, `scales` and `alphas` and flag them in `update()`; the material reads them through
+ * `positionNode`, `scaleNode` and `alphaNode`. The material's `positionNode` is set to the particle's position unless
+ * it has one already.
+ */
 export default abstract class Emitter extends GameObject {
   static preview: EmitterPreviewConfig | null = null
   /**
@@ -23,20 +31,26 @@ export default abstract class Emitter extends GameObject {
    */
   garbageCollect = false
 
-  material: Material
+  material: PointsNodeMaterial
+  /** Holds the particle attributes as `position`, `aScale` and `aAlpha` */
   geometry: BufferGeometry
-  mesh: Object3D
+  mesh: Sprite
 
   positions: Float32Array<ArrayBuffer>
   scales: Float32Array<ArrayBuffer>
   alphas: Float32Array<ArrayBuffer>
+
+  /** Each particle's position, relative to the emitter */
+  readonly positionNode: Node<'vec3'>
+  readonly scaleNode: Node<'float'>
+  readonly alphaNode: Node<'float'>
 
   maxLifeTimeParticle: number
   maxParticles!: number
 
   particles: Particle[] = []
 
-  constructor(position: Vector3, material: Material, maxParticles: number, maxLifeTimeParticle: number) {
+  constructor(position: Vector3, material: PointsNodeMaterial, maxParticles: number, maxLifeTimeParticle: number) {
     super()
 
     this.maxParticles = maxParticles
@@ -49,11 +63,22 @@ export default abstract class Emitter extends GameObject {
     this.scales = new Float32Array(this.maxParticles)
     this.alphas = new Float32Array(this.maxParticles)
 
-    this.geometry.setAttribute('position', new BufferAttribute(this.positions, 3))
-    this.geometry.setAttribute('aScale', new BufferAttribute(this.scales, 1))
-    this.geometry.setAttribute('aAlpha', new BufferAttribute(this.alphas, 1))
+    const positionAttribute = new InstancedBufferAttribute(this.positions, 3)
+    const scaleAttribute = new InstancedBufferAttribute(this.scales, 1)
+    const alphaAttribute = new InstancedBufferAttribute(this.alphas, 1)
+    this.geometry.setAttribute('position', positionAttribute)
+    this.geometry.setAttribute('aScale', scaleAttribute)
+    this.geometry.setAttribute('aAlpha', alphaAttribute)
 
-    this.mesh = new Points(this.geometry, this.material)
+    this.positionNode = instancedBufferAttribute(positionAttribute, 'vec3') as unknown as Node<'vec3'>
+    this.scaleNode = instancedBufferAttribute(scaleAttribute, 'float') as unknown as Node<'float'>
+    this.alphaNode = instancedBufferAttribute(alphaAttribute, 'float') as unknown as Node<'float'>
+    material.positionNode ??= this.positionNode
+
+    this.mesh = new Sprite(material)
+    this.mesh.count = maxParticles
+    // The particles spread out from the emitter, where a sprite's bounds would put them all
+    this.mesh.frustumCulled = false
     this.mesh.position.set(position.x, position.y, position.z)
 
     Game.instance().scene.add(this.mesh)
