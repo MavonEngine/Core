@@ -2,7 +2,7 @@
 import { ENGINE_VERSION } from '@mavonengine/core/BaseGame'
 import { nextTick, ref, watch } from 'vue'
 import NetworkManager from '../NetworkManager'
-import useChat from './composables/useChat'
+import useChat, { chatParts } from './composables/useChat'
 import useNetworkState from './composables/useNetworkState'
 
 const { chatMessages } = useChat()
@@ -59,7 +59,16 @@ function onKeydown(e: KeyboardEvent) {
           class="msg" :class="[msg.isSystem ? 'system' : '']"
         >
           <span v-if="!msg.isSystem" class="msg-name">{{ msg.playerName }}</span>
-          <span class="msg-text">{{ msg.isSystem ? msg.message : `: ${msg.message}` }}</span>
+          <span class="msg-text">
+            <template v-if="!msg.isSystem">: </template>
+            <template v-if="msg.trusted">
+              <template v-for="(part, i) in chatParts(msg.message)" :key="i">
+                <a v-if="part.href" class="msg-link" :href="part.href" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>
+                <template v-else>{{ part.text }}</template>
+              </template>
+            </template>
+            <template v-else>{{ msg.message }}</template>
+          </span>
         </div>
       </div>
       <div class="chat-input-row">
@@ -178,6 +187,13 @@ function onKeydown(e: KeyboardEvent) {
 .msg-name {
   font-weight: 600;
   color: #7ef0a0;
+}
+
+.msg-link {
+  color: #8fd3ff;
+  text-decoration: underline;
+  word-break: break-all;
+  pointer-events: auto;
 }
 
 .chat-input-row {

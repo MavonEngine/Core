@@ -1,7 +1,9 @@
 import type { SV_CHAT } from '@template/server/Commands/Server'
+import Game from '@mavonengine/core/Game'
 import BaseNetworkManager from '@mavonengine/core/Networking/Client/NetworkManager'
 import { ClientCommand } from '@template/server/Commands/Client'
 import { ServerCommand } from '@template/server/Commands/Server'
+import ClientServerNpc from './Entities/ServerNpc'
 import useStore from './stores/Game'
 import useChat from './UI/composables/useChat'
 import useNetworkState from './UI/composables/useNetworkState'
@@ -30,7 +32,10 @@ export default class NetworkManager extends BaseNetworkManager {
 
     this.socket.on(ServerCommand.SV_CHAT, (data) => {
       const chat = data as unknown as SV_CHAT
-      this.chat.addMessage(chat.playerName, chat.message, chat.playerId === '')
+      // The server's and NPCs' links can be followed, not those players type
+      const isSystem = chat.playerId === ''
+      const fromNpc = Game.instance().world.entities.items.get(chat.playerId) instanceof ClientServerNpc
+      this.chat.addMessage(chat.playerName, chat.message, isSystem, isSystem || fromNpc)
       // Forward to any listeners (e.g. GameSyncManager for chat bubbles)
       this.trigger(ServerCommand.SV_CHAT, chat)
     })
@@ -56,6 +61,15 @@ export default class NetworkManager extends BaseNetworkManager {
 
   protected override onDisconnect() {
     this.networkState.value.connected = false
+  }
+
+  /** Tell the server the player clicked an NPC: its logic graph answers */
+  sendNpcClick(npcId: string) {
+    this.socket.emit(
+      ClientCommand.CL_NPC_CLICK,
+      { npcId, sequenceId: 0 },
+      { reliable: true },
+    )
   }
 
   sendChat(message: string) {

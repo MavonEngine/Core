@@ -45,6 +45,7 @@
     "@tweakpane/core": "^2.0.5",
     "@tweakpane/plugin-essentials": "^0.2.1",
     "@wavesurfer/react": "^1.0.12",
+    "@xyflow/react": "^12.12.1",
     "react-resizable-panels": "^4.24.1",
     "react-rnd": "^10.5.2",
     "wavesurfer.js": "^8.1.0"

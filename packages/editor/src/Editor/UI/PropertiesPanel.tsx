@@ -133,6 +133,40 @@ function ReadonlyRow({ label, value }: { label: string, value: string }) {
   )
 }
 
+function SelectRow({ label, value, options, onChange, refresh }: {
+  label: string
+  value: string
+  options: { value: string, label: string }[]
+  onChange(v: string): void
+  refresh?(): Promise<unknown>
+}) {
+  // Re-render once the options are refreshed
+  const [, setVersion] = useState(0)
+  useEffect(() => {
+    let live = true
+    refresh?.().then(() => live && setVersion(v => v + 1), () => {})
+    return () => {
+      live = false
+    }
+  }, [refresh])
+
+  // The current value stays choosable even when the list doesn't have it (not loaded yet, or removed)
+  const all = options.some(option => option.value === value)
+    ? options
+    : [
+        ...options,
+        { value, label: value },
+      ]
+  return (
+    <div className={styles.propertyRow}>
+      <span className={styles.propertyLabelWide}>{label}</span>
+      <select className={styles.select} value={value} onChange={e => onChange(e.target.value)}>
+        {all.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </div>
+  )
+}
+
 function SliderRow({ label, value, min, max, step, onChange }: { label: string, value: number, min: number, max: number, step?: number, onChange(v: number): void }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const s = step ?? 1
@@ -414,6 +448,21 @@ export default function PropertiesPanel() {
                   max={field.max}
                   step={field.step}
                   value={field.getValue()}
+                  onChange={(v) => {
+                    field.setValue(v)
+                    tick()
+                  }}
+                />
+              )
+            }
+            if (field.type === 'select') {
+              return (
+                <SelectRow
+                  key={field.label}
+                  label={field.label}
+                  value={field.getValue()}
+                  options={field.options()}
+                  refresh={field.refresh}
                   onChange={(v) => {
                     field.setValue(v)
                     tick()

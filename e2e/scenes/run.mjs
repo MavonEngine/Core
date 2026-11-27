@@ -1,7 +1,8 @@
 /**
  * End-to-end test for scenes, run against packages/multiplayer-template in dev mode:
  *
- * 1. boots the game server, which loads scenes/main.json and builds its tree field and the ground's collider (no rendering)
+ * 1. boots the game server, which loads scenes/main.json and builds its tree field, the ground's collider, the Server NPC
+ *    and the logic graph walking it (no rendering)
  * 2. a player joins: the client loads the same scene (sky, lights, ground) and renders the trees the server sends
  * 3. a second client joins and opens the editor: it keeps the connection and shows the live trees and the player,
  *    but stops being a player itself, so the metrics count one player
@@ -60,7 +61,7 @@ async function main() {
     await run('npm', ['run', 'build'], { cwd: join(template, 'server') })
     server = await startServer({ MAVONENGINE_DEV_CLIENT: '1' })
     await delay(500)
-    check(server.output().includes('Loaded scene main (2 of 4 objects on the server)'), 'the server loads scenes/main.json and builds the tree field and the ground collider')
+    check(server.output().includes('Loaded scene main (4 of 6 objects on the server)'), 'the server loads scenes/main.json and builds the tree field, the ground collider, the Server NPC and its logic graph')
 
     log('\n== player')
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -77,7 +78,7 @@ async function main() {
     watch(player, 'player')
     await joinGame(player, 'Alice')
     const objects = await player.evaluate(() => window.Game.activeScene.getEntries().map(e => [e.data.id, !!e.object]))
-    check(JSON.stringify(objects) === JSON.stringify([['ambient_light', true], ['sun', true], ['ground', true], ['forest', false]]), 'the client builds the lights and ground, not the server\'s tree field')
+    check(JSON.stringify(objects) === JSON.stringify([['ambient_light', true], ['sun', true], ['ground', true], ['forest', false], ['server_npc', false], ['server_npc_logic', true]]), 'the client builds the lights, the ground and the logic graph\'s editor helper, not the server\'s tree field or NPC')
     check(await player.evaluate(() => window.Game.scene.background?.getHexString()) === '87ceeb', 'the sky colour comes from the scene settings')
     await waitFor(player, () => (window.Game.world.entities.items.get('trees')?.instancedMeshes?.[0]?.count ?? 0) === 15)
     check(true, 'the player renders the 15 trees the server sent')
@@ -86,7 +87,8 @@ async function main() {
     const editor = await context.newPage()
     watch(editor, 'editor')
     await joinGame(editor, 'Editor')
-    await waitFor(editor, () => window.Game.world.entities.items.size > 4)
+    // The other player showing up means the server has this client as a player too: it only sends players their state
+    await waitFor(editor, () => [...window.Game.world.entities.items.values()].some(e => e.$typeName === 'player'))
     const before = await (await fetch(`${base}/api/game/metrics`)).json()
     check(before.players.length === 2, 'both clients are players before the editor opens')
 
@@ -98,17 +100,17 @@ async function main() {
     const after = await (await fetch(`${base}/api/game/metrics`)).json()
     check(after.players.length === 1 && after.players[0].displayName === 'Alice', 'the editor is no player in the metrics anymore')
     check(server.output().includes('opened the editor, it is no longer a player'), 'the server logs it')
-    check(await player.evaluate(() => [...window.Game.world.entities.items.values()].filter(e => e.$typeName && e.id !== 'localPlayer').length) === 0, 'the player no longer sees the editor\'s character')
+    check(await player.evaluate(() => [...window.Game.world.entities.items.values()].filter(e => e.$typeName === 'player' && e.id !== 'localPlayer').length) === 0, 'the player no longer sees the editor\'s character')
 
     check(await treeCount(editor) === 15, 'the editor shows the trees the server seeded')
-    await waitFor(editor, () => [...window.Game.world.entities.items.values()].some(e => e.$typeName && !window.Game.activeScene.entryOf(e)))
+    await waitFor(editor, () => [...window.Game.world.entities.items.values()].some(e => e.$typeName === 'player' && !window.Game.activeScene.entryOf(e)))
     check(true, 'the editor shows the other player live, from the server')
-    check(await editor.evaluate(() => window.Game.activeScene.getEntries().filter(e => e.object).length) === 3, 'the editor keeps the scene it was playing in')
+    check(await editor.evaluate(() => window.Game.activeScene.getEntries().filter(e => e.object).length) === 4, 'the editor keeps the scene it was playing in')
     check(await editor.evaluate(() => window.Game.activeScene.isDirty()) === false, 'opening the editor leaves the scene unchanged')
     // The console errors so far may be harmless (a missing favicon), so they are only reported if the UI never shows up
     await (await waitForEditorUi(editor, 'Scene', [], errors)).click()
     await editor.getByText('Forest').waitFor()
-    check(await editor.getByText('server', { exact: true }).isVisible(), 'the Scene panel marks the tree field as server-built')
+    check(await editor.getByText('server', { exact: true }).count() === 2, 'the Scene panel marks the tree field and the Server NPC as server-built')
     await editor.screenshot({ path: join(screenshots, '1-editor.png') })
 
     log('\n== save')
@@ -122,7 +124,7 @@ async function main() {
     const saved = JSON.parse(readFileSync(sceneFile, 'utf8'))
     const forest = saved.objects.find(o => o.id === 'forest')
     check(forest.props.count === 40, 'the save writes the new tree count to scenes/main.json')
-    check(saved.objects.length === 4 && saved.settings.fog.density === 0.012, 'the rest of the scene is saved as it was')
+    check(saved.objects.length === 6 && saved.settings.fog.density === 0.012, 'the rest of the scene is saved as it was')
 
     await waitFor(player, () => (window.Game.world.entities.items.get('trees')?.instancedMeshes?.[0]?.count ?? 0) === 40)
     check(true, 'the server reloads the scene and the player gets 40 trees')

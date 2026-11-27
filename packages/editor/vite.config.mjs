@@ -9,6 +9,7 @@ import glsl from 'vite-plugin-glsl'
 const EXTENDS_RE = /\bclass\s+\w+\s+extends\s+(?:ParticleEffect|Emitter)\b/
 const ASSETS_RE = /Assets\.tsx$/
 const TS_EXT_RE = /\.ts$/
+const WITH_SELECTOR_RE = /^use-sync-external-store\/shim\/with-selector(?:\.js)?$/
 // Peer dependencies the game provides. A copy of one in the bundle means an `external` entry misses it
 const PEER_IN_BUNDLE_RE = /[\\/]node_modules[\\/](?:react|react-dom|three|@mavonengine[\\/]core)[\\/]/
 // Rolldown's error for a CommonJS require() of an external it couldn't turn into an import.
@@ -46,11 +47,21 @@ async function findParticleFiles(projectRoot) {
 
 export default defineConfig(({ command }) => ({
   resolve: {
-    alias: command === 'serve'
-      ? {
-          '@mavonengine/core': resolve(coreRoot, 'src'),
-        }
-      : {},
+    alias: [
+      ...(command === 'serve'
+        ? [
+            {
+              find: '@mavonengine/core',
+              replacement: resolve(coreRoot, 'src'),
+            },
+          ]
+        : []),
+      // CommonJS that requires react, which the bundle keeps external: see the shim
+      {
+        find: WITH_SELECTOR_RE,
+        replacement: resolve(editorRoot, 'src/shims/useSyncExternalStoreWithSelector.ts'),
+      },
+    ],
   },
   plugins: [
     (() => {

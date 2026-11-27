@@ -1,0 +1,690 @@
+{
+  "version": 1,
+  "kind": "logic",
+  "name": "server-npc",
+  "nodes": [
+    {
+      "id": "group_start",
+      "type": "graph.group",
+      "position": [
+        0,
+        0
+      ],
+      "values": {
+        "name": "Remember where it started",
+        "width": 740,
+        "height": 410
+      }
+    },
+    {
+      "id": "group_walk",
+      "type": "graph.group",
+      "position": [
+        0,
+        480
+      ],
+      "values": {
+        "name": "Walk",
+        "width": 960,
+        "height": 610
+      }
+    },
+    {
+      "id": "group_turn",
+      "type": "graph.group",
+      "position": [
+        1040,
+        480
+      ],
+      "values": {
+        "name": "Turn around",
+        "width": 1000,
+        "height": 720
+      }
+    },
+    {
+      "id": "group_clicked",
+      "type": "graph.group",
+      "position": [
+        0,
+        1260
+      ],
+      "values": {
+        "name": "Answer clicks",
+        "width": 880,
+        "height": 260
+      }
+    },
+    {
+      "id": "about",
+      "type": "graph.comment",
+      "position": [
+        20,
+        46
+      ],
+      "values": {
+        "text": "Runs on the server, with the Server NPC as Self: the Logic Graph object in the scene names it as its target. On Start remembers where the NPC started along x, so it knows how far it has walked.",
+        "width": 700,
+        "height": 80
+      },
+      "group": "group_start"
+    },
+    {
+      "id": "about_walking",
+      "type": "graph.comment",
+      "position": [
+        20,
+        526
+      ],
+      "values": {
+        "text": "Every tick: walk along x by direction \u00d7 speed \u00d7 delta, then face that way. dir, speed and range are this graph's parameters. Rotation y follows the players' convention: \u221290\u00b0 (\u22121.5708) faces +x, so yaw = dir \u00d7 \u22121.5708.",
+        "width": 920,
+        "height": 90
+      },
+      "group": "group_walk"
+    },
+    {
+      "id": "about_turning",
+      "type": "graph.comment",
+      "position": [
+        1060,
+        526
+      ],
+      "values": {
+        "text": "Turn around: (x \u2212 start) \u00d7 dir is how far the NPC is past its start in the direction it walks. Once that reaches range, Branch flips dir. The same test covers both ends.",
+        "width": 960,
+        "height": 90
+      },
+      "group": "group_turn"
+    },
+    {
+      "id": "about_clicked",
+      "type": "graph.comment",
+      "position": [
+        20,
+        1306
+      ],
+      "values": {
+        "text": "Clicked: when a player clicks the NPC, the server sends `clicked` to the graphs acting on it. Cooldown lets it answer at most once every 10 seconds (clicks sooner do nothing), then Say in Chat posts as the NPC.",
+        "width": 840,
+        "height": 80
+      },
+      "group": "group_clicked"
+    },
+    {
+      "id": "start",
+      "type": "event.start",
+      "position": [
+        20,
+        150
+      ],
+      "group": "group_start"
+    },
+    {
+      "id": "start_position",
+      "type": "entity.position",
+      "position": [
+        20,
+        240
+      ],
+      "group": "group_start"
+    },
+    {
+      "id": "start_split",
+      "type": "vector.split",
+      "position": [
+        250,
+        240
+      ],
+      "group": "group_start"
+    },
+    {
+      "id": "remember_start",
+      "type": "variable.set",
+      "position": [
+        480,
+        150
+      ],
+      "values": {
+        "name": "startX"
+      },
+      "group": "group_start"
+    },
+    {
+      "id": "tick",
+      "type": "event.tick",
+      "position": [
+        20,
+        640
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "direction",
+      "type": "variable.get",
+      "position": [
+        20,
+        790
+      ],
+      "values": {
+        "name": "dir"
+      },
+      "group": "group_walk"
+    },
+    {
+      "id": "speed",
+      "type": "input.parameter",
+      "position": [
+        20,
+        890
+      ],
+      "values": {
+        "name": "speed"
+      },
+      "group": "group_walk"
+    },
+    {
+      "id": "velocity",
+      "type": "math.multiply",
+      "position": [
+        240,
+        790
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "distance",
+      "type": "math.multiply",
+      "position": [
+        440,
+        790
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "step",
+      "type": "vector.combine3",
+      "position": [
+        640,
+        790
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "walk",
+      "type": "entity.addPosition",
+      "position": [
+        300,
+        640
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "yaw",
+      "type": "math.multiply",
+      "position": [
+        440,
+        940
+      ],
+      "values": {
+        "b": -1.5708
+      },
+      "group": "group_walk"
+    },
+    {
+      "id": "facing",
+      "type": "vector.combine3",
+      "position": [
+        640,
+        940
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "face",
+      "type": "entity.setRotation",
+      "position": [
+        620,
+        640
+      ],
+      "group": "group_walk"
+    },
+    {
+      "id": "position",
+      "type": "entity.position",
+      "position": [
+        1060,
+        920
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "position_split",
+      "type": "vector.split",
+      "position": [
+        1260,
+        920
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "start_x",
+      "type": "variable.get",
+      "position": [
+        1260,
+        1080
+      ],
+      "values": {
+        "name": "startX"
+      },
+      "group": "group_turn"
+    },
+    {
+      "id": "offset",
+      "type": "math.subtract",
+      "position": [
+        1460,
+        920
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "ahead",
+      "type": "math.multiply",
+      "position": [
+        1640,
+        920
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "range",
+      "type": "input.parameter",
+      "position": [
+        1640,
+        1040
+      ],
+      "values": {
+        "name": "range"
+      },
+      "group": "group_turn"
+    },
+    {
+      "id": "past_end",
+      "type": "logic.compare",
+      "position": [
+        1820,
+        920
+      ],
+      "values": {
+        "op": ">="
+      },
+      "group": "group_turn"
+    },
+    {
+      "id": "turn_around",
+      "type": "flow.branch",
+      "position": [
+        1060,
+        640
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "reversed",
+      "type": "math.negate",
+      "position": [
+        1320,
+        790
+      ],
+      "group": "group_turn"
+    },
+    {
+      "id": "reverse",
+      "type": "variable.set",
+      "position": [
+        1320,
+        640
+      ],
+      "values": {
+        "name": "dir"
+      },
+      "group": "group_turn"
+    },
+    {
+      "id": "clicked",
+      "type": "event.message",
+      "position": [
+        20,
+        1410
+      ],
+      "values": {
+        "name": "clicked"
+      },
+      "group": "group_clicked"
+    },
+    {
+      "id": "cooldown",
+      "type": "flow.cooldown",
+      "position": [
+        280,
+        1410
+      ],
+      "values": {
+        "seconds": 10
+      },
+      "group": "group_clicked"
+    },
+    {
+      "id": "greet",
+      "type": "chat.say",
+      "position": [
+        520,
+        1410
+      ],
+      "values": {
+        "message": "Hi! I'm an NPC controlled by a logic graph running on the server. See how logic graphs work: https://mavonengine.com/logic-graphs"
+      },
+      "group": "group_clicked"
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "node": "start",
+        "port": "then"
+      },
+      "to": {
+        "node": "remember_start",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "start_position",
+        "port": "position"
+      },
+      "to": {
+        "node": "start_split",
+        "port": "vector"
+      }
+    },
+    {
+      "from": {
+        "node": "start_split",
+        "port": "x"
+      },
+      "to": {
+        "node": "remember_start",
+        "port": "value"
+      }
+    },
+    {
+      "from": {
+        "node": "tick",
+        "port": "then"
+      },
+      "to": {
+        "node": "walk",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "walk",
+        "port": "then"
+      },
+      "to": {
+        "node": "face",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "face",
+        "port": "then"
+      },
+      "to": {
+        "node": "turn_around",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "turn_around",
+        "port": "true"
+      },
+      "to": {
+        "node": "reverse",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "direction",
+        "port": "value"
+      },
+      "to": {
+        "node": "velocity",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "speed",
+        "port": "value"
+      },
+      "to": {
+        "node": "velocity",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "velocity",
+        "port": "result"
+      },
+      "to": {
+        "node": "distance",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "tick",
+        "port": "delta"
+      },
+      "to": {
+        "node": "distance",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "distance",
+        "port": "result"
+      },
+      "to": {
+        "node": "step",
+        "port": "x"
+      }
+    },
+    {
+      "from": {
+        "node": "step",
+        "port": "vector"
+      },
+      "to": {
+        "node": "walk",
+        "port": "amount"
+      }
+    },
+    {
+      "from": {
+        "node": "direction",
+        "port": "value"
+      },
+      "to": {
+        "node": "yaw",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "yaw",
+        "port": "result"
+      },
+      "to": {
+        "node": "facing",
+        "port": "y"
+      }
+    },
+    {
+      "from": {
+        "node": "facing",
+        "port": "vector"
+      },
+      "to": {
+        "node": "face",
+        "port": "rotation"
+      }
+    },
+    {
+      "from": {
+        "node": "position",
+        "port": "position"
+      },
+      "to": {
+        "node": "position_split",
+        "port": "vector"
+      }
+    },
+    {
+      "from": {
+        "node": "position_split",
+        "port": "x"
+      },
+      "to": {
+        "node": "offset",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "start_x",
+        "port": "value"
+      },
+      "to": {
+        "node": "offset",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "offset",
+        "port": "result"
+      },
+      "to": {
+        "node": "ahead",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "direction",
+        "port": "value"
+      },
+      "to": {
+        "node": "ahead",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "ahead",
+        "port": "result"
+      },
+      "to": {
+        "node": "past_end",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "range",
+        "port": "value"
+      },
+      "to": {
+        "node": "past_end",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "past_end",
+        "port": "result"
+      },
+      "to": {
+        "node": "turn_around",
+        "port": "condition"
+      }
+    },
+    {
+      "from": {
+        "node": "direction",
+        "port": "value"
+      },
+      "to": {
+        "node": "reversed",
+        "port": "x"
+      }
+    },
+    {
+      "from": {
+        "node": "reversed",
+        "port": "result"
+      },
+      "to": {
+        "node": "reverse",
+        "port": "value"
+      }
+    },
+    {
+      "from": {
+        "node": "clicked",
+        "port": "then"
+      },
+      "to": {
+        "node": "cooldown",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "cooldown",
+        "port": "then"
+      },
+      "to": {
+        "node": "greet",
+        "port": "run"
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "name": "dir",
+      "type": "float",
+      "default": 1
+    },
+    {
+      "name": "speed",
+      "type": "float",
+      "default": 2
+    },
+    {
+      "name": "range",
+      "type": "float",
+      "default": 4
+    }
+  ]
+}

@@ -4,16 +4,18 @@ import type { EnabledPlugin } from './ProjectConfig.js'
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import process from 'node:process'
+import { graphFilePath, readGraphFile, resolveGraphFile, writeGraphFile } from '../Graph/loadGraphFile.js'
+import { GRAPH_NAME_RE, GRAPHS_DIR, isFunctionGraph } from '../Graph/types.js'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
 import { DevPluginHost } from './DevPluginHost.js'
 import { fromLocalhost, fromThisPage, readBody } from './devRequest.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
-import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
-import { pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
+import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginGraphDirs, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
+import { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
-export { PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
+export { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
@@ -36,6 +38,9 @@ if (import.meta.hot)
 const MAX_BODY_BYTES = 4096
 const MAX_SCENE_BYTES = 20 * 1024 * 1024
 const SCENE_URL_RE = new RegExp(`^/${SCENES_DIR}/([\\w-]+)\\.json$`)
+const GRAPH_EXT = '.graph.json'
+// `/graphs/<name>.graph.json` for the project's, `/graphs/<package>/<name>.graph.json` for a plugin's
+const GRAPH_URL_RE = new RegExp(`^/${GRAPHS_DIR}/(?:((?:@[\\w.-]+/)?[\\w.-]+)/)?([\\w-]+)\\.graph\\.json$`)
 
 const CONTENT_TYPES: Record<string, string> = {
   '.glb': 'model/gltf-binary',
@@ -288,6 +293,19 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         if ((req.method === 'GET' || req.method === 'HEAD') && SCENE_URL_RE.test(url) && serveScene(url, req, res))
           return
 
+        if (req.method === 'POST' && url === GRAPH_SAVE_PATH) {
+          handleGraphSave(req, res)
+          return
+        }
+
+        if (req.method === 'GET' && url === GRAPHS_LIST_PATH) {
+          handleGraphList(res)
+          return
+        }
+
+        if ((req.method === 'GET' || req.method === 'HEAD') && GRAPH_URL_RE.test(url) && serveGraph(url, req, res))
+          return
+
         if ((req.method === 'GET' || req.method === 'HEAD') && url.startsWith('/plugins/') && servePluginAsset(url, req, res))
           return
 
@@ -321,6 +339,32 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
             ? ''
             : 's'}`)
         }
+      }
+
+      // The project's graphs, and the plugins' under graphs/<package>/
+      const shipped = [
+        {
+          dir: graphsDir(),
+          to: GRAPHS_DIR,
+          files: graphFiles(),
+        },
+        ...pluginGraphs().map(plugin => ({ dir: plugin.dir, to: `${GRAPHS_DIR}/${plugin.package}`, files: plugin.files })),
+      ]
+      let graphCount = 0
+      for (const { dir, to, files } of shipped) {
+        for (const file of files) {
+          this.emitFile({
+            type: 'asset',
+            fileName: `${to}/${file}`,
+            source: readFileSync(join(dir, file)),
+          })
+          graphCount++
+        }
+      }
+      if (graphCount) {
+        config.logger.info(`[mavonengine] Shipping ${graphCount} graph${graphCount === 1
+          ? ''
+          : 's'}`)
       }
 
       const root = projectRoot()
@@ -468,6 +512,134 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     else
       createReadStream(file).pipe(res)
     return true
+  }
+
+  /** `<project root>/graphs`, the Vite root when there is no mavonengine.json */
+  function graphsDir() {
+    return join(projectRoot() ?? config.root, GRAPHS_DIR)
+  }
+
+  /** The graph files' names in `dir` (graphs/ by default), e.g. `lava.graph.json` */
+  function graphFiles(dir = graphsDir()): string[] {
+    if (!existsSync(dir))
+      return []
+    return readdirSync(dir)
+      .filter(file => file.endsWith(GRAPH_EXT) && GRAPH_NAME_RE.test(file.slice(0, -GRAPH_EXT.length)))
+      .sort()
+  }
+
+  /** The graphs the enabled plugins ship in their graphs/ */
+  function pluginGraphs(): { package: string, dir: string, files: string[] }[] {
+    const root = projectRoot()
+    return root
+      ? pluginGraphDirs(root).map(plugin => ({
+          ...plugin,
+          files: graphFiles(plugin.dir),
+        }))
+      : []
+  }
+
+  /** Read from disk on every request, like scenes, so the game gets what the editor saved last */
+  function serveGraph(url: string, req: IncomingMessage, res: ServerResponse): boolean {
+    const [, plugin, name] = GRAPH_URL_RE.exec(url)!
+    let file: string
+    try {
+      file = resolveGraphFile(dirname(graphsDir()), plugin
+        ? `${plugin}:${name}`
+        : name!)
+    }
+    catch {
+      return false
+    }
+    if (!existsSync(file))
+      return false
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Length', statSync(file).size)
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method === 'HEAD')
+      res.end()
+    else
+      createReadStream(file).pipe(res)
+    return true
+  }
+
+  function handleGraphList(res: ServerResponse) {
+    const listing = (dir: string, file: string, plugin?: string) => {
+      try {
+        const graph = readGraphFile(join(dir, file))
+        const name = file.slice(0, -GRAPH_EXT.length)
+        // A function graph is used as a node in others
+        const fn = isFunctionGraph(graph)
+          ? { function: true }
+          : {}
+        return [
+          plugin
+            ? {
+                name: `${plugin}:${name}`,
+                kind: graph.kind,
+                plugin,
+                ...fn,
+              }
+            : { name, kind: graph.kind, ...fn },
+        ]
+      }
+      catch (err) {
+        config.logger.warn(`[mavonengine] Skipping graph ${plugin
+          ? `${plugin}:`
+          : ''}${file}: ${(err as Error).message}`)
+        return []
+      }
+    }
+    const graphs = [
+      ...graphFiles().flatMap(file => listing(graphsDir(), file)),
+      ...pluginGraphs().flatMap(plugin => plugin.files.flatMap(file => listing(plugin.dir, file, plugin.package))),
+    ]
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end(JSON.stringify({ graphs }))
+  }
+
+  function handleGraphSave(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(body))
+    }
+
+    if (!fromLocalhost(req)) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    readBody(req, MAX_SCENE_BYTES).then((body) => {
+      let name: unknown
+      let graph: unknown
+      try {
+        ({ name, graph } = JSON.parse(body))
+      }
+      catch {
+        reply(400, { error: 'Expected a JSON body' })
+        return
+      }
+
+      if (typeof name !== 'string' || !GRAPH_NAME_RE.test(name)) {
+        reply(400, { error: 'Expected { name, graph } with a name of letters, digits, - and _' })
+        return
+      }
+
+      try {
+        const file = graphFilePath(dirname(graphsDir()), name)
+        const written = writeGraphFile(file, graph)
+        config.logger.info(`[mavonengine] Saved graph ${name} (${written.nodes.length} nodes) to ${file}`)
+        reply(200, { saved: true, file, graph: written })
+      }
+      catch (err) {
+        reply(400, { error: (err as Error).message })
+      }
+    }, (err: Error) => reply(413, { error: err.message }))
   }
 
   function handleSceneSave(req: IncomingMessage, res: ServerResponse) {

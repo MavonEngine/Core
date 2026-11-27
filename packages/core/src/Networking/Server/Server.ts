@@ -22,11 +22,15 @@ import type { DatabaseSource } from './Stats/DatabaseInspector'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
 import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
-import { watch } from 'node:fs'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { existsSync, watch } from 'node:fs'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { readGraph } from '../../Graph/loadGraphFile'
+import { logicGraphUsers, registerLogicGraphServerObject, reloadLogicGraph, setGraphSource } from '../../Graph/Logic/logicGraphObject'
+import { pluginNodeType, registerNode } from '../../Graph/NodeRegistry'
+import { GRAPHS_DIR } from '../../Graph/types'
 import { currentNotifier, setNotifier } from '../../Notifications/Notifiable'
 import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
 import { tableName } from '../../Plugins/Database/tables'
@@ -178,6 +182,8 @@ const MAX_SYNC_EVENT_IDS = 20
 
 const vec = ({ x, y, z }: { x: number, y: number, z: number }) => ({ x, y, z })
 
+const GRAPH_FILE_EXT = '.graph.json'
+
 export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource, NetDebugSource, DatabaseSource {
   game: BaseGame
 
@@ -221,6 +227,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
   private sceneWatcher?: FSWatcher
+  private graphWatcher?: FSWatcher
 
   /** File of the scene last opened with `openScene()` */
   activeSceneFile?: string
@@ -267,6 +274,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
     registerPrimitiveServerObjects()
+    registerLogicGraphServerObject()
+    // Logic graphs come from the project's graphs/ and the plugins', read fresh each time a scene builds them
+    setGraphSource(async (name) => {
+      const root = this.projectRoot
+      if (!root)
+        throw new Error('Set the server\'s `root` option to load logic graphs')
+      return readGraph(root, name)
+    })
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
     this.gameSocket = geckos({
@@ -917,6 +932,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
+      registerNode: (definition) => {
+        const type = pluginNodeType(loaded.package, definition.type)
+        registerNode({ ...definition, type, plugin: loaded.package })
+        return type
+      },
     }), this.logger, 'server')
     return host
   }
@@ -1312,8 +1332,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
-    if (options.watch ?? !!this.options.client?.dev)
+    if (options.watch ?? !!this.options.client?.dev) {
       this.watchScene(file)
+      this.watchGraphs()
+    }
 
     return loaded
   }
@@ -1354,6 +1376,42 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
+   * Logic graphs running here pick up their graph file's changes (the editor saved it), from the start. Only the
+   * project's graphs/: plugins' graphs change when the plugin is updated, which restarts the server anyway
+   */
+  private watchGraphs() {
+    const root = this.projectRoot
+    if (this.graphWatcher || !root)
+      return
+    const dir = join(root, GRAPHS_DIR)
+    if (!existsSync(dir))
+      return
+
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
+    this.graphWatcher = watch(dir, (_event, changed) => {
+      if (!changed?.endsWith(GRAPH_FILE_EXT))
+        return
+      const name = changed.slice(0, -GRAPH_FILE_EXT.length)
+      clearTimeout(timers.get(name))
+      timers.set(name, setTimeout(() => {
+        timers.delete(name)
+        if (!logicGraphUsers(name))
+          return
+        try {
+          const reached = reloadLogicGraph(name, readGraph(root, name))
+          this.logger.info(`Logic graph ${name} changed, restarted it in ${reached} object${reached === 1
+            ? ''
+            : 's'}`)
+        }
+        catch (err) {
+          this.logger.error(`Logic graph ${name} changed but can't run, keeping the current one: ${(err as Error).message}`)
+        }
+      }, 50))
+    })
+    this.graphWatcher.on('error', err => this.logger.warn(`Stopped watching graphs: ${err.message}`))
+  }
+
+  /**
    * Stop the metric sampling and logging timers, the scene watcher, the queue and the plugins, then close the database
    * once the running jobs and plugins' `destroy()` finished.
    * The returned promise settles once the database is closed, and never rejects.
@@ -1368,6 +1426,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
+    this.graphWatcher?.close()
+    this.graphWatcher = undefined
 
     const draining = this.queue.stop()
 

@@ -6,9 +6,15 @@ import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
 import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
+import { registerChatNodes } from '@template/server/Base/Npc/sayInChat'
 import { ServerCommand } from '@template/server/Commands/Server'
+import { Vector2 } from 'three'
 import Character from './Entities/Player'
+import ClientServerNpc from './Entities/ServerNpc'
 import Trees from './World/Trees'
+
+// The Say in Chat node: graphs using it run on the server, but the editor needs to know it to edit them
+registerChatNodes()
 
 export default class GameSyncManager implements GameObjectInterface {
   private networkManager: NetworkManager
@@ -44,7 +50,7 @@ export default class GameSyncManager implements GameObjectInterface {
         ? this.playerController?.player
         : Game.instance().world.entities.items.get(chat.playerId)
 
-      if (entity instanceof Character) {
+      if (entity instanceof Character || entity instanceof ClientServerNpc) {
         entity.showChatBubble(chat.message)
       }
     })
@@ -52,9 +58,91 @@ export default class GameSyncManager implements GameObjectInterface {
     this.networkManager.socket.on(ServerCommand.SV_REMOVE_ENTITY, (data: any) => {
       this.handleEntityRemove(data.id)
     })
+
+    this.listenForNpcClicks()
+  }
+
+  private readonly abort = new AbortController()
+
+  /** The NPC under a point of the page, if any */
+  private npcAt(clientX: number, clientY: number): ClientServerNpc | undefined {
+    const canvas = Game.instance().canvas
+    const rect = canvas.getBoundingClientRect()
+    const pointer = new Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    const raycaster = Game.instance().rayCaster
+    raycaster.setFromCamera(pointer, Game.instance().camera.instance)
+    const npcs = [...ClientServerNpc.all].filter(npc => npc.hitArea)
+    const hit = raycaster.intersectObjects(npcs.map(npc => npc.hitArea!), false)[0]
+    return hit && npcs.find(candidate => candidate.hitArea === hit.object)
+  }
+
+  /**
+   * A click on an NPC (not a drag, which orbits the camera) tells the server, whose logic graph for it answers.
+   * Over an NPC the cursor is a pointer, also when it walks under a still mouse. Not in the editor, where clicks
+   * select objects
+   */
+  private listenForNpcClicks() {
+    const canvas = Game.instance().canvas
+    let down: { x: number, y: number } | undefined
+    let pointer: { x: number, y: number } | undefined
+    let checkedAt = 0
+
+    // Set every time rather than on changes only: anything else that sets the canvas' cursor doesn't leave it wrong
+    const setHovering = (value: boolean) => {
+      if (value && canvas.style.cursor !== 'pointer')
+        canvas.style.cursor = 'pointer'
+      else if (!value && canvas.style.cursor === 'pointer')
+        canvas.style.cursor = ''
+    }
+    const checkHover = () => {
+      checkedAt = performance.now()
+      setHovering(!!pointer && !down && !Game.instance().editor && !!this.npcAt(pointer.x, pointer.y))
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY }
+      setHovering(false)
+    }, { signal: this.abort.signal })
+    canvas.addEventListener('pointermove', (e) => {
+      pointer = { x: e.clientX, y: e.clientY }
+      // No button held: not dragging, whatever happened to the pointerup
+      if (e.buttons === 0)
+        down = undefined
+    }, { signal: this.abort.signal })
+    // A drag that ends off the canvas, or is cancelled, still ends
+    for (const type of ['pointerup', 'pointercancel', 'blur'] as const)
+      window.addEventListener(type, () => down = undefined, { signal: this.abort.signal })
+    canvas.addEventListener('pointerleave', () => {
+      pointer = undefined
+      setHovering(false)
+    }, { signal: this.abort.signal })
+    canvas.addEventListener('pointerup', (e) => {
+      const start = down
+      down = undefined
+      if (!start || Game.instance().editor || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5)
+        return
+      const npc = this.npcAt(e.clientX, e.clientY)
+      if (npc)
+        this.networkManager.sendNpcClick(npc.id)
+    }, { signal: this.abort.signal })
+
+    // Ten times a second is plenty for a cursor, and the raycast against a skinned model isn't free
+    const onFrame = () => {
+      if (performance.now() - checkedAt >= 100)
+        checkHover()
+    }
+    Game.instance().on('beforeRender', onFrame)
+    this.abort.signal.addEventListener('abort', () => {
+      Game.instance().off('beforeRender', onFrame)
+      canvas.style.cursor = ''
+    })
   }
 
   destroy(): void {
+    this.abort.abort()
     this.trees?.destroy()
     this.trees = null
     this.networkManager.destroy()

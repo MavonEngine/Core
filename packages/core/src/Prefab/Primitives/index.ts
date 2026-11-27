@@ -1,4 +1,4 @@
-import type { BufferGeometry, Quaternion, Vector3 } from 'three'
+import type { BufferGeometry, Material, Quaternion, Vector3 } from 'three'
 import type { PropertyField } from '../../Editor/EditorHelper'
 import type { GeometryParams, PrimitiveDefinition, PrimitiveName, PrimitiveOptions, PrimitivePivot } from './definitions'
 import {
@@ -9,6 +9,7 @@ import {
 } from 'three'
 import { WithEditorHelper } from '../../Editor/WithEditorHelper'
 import Game from '../../Game'
+import { materialGraphs } from '../../Graph/Material/MaterialGraphs'
 import GameObject from '../../World/GameObject'
 import { PrimitiveCollider } from './collider'
 import { buildPrimitiveGeometry, PRIMITIVE_DEFINITIONS, primitiveCollides, resolveParams } from './definitions'
@@ -24,6 +25,9 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
   private _collision: boolean
   /** Set while the primitive collides and the game has a physics world */
   collider?: PrimitiveCollider
+  /** Its own material, drawn while it has no material graph */
+  readonly baseMaterial: Material
+  private _materialGraph?: string
   /** What the collider was last built from, to notice when it needs moving or reshaping */
   private colliderState?: { geometry: BufferGeometry, position: Vector3, quaternion: Quaternion, scale: Vector3 }
 
@@ -37,11 +41,13 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
     this.instance = definition.lines
       ? new LineSegments(geometry, new LineBasicMaterial({ color: 0x4A9EFF }))
       : new Mesh(geometry, new MeshStandardMaterial({ color: 0x888888 }))
+    this.baseMaterial = this.instance.material as Material
     this.instance.position.copy(position)
     Game.instance().scene.add(this.instance)
     this.registerEditorHelper(position, definition.label, {
       onMove: (delta: Vector3) => this.instance.position.add(delta),
       properties: [
+        ...this.materialGraphProperty(),
         ...this.materialProperties(),
         this.pivotProperty(),
         ...this.collisionProperty(),
@@ -167,6 +173,54 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
     this.setParams({ [key]: value })
   }
 
+  /** The material graph it is drawn with, see `setMaterialGraph()` */
+  get materialGraph(): string | undefined {
+    return this._materialGraph
+  }
+
+  /**
+   * Draw it with a material graph from `graphs/<name>.graph.json`, or with its own material again without a name.
+   * Its own material's settings (color, roughness...) are kept for when the graph is taken off
+   */
+  setMaterialGraph(name?: string): void {
+    const mesh = this.instance
+    if (!(mesh instanceof Mesh) || name === this._materialGraph)
+      return
+
+    this._materialGraph = name || undefined
+    if (!name) {
+      materialGraphs.release(mesh)
+      mesh.material = this.baseMaterial
+      return
+    }
+
+    materialGraphs.apply(mesh, name).catch((err: Error) => {
+      Game.instance().logger?.warn(`${this.definition.label}: could not use material graph "${name}": ${err.message}`)
+      if (this._materialGraph === name)
+        mesh.material = this.baseMaterial
+    })
+  }
+
+  private materialGraphProperty(): PropertyField[] {
+    if (this.definition.lines)
+      return []
+    return [
+      {
+        type: 'select',
+        label: 'material graph',
+        options: () => [
+          { value: '', label: 'None' },
+          ...materialGraphs.list
+            .filter(graph => graph.kind === 'material' && !graph.function)
+            .map(graph => ({ value: graph.name, label: graph.name })),
+        ],
+        getValue: () => this._materialGraph ?? '',
+        setValue: (v: string) => this.setMaterialGraph(v || undefined),
+        refresh: () => materialGraphs.refreshList(),
+      },
+    ]
+  }
+
   private materialProperties(): PropertyField[] {
     const mat = this.instance.material
     if (!(mat instanceof MeshStandardMaterial))
@@ -234,11 +288,10 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
 
   destroy(): void {
     this.instance.geometry.dispose()
-    const material = this.instance.material
-    for (const m of Array.isArray(material)
-      ? material
-      : [material])
-      m.dispose()
+    // A material graph's material is shared, only its own is disposed
+    if (this.instance instanceof Mesh)
+      materialGraphs.release(this.instance)
+    this.baseMaterial.dispose()
     this.removeCollider()
     Game.instance().scene.remove(this.instance)
     super.destroy()

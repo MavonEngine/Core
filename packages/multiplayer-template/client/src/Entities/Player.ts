@@ -18,7 +18,10 @@ export default class Character extends BasePlayer {
     super(id, spawn)
     this.isLocalPlayer = isLocalPlayer
 
-    this.graphicalComponent = new PlayerGraphicsComponent(this)
+    this.graphicalComponent = new PlayerGraphicsComponent(this, {
+      // Re-enter the current state so animations start now that the model is ready
+      onReady: () => this.state.at(-1)?.enter(),
+    })
     this.graphicalComponent.init()
 
     this.label = new PlayerLabel(this, isLocalPlayer ? 'You' : 'Player', isLocalPlayer)

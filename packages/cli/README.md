@@ -512,6 +512,41 @@ export default defineServerPlugin({
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
 
+### Graphs and nodes
+
+A plugin can ship material and logic graphs: put `<name>.graph.json` files (made in the editor's Graphs view, then copied over) in a `graphs/` directory in the package. They go by `<package>:<name>`, e.g. `my-custom-plugin:ocean`, wherever a graph is picked: a primitive's material graph, a Logic Graph object's graph. They are served at `/graphs/<package>/<name>.graph.json`, shipped in every release, and the server reads them from the package. The editor lists them under the project's graphs, read-only: *Copy to project* makes an editable copy.
+
+It can also add node types, from `setup`. Their key in graph files is `<package>:<type>`, which `registerNode` returns. Material nodes take their TSL implementation as a second argument; logic nodes need registering in the server entry too, for graphs that run there:
+
+```ts
+// client.ts
+import { defineClientPlugin } from '@mavonengine/core/Plugins/types'
+import { sin, time } from 'three/tsl'
+
+export default defineClientPlugin({
+  setup(ctx) {
+    ctx.registerNode({
+      type: 'wobble',
+      label: 'Wobble',
+      category: 'Math',
+      kinds: ['material', 'logic'],
+      inputs: {
+        speed: { type: 'float', default: 1 }
+      },
+      outputs: {
+        value: { type: 'float' }
+      },
+      // In logic graphs
+      eval: ({ speed }, { time }) => ({
+        value: Math.sin(time * Number(speed))
+      }),
+    }, ({ speed }) => ({
+      value: sin(time.mul(speed))
+    }))
+  },
+})
+```
+
 ### Dev entries
 
 A plugin's `dev` entry runs in the client's Vite dev server, only in dev: tooling for the editor that has to work with the project's files, like downloading something and writing it into `client/public/`. It is never part of a build, and the game server never loads it.
