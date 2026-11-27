@@ -71,6 +71,8 @@ export default function CanvasToolbar() {
   const [shadeMode, setShadeMode] = useState<ShadeMode>('solid')
   const [overlaysOpen, setOverlaysOpen] = useState(false)
   const [showHelpers, setShowHelpers] = useState(true)
+  const physicsAvailable = window.Game.editor?.physicsAvailable ?? false
+  const [showPhysics, setShowPhysics] = useState(() => window.Game.editor?.showPhysics ?? false)
   const overlaysRef = useRef<HTMLDivElement>(null)
 
   const setMode = (mode: TransformControlsMode) => {
@@ -86,6 +88,11 @@ export default function CanvasToolbar() {
   const toggleShowHelpers = (value: boolean) => {
     setShowHelpers(value)
     window.Game.editor?.setShowHelpers(value)
+  }
+
+  const toggleShowPhysics = (value: boolean) => {
+    setShowPhysics(value)
+    window.Game.editor?.setShowPhysics(value)
   }
 
   useEffect(() => {
@@ -150,6 +157,21 @@ export default function CanvasToolbar() {
                 onChange={e => toggleShowHelpers(e.target.checked)}
               />
               Show Helpers
+            </label>
+            <div className={styles.overlaySection}>Physics</div>
+            <label
+              className={styles.overlayRow}
+              title={physicsAvailable
+                ? 'Draw the physics world\'s colliders'
+                : 'The game has no physics world'}
+            >
+              <input
+                type="checkbox"
+                checked={showPhysics}
+                disabled={!physicsAvailable}
+                onChange={e => toggleShowPhysics(e.target.checked)}
+              />
+              Show Physics
             </label>
           </div>
         )}

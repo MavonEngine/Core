@@ -35,6 +35,10 @@ export default interface IEditor {
   addLightHelper(helper: Object3D): void
   removeLightHelper(helper: Object3D): void
   setShowHelpers(visible: boolean): void
+  /** Whether the game has a physics world to show */
+  readonly physicsAvailable: boolean
+  readonly showPhysics: boolean
+  setShowPhysics(visible: boolean): void
   on(event: string, callback: (event?: any) => void): void
   off(event: string, callback: (event?: any) => void): void
   trigger(name: string, event?: any): void

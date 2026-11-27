@@ -414,6 +414,20 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.lightHelpers = this.lightHelpers.filter(h => h !== helper)
   }
 
+  /** Whether the game has a physics world whose colliders can be shown */
+  get physicsAvailable(): boolean {
+    return !!window.Game.physicsDebugRender
+  }
+
+  get showPhysics(): boolean {
+    return window.Game.physicsDebugRender?.enabled ?? false
+  }
+
+  /** Draws the physics world's colliders over the scene */
+  setShowPhysics(visible: boolean): void {
+    window.Game.physicsDebugRender?.toggleVisible(visible)
+  }
+
   setShowHelpers(visible: boolean): void {
     this._showHelpers = visible
     this.helpers.forEach((h) => {
