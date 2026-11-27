@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
+import { _resetLogicGraphs } from '../../src/Graph/Logic/logicGraphObject'
 import Player from '../../src/Networking/Entities/Player'
 import { ClientCommand, ServerCommand } from '../../src/Networking/Server/Commands'
 import Server from '../../src/Networking/Server/Server'
@@ -1320,6 +1321,55 @@ describe('server', () => {
       expect([
         ...server.game.world.entities.items.keys(),
       ]).toEqual(['crate2'])
+    })
+
+    it('restarts the logic graphs running here when their graph file changes', async () => {
+      _resetLogicGraphs()
+      const graph = (x: number) => JSON.stringify({
+        kind: 'logic',
+        name: 'mover',
+        nodes: [
+          { id: 'tick', type: 'event.tick' },
+          {
+            id: 'put',
+            type: 'entity.setPosition',
+            values: {
+              position: [x, 0, 0],
+            },
+          },
+        ],
+        edges: [
+          {
+            from: { node: 'tick', port: 'then' },
+            to: { node: 'put', port: 'run' },
+          },
+        ],
+      })
+      writeFile(join(root, 'graphs', 'mover.graph.json'), graph(1))
+      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({
+        objects: [
+          {
+            id: 'brain',
+            type: 'LogicGraph',
+            props: { graph: 'mover', side: 'server' },
+          },
+        ],
+      }))
+      const server = new TestServer(logger, undefined, { root })
+      server.openScene('main', { watch: true })
+      const brain = () => server.game.world.entities.items.get('brain')!
+      await vi.waitFor(() => {
+        server.game.update(0.1)
+        expect(brain().position.x).toBe(1)
+      }, { timeout: 3000 })
+
+      writeFile(join(root, 'graphs', 'mover.graph.json'), graph(5))
+
+      await vi.waitFor(() => {
+        server.game.update(0.1)
+        expect(brain().position.x).toBe(5)
+      }, { timeout: 3000 })
+      server.stop()
     })
 
     it('keeps the current scene when the changed file is invalid', async () => {
