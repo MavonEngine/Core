@@ -121,6 +121,7 @@ export function buildTslNodes(
     const definition = getNode(node.type)!
     const edges = incoming.get(node.id) ?? {}
     const inputs: Record<string, TslNode> = {}
+    const types: Record<string, PinType> = {}
 
     for (const [port, spec] of Object.entries(definition.inputs)) {
       const edge = edges[port]
@@ -128,9 +129,13 @@ export function buildTslNodes(
       if (edge) {
         const source = built.get(edge.from.node)?.[edge.from.port]
         // A fixed type converts what arrives (float into a color); `number` inputs take it as it is
-        inputs[port] = spec.type === 'number' || spec.type === 'any' || spec.type === arriving
+        const asIs = spec.type === 'number' || spec.type === 'any' || spec.type === arriving
+        inputs[port] = asIs
           ? source
-          : tslConvert(source, spec.type)
+          : tslConvert(source, spec.type as PinType)
+        types[port] = asIs
+          ? arriving ?? 'float'
+          : spec.type as PinType
       }
       else {
         const value = node.values?.[port] ?? spec.default
@@ -140,6 +145,7 @@ export function buildTslNodes(
               : 'float')
           : spec.type
         inputs[port] = tslConstant(value, type)
+        types[port] = type
       }
     }
 
@@ -147,6 +153,7 @@ export function buildTslNodes(
       ...context,
       values: { ...node.values },
       connected: new Set(Object.keys(edges)),
+      types,
     }))
     // A Graph Output keeps what it was given, for the subgraph's node to hand on
     if (node.type === GRAPH_OUTPUT)

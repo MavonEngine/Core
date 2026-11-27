@@ -197,8 +197,6 @@ export function evaluateSubgraph(name: string, graph: GraphData, analysis: Graph
  */
 export function registerSubgraph(name: string, graph: GraphData): NodeDefinition {
   registerBuiltinNodes()
-  for (const node of SUBGRAPH_NODES)
-    registerNode(node)
   const analysis = analyzeGraph(graph)
   const issues = subgraphIssues(graph, analysis)
   if (issues.length)

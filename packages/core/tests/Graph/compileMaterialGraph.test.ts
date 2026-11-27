@@ -120,6 +120,44 @@ describe('compileMaterialGraph', () => {
     expect((parameters.tint!.value as Color).toArray()).toEqual([1, 0.3, 0])
   })
 
+  it('splits a vector of any size, 0 for the components it hasn\'t', () => {
+    const { material } = compileMaterialGraph(graph({
+      nodes: [
+        {
+          id: 'uv',
+          type: 'surface.uv',
+          position: [0, 0],
+        },
+        {
+          id: 'split',
+          type: 'vector.split',
+          position: [0, 0],
+        },
+        {
+          id: 'out',
+          type: 'material.output',
+          position: [0, 0],
+        },
+      ],
+      edges: [
+        {
+          from: { node: 'uv', port: 'value' },
+          to: { node: 'split', port: 'vector' },
+        },
+        {
+          from: { node: 'split', port: 'z' },
+          to: { node: 'out', port: 'metalness' },
+        },
+        {
+          from: { node: 'split', port: 'y' },
+          to: { node: 'out', port: 'roughness' },
+        },
+      ],
+    }))
+    expect(material.roughnessNode).toBeTruthy()
+    expect(material.metalnessNode).toBeTruthy()
+  })
+
   it('throws with every problem in the graph', () => {
     expect(() => compileMaterialGraph(graph({}))).toThrow(MaterialGraphError)
     expect(() => compileMaterialGraph(graph({}))).toThrow('exactly one Material Output node, it has 0')

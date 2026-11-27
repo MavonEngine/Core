@@ -33,6 +33,7 @@ import {
   vec4,
 } from 'three/tsl'
 import { perlinNoise3D, valueNoise2D } from '../../Shaders/Nodes/noise'
+import { componentCount } from '../NodeRegistry'
 
 /** A TSL node. Untyped: the graph decides what flows where */
 export type TslNode = any
@@ -42,6 +43,8 @@ export interface TslNodeContext {
   values: Record<string, GraphValue>
   /** The inputs that have an edge */
   connected: Set<string>
+  /** What type each input got: from its edge, or its value */
+  types: Record<string, PinType>
   /** The uniform behind one of the graph's parameters */
   parameter(name: string): TslNode | undefined
   /** A texture from the game's resources, by name */
@@ -188,12 +191,28 @@ const BUILTIN: Record<string, TslImplementation> = {
   'vector.cross': ({ a, b }) => ({
     result: cross(a, b),
   }),
-  'vector.split': ({ vector }) => ({
-    x: vector.x,
-    y: vector.y,
-    z: vector.z,
-    w: vector.w,
-  }),
+  // The components the vector has, 0 for the rest
+  'vector.split': ({ vector }, { types }) => {
+    const count = componentCount(types.vector ?? 'float') ?? 1
+    if (count === 1) {
+      return {
+        x: vector,
+        y: float(0),
+        z: float(0),
+        w: float(0),
+      }
+    }
+    return {
+      x: vector.x,
+      y: vector.y,
+      z: count > 2
+        ? vector.z
+        : float(0),
+      w: count > 3
+        ? vector.w
+        : float(0),
+    }
+  },
   'vector.combine2': ({ x, y }) => ({
     vector: vec2(x, y),
   }),
