@@ -7,7 +7,7 @@ import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import Game from '../Game'
 import { LIGHT_REGISTRY } from '../Prefab/Lights/index'
 import { getPrefab, spawnPrefab } from '../Prefab/PrefabRegistry'
-import { PlanePrimitive, PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
+import { PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
 import GameObject from '../World/GameObject'
 import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectRegistry'
 
@@ -15,7 +15,8 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * The client side of the scene object types that come with the engine. None of them exist on the server,
  * they are visuals only; a project registers `server` factories for what the server needs.
  *
- * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow (+ width, height for Plane)
+ * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, plus the primitive's
+ *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere). Missing params use their defaults
  * - `Light:<AmbientLight|DirectionalLight|…>` props: color, intensity, castShadow, shadowMapSize (+ shadowArea, shadowFar for directional lights)
  * - `Model` props: resource (name of a loaded gltfModel), castShadow, receiveShadow
  * - `prefab:<key>` any prefab of the prefab registry, by its key
@@ -54,7 +55,7 @@ function bool(v: unknown) {
 }
 
 function primitiveProps(primitive: Primitive): Props {
-  const props: Props = {}
+  const props: Props = { ...primitive.params }
   const mesh = primitive.instance
   if (mesh instanceof Mesh) {
     props.castShadow = mesh.castShadow
@@ -66,10 +67,6 @@ function primitiveProps(primitive: Primitive): Props {
       if (mesh.material.wireframe)
         props.wireframe = true
     }
-  }
-  if (primitive instanceof PlanePrimitive) {
-    props.width = primitive.width
-    props.height = primitive.height
   }
   return props
 }
@@ -200,9 +197,7 @@ export function registerBuiltinSceneObjects() {
       label: name,
       client(data) {
         const position = new Vector3(...data.transform.position)
-        const primitive = PrimitiveClass === PlanePrimitive
-          ? new PlanePrimitive(position, num(data.props?.width) ?? 1, num(data.props?.height) ?? 1)
-          : new PrimitiveClass(position)
+        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined)
         applyPrimitiveProps(primitive, data.props)
         return primitive
       },

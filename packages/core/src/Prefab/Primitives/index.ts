@@ -1,7 +1,7 @@
 import type {
   BufferGeometry,
-  Object3D,
 } from 'three'
+import type { PropertyField } from '../../Editor/EditorHelper'
 import {
   BoxGeometry,
   CapsuleGeometry,
@@ -37,266 +37,631 @@ import { WithEditorHelper } from '../../Editor/WithEditorHelper'
 import Game from '../../Game'
 import GameObject from '../../World/GameObject'
 
-export abstract class Primitive extends WithEditorHelper(GameObject) {
-  public instance: Object3D
+/** One number that shapes a primitive's geometry, shown as a slider in the editor */
+export interface GeometryParam {
+  key: string
+  default: number
+  min: number
+  max: number
+  step: number
+}
 
-  constructor(position: Vector3, object: Object3D, label: string) {
+export type GeometryParams = Record<string, number>
+
+export interface PrimitiveDefinition {
+  label: string
+  params: GeometryParam[]
+  /** Builds the geometry from a full set of params */
+  geometry(p: GeometryParams): BufferGeometry
+  /** Drawn as lines instead of a lit mesh */
+  lines?: boolean
+}
+
+const TAU = Math.PI * 2
+
+/** Helpers to keep the definitions short */
+function size(key: string, value = 1, max = 100): GeometryParam {
+  return {
+    key,
+    default: value,
+    min: 0.01,
+    max,
+    step: 0.01,
+  }
+}
+function segments(key: string, value: number, min = 1, max = 128): GeometryParam {
+  return {
+    key,
+    default: value,
+    min,
+    max,
+    step: 1,
+  }
+}
+function angle(key: string, value = TAU): GeometryParam {
+  return {
+    key,
+    default: value,
+    min: 0.01,
+    max: TAU,
+    step: 0.01,
+  }
+}
+function detail(value = 0): GeometryParam {
+  return {
+    key: 'detail',
+    default: value,
+    min: 0,
+    max: 5,
+    step: 1,
+  }
+}
+
+function rectangle(width: number, height: number): Shape {
+  const shape = new Shape()
+  shape.moveTo(0, 0)
+  shape.lineTo(0, height)
+  shape.lineTo(width, height)
+  shape.lineTo(width, 0)
+  shape.closePath()
+  return shape
+}
+
+/** Builds a derived geometry from a box of the given size, then frees the box */
+function fromBox<T extends BufferGeometry>(p: GeometryParams, derive: (box: BoxGeometry) => T): T {
+  const box = new BoxGeometry(p.width, p.height, p.depth)
+  const derived = derive(box)
+  box.dispose()
+  return derived
+}
+
+const boxSize = [
+  size('width'),
+  size('height'),
+  size('depth'),
+]
+
+/**
+ * Defaults match what each primitive looked like before it had params, so scenes saved
+ * without them load unchanged.
+ */
+export const PRIMITIVE_DEFINITIONS = {
+  Box: {
+    label: 'Box',
+    params: [
+      ...boxSize,
+      segments('widthSegments', 1),
+      segments('heightSegments', 1),
+      segments('depthSegments', 1),
+    ],
+    geometry: p => new BoxGeometry(p.width, p.height, p.depth, p.widthSegments, p.heightSegments, p.depthSegments),
+  },
+  Capsule: {
+    label: 'Capsule',
+    params: [
+      size('radius'),
+      size('height'),
+      segments('capSegments', 4),
+      segments('radialSegments', 8, 3),
+      segments('heightSegments', 1),
+    ],
+    geometry: p => new CapsuleGeometry(p.radius, p.height, p.capSegments, p.radialSegments, p.heightSegments),
+  },
+  Circle: {
+    label: 'Circle',
+    params: [
+      size('radius'),
+      segments('segments', 32, 3),
+      angle('thetaLength'),
+    ],
+    geometry: p => new CircleGeometry(p.radius, p.segments, 0, p.thetaLength),
+  },
+  Cone: {
+    label: 'Cone',
+    params: [
+      size('radius'),
+      size('height'),
+      segments('radialSegments', 32, 3),
+      segments('heightSegments', 1),
+      angle('thetaLength'),
+    ],
+    geometry: p => new ConeGeometry(p.radius, p.height, p.radialSegments, p.heightSegments, false, 0, p.thetaLength),
+  },
+  Cylinder: {
+    label: 'Cylinder',
+    params: [
+      {
+        ...size('radiusTop'),
+        min: 0,
+      },
+      {
+        ...size('radiusBottom'),
+        min: 0,
+      },
+      size('height'),
+      segments('radialSegments', 32, 3),
+      segments('heightSegments', 1),
+      angle('thetaLength'),
+    ],
+    geometry: p => new CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, p.radialSegments, p.heightSegments, false, 0, p.thetaLength),
+  },
+  Dodecahedron: {
+    label: 'Dodecahedron',
+    params: [
+      size('radius'),
+      detail(),
+    ],
+    geometry: p => new DodecahedronGeometry(p.radius, p.detail),
+  },
+  Edges: {
+    label: 'Edges',
+    params: [
+      ...boxSize,
+      {
+        key: 'thresholdAngle',
+        default: 1,
+        min: 0,
+        max: 180,
+        step: 1,
+      },
+    ],
+    geometry: p => fromBox(p, box => new EdgesGeometry(box, p.thresholdAngle)),
+    lines: true,
+  },
+  Extrude: {
+    label: 'Extrude',
+    params: [
+      size('width'),
+      size('height'),
+      size('depth', 0.5),
+    ],
+    geometry: p => new ExtrudeGeometry(rectangle(p.width, p.height), { depth: p.depth, bevelEnabled: false }),
+  },
+  Icosahedron: {
+    label: 'Icosahedron',
+    params: [
+      size('radius'),
+      detail(),
+    ],
+    geometry: p => new IcosahedronGeometry(p.radius, p.detail),
+  },
+  Lathe: {
+    label: 'Lathe',
+    params: [
+      size('radius'),
+      size('height'),
+      segments('segments', 12, 3),
+      angle('phiLength'),
+    ],
+    geometry: (p) => {
+      // A vase-like profile, scaled to the requested size
+      const points: Vector2[] = []
+      for (let i = 0; i <= 10; i++) {
+        points.push(new Vector2((Math.sin(i * 0.2) * 0.5 + 0.3) * p.radius, i * 0.1 * p.height))
+      }
+      return new LatheGeometry(points, p.segments, 0, p.phiLength)
+    },
+  },
+  Octahedron: {
+    label: 'Octahedron',
+    params: [
+      size('radius'),
+      detail(),
+    ],
+    geometry: p => new OctahedronGeometry(p.radius, p.detail),
+  },
+  Plane: {
+    label: 'Plane',
+    params: [
+      size('width', 1, 1000),
+      size('height', 1, 1000),
+      segments('widthSegments', 1),
+      segments('heightSegments', 1),
+    ],
+    geometry: (p) => {
+      const geometry = new PlaneGeometry(p.width, p.height, p.widthSegments, p.heightSegments)
+      // Lie flat on the ground
+      geometry.rotateX(-Math.PI / 2)
+      return geometry
+    },
+  },
+  Polyhedron: {
+    label: 'Polyhedron',
+    params: [
+      size('radius', 0.8),
+      detail(2),
+    ],
+    geometry: (p) => {
+      const vertices = [
+        1,
+        1,
+        1,
+        -1,
+        -1,
+        1,
+        -1,
+        1,
+        -1,
+        1,
+        -1,
+        -1,
+      ]
+      const indices = [2, 1, 0, 0, 3, 2, 1, 3, 0, 2, 3, 1]
+      return new PolyhedronGeometry(vertices, indices, p.radius, p.detail)
+    },
+  },
+  Ring: {
+    label: 'Ring',
+    params: [
+      {
+        ...size('innerRadius', 0.5),
+        min: 0,
+      },
+      size('outerRadius'),
+      segments('thetaSegments', 32, 3),
+      segments('phiSegments', 1),
+      angle('thetaLength'),
+    ],
+    geometry: p => new RingGeometry(p.innerRadius, p.outerRadius, p.thetaSegments, p.phiSegments, 0, p.thetaLength),
+  },
+  Shape: {
+    label: 'Shape',
+    params: [
+      size('width'),
+      size('height'),
+    ],
+    geometry: p => new ShapeGeometry(rectangle(p.width, p.height)),
+  },
+  Sphere: {
+    label: 'Sphere',
+    params: [
+      size('radius'),
+      segments('widthSegments', 32, 3),
+      segments('heightSegments', 16, 2),
+      angle('phiLength'),
+      angle('thetaLength', Math.PI),
+    ],
+    geometry: p => new SphereGeometry(p.radius, p.widthSegments, p.heightSegments, 0, p.phiLength, 0, p.thetaLength),
+  },
+  Tetrahedron: {
+    label: 'Tetrahedron',
+    params: [
+      size('radius'),
+      detail(),
+    ],
+    geometry: p => new TetrahedronGeometry(p.radius, p.detail),
+  },
+  Torus: {
+    label: 'Torus',
+    params: [
+      size('radius'),
+      size('tube', 0.4),
+      segments('radialSegments', 12, 2),
+      segments('tubularSegments', 48, 3, 256),
+      angle('arc'),
+    ],
+    geometry: p => new TorusGeometry(p.radius, p.tube, p.radialSegments, p.tubularSegments, p.arc),
+  },
+  TorusKnot: {
+    label: 'TorusKnot',
+    params: [
+      size('radius'),
+      size('tube', 0.4),
+      segments('tubularSegments', 64, 3, 512),
+      segments('radialSegments', 8, 3),
+      segments('p', 2, 1, 20),
+      segments('q', 3, 1, 20),
+    ],
+    geometry: p => new TorusKnotGeometry(p.radius, p.tube, p.tubularSegments, p.radialSegments, p.p, p.q),
+  },
+  Tube: {
+    label: 'Tube',
+    params: [
+      size('length', 2),
+      size('radius', 0.2),
+      segments('tubularSegments', 20, 2, 256),
+      segments('radialSegments', 8, 3),
+    ],
+    geometry: (p) => {
+      const half = p.length / 2
+      const path = new CatmullRomCurve3([
+        new Vector3(-half, 0, 0),
+        new Vector3(-half / 2, half / 2, 0),
+        new Vector3(half / 2, -half / 2, 0),
+        new Vector3(half, 0, 0),
+      ])
+      return new TubeGeometry(path, p.tubularSegments, p.radius, p.radialSegments, false)
+    },
+  },
+  Wireframe: {
+    label: 'Wireframe',
+    params: boxSize,
+    geometry: p => fromBox(p, box => new WireframeGeometry(box)),
+    lines: true,
+  },
+} satisfies Record<string, PrimitiveDefinition>
+
+export type PrimitiveName = keyof typeof PRIMITIVE_DEFINITIONS
+
+/** Clamps a value into a param's range and onto its step */
+function clampParam(param: GeometryParam, value: number): number {
+  const clamped = Math.min(param.max, Math.max(param.min, value))
+  return param.step >= 1
+    ? Math.round(clamped)
+    : clamped
+}
+
+/** The full set of params for a definition: defaults, overridden by any valid values given */
+export function resolveParams(definition: PrimitiveDefinition, given: Partial<Record<string, unknown>> = {}): GeometryParams {
+  const params: GeometryParams = {}
+  for (const param of definition.params) {
+    const value = given[param.key]
+    params[param.key] = typeof value === 'number' && Number.isFinite(value)
+      ? clampParam(param, value)
+      : param.default
+  }
+  return params
+}
+
+export abstract class Primitive extends WithEditorHelper(GameObject) {
+  public instance: Mesh | LineSegments
+  readonly definition: PrimitiveDefinition
+  private _params: GeometryParams
+
+  constructor(position: Vector3, definition: PrimitiveDefinition, params?: Partial<GeometryParams>) {
     super(undefined, position)
-    this.instance = object
+    this.definition = definition
+    this._params = resolveParams(definition, params)
+    const geometry = definition.geometry(this._params)
+    this.instance = definition.lines
+      ? new LineSegments(geometry, new LineBasicMaterial({ color: 0x4A9EFF }))
+      : new Mesh(geometry, new MeshStandardMaterial({ color: 0x888888 }))
     this.instance.position.copy(position)
     Game.instance().scene.add(this.instance)
-    const isMeshStd = this.instance instanceof Mesh && this.instance.material instanceof MeshStandardMaterial
-    const mat = isMeshStd ? (this.instance as Mesh).material as MeshStandardMaterial : null
-    this.registerEditorHelper(position, label, {
+    this.registerEditorHelper(position, definition.label, {
       onMove: (delta: Vector3) => this.instance.position.add(delta),
-      properties: mat
-        ? [
-            {
-              type: 'color',
-              label: 'color',
-              getValue: () => `#${mat.color.getHexString()}`,
-              setValue: (v: string) => mat.color.set(v),
-            },
-            {
-              type: 'checkbox',
-              label: 'wireframe',
-              getValue: () => mat.wireframe,
-              setValue: (v: boolean) => {
-                mat.wireframe = v
-                mat.needsUpdate = true
-              },
-            },
-            {
-              type: 'slider',
-              label: 'roughness',
-              min: 0,
-              max: 1,
-              step: 0.01,
-              getValue: () => mat.roughness,
-              setValue: (v: number) => { mat.roughness = v },
-            },
-            {
-              type: 'slider',
-              label: 'metalness',
-              min: 0,
-              max: 1,
-              step: 0.01,
-              getValue: () => mat.metalness,
-              setValue: (v: number) => { mat.metalness = v },
-            },
-          ]
-        : [],
+      properties: [
+        ...this.materialProperties(),
+        ...this.geometryProperties(),
+      ],
     })
     this.tagWithHelper(this.instance)
   }
 
+  /** A copy of the current geometry params */
+  get params(): GeometryParams {
+    return { ...this._params }
+  }
+
+  /** Changes some geometry params and rebuilds the geometry. Unknown keys are ignored, values are clamped. */
+  setParams(changes: Partial<GeometryParams>): void {
+    const next = resolveParams(this.definition, {
+      ...this._params,
+      ...changes,
+    })
+    if (this.definition.params.every(p => next[p.key] === this._params[p.key]))
+      return
+    this._params = next
+    this.instance.geometry.dispose()
+    this.instance.geometry = this.definition.geometry(next)
+  }
+
+  setParam(key: string, value: number): void {
+    this.setParams({ [key]: value })
+  }
+
+  private materialProperties(): PropertyField[] {
+    const mat = this.instance.material
+    if (!(mat instanceof MeshStandardMaterial))
+      return []
+    return [
+      {
+        type: 'color',
+        label: 'color',
+        getValue: () => `#${mat.color.getHexString()}`,
+        setValue: (v: string) => mat.color.set(v),
+      },
+      {
+        type: 'checkbox',
+        label: 'wireframe',
+        getValue: () => mat.wireframe,
+        setValue: (v: boolean) => {
+          mat.wireframe = v
+          mat.needsUpdate = true
+        },
+      },
+      {
+        type: 'slider',
+        label: 'roughness',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        getValue: () => mat.roughness,
+        setValue: (v: number) => { mat.roughness = v },
+      },
+      {
+        type: 'slider',
+        label: 'metalness',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        getValue: () => mat.metalness,
+        setValue: (v: number) => { mat.metalness = v },
+      },
+    ]
+  }
+
+  private geometryProperties(): PropertyField[] {
+    return this.definition.params.map(param => ({
+      type: 'slider',
+      label: param.key,
+      min: param.min,
+      max: param.max,
+      step: param.step,
+      getValue: () => this._params[param.key],
+      setValue: (v: number) => this.setParam(param.key, v),
+    }))
+  }
+
   setReceiveShadow(value: boolean): void {
-    if (this.instance instanceof Mesh) {
-      this.instance.receiveShadow = value
-    }
+    this.instance.receiveShadow = value
   }
 
   setCastShadow(value: boolean): void {
-    if (this.instance instanceof Mesh) {
-      this.instance.castShadow = value
-    }
+    this.instance.castShadow = value
   }
 
   update(_delta: number): void { }
 
   destroy(): void {
-    const asRenderable = this.instance as { geometry?: BufferGeometry, material?: MeshStandardMaterial | LineBasicMaterial | (MeshStandardMaterial | LineBasicMaterial)[] }
-    asRenderable.geometry?.dispose()
-    if (Array.isArray(asRenderable.material)) {
-      asRenderable.material.forEach(m => m.dispose())
-    }
-    else {
-      asRenderable.material?.dispose()
-    }
+    this.instance.geometry.dispose()
+    const material = this.instance.material
+    for (const m of Array.isArray(material)
+      ? material
+      : [material])
+      m.dispose()
     Game.instance().scene.remove(this.instance)
     super.destroy()
   }
 }
 
-function mesh(geometry: BufferGeometry): Mesh {
-  return new Mesh(geometry, new MeshStandardMaterial({ color: 0x888888 }))
-}
-
-function lines(geometry: BufferGeometry): LineSegments {
-  return new LineSegments(geometry, new LineBasicMaterial({ color: 0x4A9EFF }))
-}
+export type PrimitiveConstructor = new (position: Vector3, params?: Partial<GeometryParams>) => Primitive
 
 export class BoxPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new BoxGeometry()), 'Box')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Box, params)
   }
 }
 
 export class CapsulePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new CapsuleGeometry()), 'Capsule')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Capsule, params)
   }
 }
 
 export class CirclePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new CircleGeometry()), 'Circle')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Circle, params)
   }
 }
 
 export class ConePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new ConeGeometry()), 'Cone')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Cone, params)
   }
 }
 
 export class CylinderPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new CylinderGeometry()), 'Cylinder')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Cylinder, params)
   }
 }
 
 export class DodecahedronPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new DodecahedronGeometry()), 'Dodecahedron')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Dodecahedron, params)
   }
 }
 
 export class EdgesPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, lines(new EdgesGeometry(new BoxGeometry())), 'Edges')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Edges, params)
   }
 }
 
 export class ExtrudePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    const shape = new Shape()
-    shape.moveTo(0, 0)
-    shape.lineTo(0, 1)
-    shape.lineTo(1, 1)
-    shape.lineTo(1, 0)
-    shape.closePath()
-    super(position, mesh(new ExtrudeGeometry(shape, { depth: 0.5, bevelEnabled: false })), 'Extrude')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Extrude, params)
   }
 }
 
 export class IcosahedronPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new IcosahedronGeometry()), 'Icosahedron')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Icosahedron, params)
   }
 }
 
 export class LathePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    const points: Vector2[] = []
-    for (let i = 0; i <= 10; i++) {
-      points.push(new Vector2(Math.sin(i * 0.2) * 0.5 + 0.3, i * 0.1))
-    }
-    super(position, mesh(new LatheGeometry(points, 12)), 'Lathe')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Lathe, params)
   }
 }
 
 export class OctahedronPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new OctahedronGeometry()), 'Octahedron')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Octahedron, params)
   }
 }
 
 export class PlanePrimitive extends Primitive {
-  readonly width: number
-  readonly height: number
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Plane, params)
+  }
 
-  constructor(position: Vector3, width = 1, height = 1) {
-    const geometry = new PlaneGeometry(width, height)
-    geometry.rotateX(-Math.PI / 2)
-    super(position, mesh(geometry), 'Plane')
-    this.width = width
-    this.height = height
+  get width(): number {
+    return this.params.width
+  }
+
+  get height(): number {
+    return this.params.height
   }
 }
 
 export class PolyhedronPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    const vertices = [
-      1,
-      1,
-      1,
-      -1,
-      -1,
-      1,
-      -1,
-      1,
-      -1,
-      1,
-      -1,
-      -1,
-    ]
-    const indices = [2, 1, 0, 0, 3, 2, 1, 3, 0, 2, 3, 1]
-    super(position, mesh(new PolyhedronGeometry(vertices, indices, 0.8, 2)), 'Polyhedron')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Polyhedron, params)
   }
 }
 
 export class RingPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new RingGeometry(0.5, 1)), 'Ring')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Ring, params)
   }
 }
 
 export class ShapePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    const shape = new Shape()
-    shape.moveTo(0, 0)
-    shape.lineTo(0, 1)
-    shape.lineTo(1, 1)
-    shape.lineTo(1, 0)
-    shape.closePath()
-    super(position, mesh(new ShapeGeometry(shape)), 'Shape')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Shape, params)
   }
 }
 
 export class SpherePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new SphereGeometry()), 'Sphere')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Sphere, params)
   }
 }
 
 export class TetrahedronPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new TetrahedronGeometry()), 'Tetrahedron')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Tetrahedron, params)
   }
 }
 
 export class TorusPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new TorusGeometry()), 'Torus')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Torus, params)
   }
 }
 
 export class TorusKnotPrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, mesh(new TorusKnotGeometry()), 'TorusKnot')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.TorusKnot, params)
   }
 }
 
 export class TubePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    const path = new CatmullRomCurve3([
-      new Vector3(-1, 0, 0),
-      new Vector3(-0.5, 0.5, 0),
-      new Vector3(0.5, -0.5, 0),
-      new Vector3(1, 0, 0),
-    ])
-    super(position, mesh(new TubeGeometry(path, 20, 0.2, 8, false)), 'Tube')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Tube, params)
   }
 }
 
 export class WireframePrimitive extends Primitive {
-  constructor(position: Vector3) {
-    super(position, lines(new WireframeGeometry(new BoxGeometry())), 'Wireframe')
+  constructor(position: Vector3, params?: Partial<GeometryParams>) {
+    super(position, PRIMITIVE_DEFINITIONS.Wireframe, params)
   }
 }
 
-export const PRIMITIVE_REGISTRY: Record<string, new (position: Vector3) => Primitive> = {
+export const PRIMITIVE_REGISTRY: Record<string, PrimitiveConstructor> & Record<PrimitiveName, PrimitiveConstructor> = {
   Box: BoxPrimitive,
   Capsule: CapsulePrimitive,
   Circle: CirclePrimitive,
