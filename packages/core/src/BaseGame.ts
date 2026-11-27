@@ -4,7 +4,7 @@ import type { SceneData, SceneSide } from './Scene/types'
 import type Logger from './Utils/Logger'
 import type GameObjectInterface from './World/GameObjectInterface'
 import { version as RAPIER_VERSION } from '@dimforge/rapier3d-compat'
-import { Clock, Raycaster, Scene, REVISION as THREE_REVISION } from 'three'
+import { Raycaster, Scene, Timer, REVISION as THREE_REVISION } from 'three'
 import GameScene from './Scene/GameScene'
 import { bootBanner } from './Utils/BootBanner'
 import EventEmitter from './Utils/EventEmitter'
@@ -23,7 +23,8 @@ let instance: BaseGame
  * Do not add anything related to audio or rendering here
  */
 export default class BaseGame extends EventEmitter implements GameObjectInterface {
-  readonly clock: Clock
+  /** Advanced once per rendered frame on the client, so `getDelta()` / `getElapsed()` read the same all frame */
+  readonly clock: Timer
 
   logger?: winston.Logger | Logger | null
 
@@ -81,8 +82,7 @@ export default class BaseGame extends EventEmitter implements GameObjectInterfac
       this.characterController.setMinSlopeSlideAngle(30 * Math.PI / 180)
     }
 
-    this.clock = new Clock()
-    this.clock.start()
+    this.clock = new Timer()
 
     this.scene = new Scene()
     this.rayCaster = new Raycaster()
