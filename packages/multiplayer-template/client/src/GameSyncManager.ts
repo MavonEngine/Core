@@ -87,9 +87,9 @@ export default class GameSyncManager implements GameObjectInterface {
       )
       const raycaster = Game.instance().rayCaster
       raycaster.setFromCamera(pointer, Game.instance().camera.instance)
-      const npcs = [...ClientServerNpc.all]
-      const hit = raycaster.intersectObjects(npcs.map(npc => npc.mesh), false)[0]
-      const npc = hit && npcs.find(candidate => candidate.mesh === hit.object)
+      const npcs = [...ClientServerNpc.all].filter(npc => npc.model.instance)
+      const hit = raycaster.intersectObjects(npcs.map(npc => npc.model.instance), true)[0]
+      const npc = hit && npcs.find(candidate => candidate.owns(hit.object))
       if (npc)
         this.networkManager.sendNpcClick(npc.id)
     }, { signal: this.abort.signal })

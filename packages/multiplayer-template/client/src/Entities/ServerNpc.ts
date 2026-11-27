@@ -1,33 +1,47 @@
-import Game from '@mavonengine/core/Game'
+import type { Object3D } from 'three'
 import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import { registerSceneObject } from '@mavonengine/core/Scene/SceneObjectRegistry'
 import ServerNpc, { SERVER_NPC_TYPE } from '@template/server/Base/Npc/ServerNpc'
-import { CapsuleGeometry, Mesh, MeshStandardMaterial, Vector3 } from 'three'
+import { Vector3 } from 'three'
+import PlayerGraphicsComponent from './Player/PlayerGraphicsComponent'
 import PlayerLabel from './Player/PlayerLabel'
 
 /**
- * An NPC the server moves, drawn where the state updates put it. Clicking it sends CL_NPC_CLICK (see GameSyncManager),
+ * An NPC the server moves, drawn with the players' character model, walking, where the state updates put it. Clicking it sends CL_NPC_CLICK (see GameSyncManager),
  * and its logic graph on the server answers in the chat.
  */
 export default class ClientServerNpc extends ServerNpc {
   /** Every NPC drawn here, for clicks to find */
   static readonly all = new Set<ClientServerNpc>()
 
-  readonly mesh: Mesh<CapsuleGeometry, MeshStandardMaterial>
+  readonly model: PlayerGraphicsComponent
   private readonly label: PlayerLabel
 
   constructor(id: string, position: Vector3) {
     super(id, position)
-    this.mesh = new Mesh(
-      new CapsuleGeometry(0.4, 0.9, 6, 16),
-      new MeshStandardMaterial({ color: 0xE08A2E, roughness: 0.6 }),
-    )
-    this.mesh.castShadow = true
-    this.mesh.userData.serverNpc = this
-    Game.instance().scene.add(this.mesh)
+    // Its position is its feet on the ground. It never stops, so it always walks
+    this.model = new PlayerGraphicsComponent(this, {
+      footOffset: 0,
+      onReady: () => {
+        const walk = this.model.animationsMap.get('walk')
+        if (walk)
+          this.model.fadeToAction(walk, 0)
+      },
+    })
+    this.model.init()
+    // Over its head: the label sits this far above the position, like a player's over its middle
     this.label = new PlayerLabel(this, this.name)
-    this.syncMesh()
+    this.label.offset.y += 0.8
     ClientServerNpc.all.add(this)
+  }
+
+  /** Whether `object` (a raycast hit) is part of its model */
+  owns(object: Object3D): boolean {
+    for (let o: Object3D | null = object; o; o = o.parent) {
+      if (o === this.model.instance)
+        return true
+    }
+    return false
   }
 
   /** Called by GameSyncManager when it talks in the chat */
@@ -35,14 +49,7 @@ export default class ClientServerNpc extends ServerNpc {
     this.label.showChatBubble(message)
   }
 
-  private syncMesh() {
-    // Its position is its feet on the ground: the capsule stands on them
-    this.mesh.position.set(this.position.x, this.position.y + 0.85, this.position.z)
-    this.mesh.rotation.set(this.rotation.x, this.rotation.y, this.rotation.z)
-  }
-
   update(delta: number): void {
-    this.syncMesh()
     this.label.update(delta)
   }
 
@@ -60,9 +67,7 @@ export default class ClientServerNpc extends ServerNpc {
 
   destroy(): void {
     ClientServerNpc.all.delete(this)
-    Game.instance().scene.remove(this.mesh)
-    this.mesh.geometry.dispose()
-    this.mesh.material.dispose()
+    this.model.destroy()
     this.label.destroy()
     super.destroy()
   }
