@@ -64,35 +64,75 @@ export default class GameSyncManager implements GameObjectInterface {
 
   private readonly abort = new AbortController()
 
+  /** The NPC under a point of the page, if any */
+  private npcAt(clientX: number, clientY: number): ClientServerNpc | undefined {
+    const canvas = Game.instance().canvas
+    const rect = canvas.getBoundingClientRect()
+    const pointer = new Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    const raycaster = Game.instance().rayCaster
+    raycaster.setFromCamera(pointer, Game.instance().camera.instance)
+    const npcs = [...ClientServerNpc.all].filter(npc => npc.model.instance)
+    const hit = raycaster.intersectObjects(npcs.map(npc => npc.model.instance), true)[0]
+    return hit && npcs.find(candidate => candidate.owns(hit.object))
+  }
+
   /**
    * A click on an NPC (not a drag, which orbits the camera) tells the server, whose logic graph for it answers.
-   * Not in the editor, where clicks select objects
+   * Over an NPC the cursor is a pointer, also when it walks under a still mouse. Not in the editor, where clicks
+   * select objects
    */
   private listenForNpcClicks() {
     const canvas = Game.instance().canvas
     let down: { x: number, y: number } | undefined
+    let pointer: { x: number, y: number } | undefined
+    let hovering = false
+    let checkedAt = 0
+
+    const setHovering = (value: boolean) => {
+      if (value === hovering)
+        return
+      hovering = value
+      canvas.style.cursor = value ? 'pointer' : ''
+    }
+    const checkHover = () => {
+      checkedAt = performance.now()
+      setHovering(!!pointer && !down && !Game.instance().editor && !!this.npcAt(pointer.x, pointer.y))
+    }
+
     canvas.addEventListener('pointerdown', (e) => {
       down = { x: e.clientX, y: e.clientY }
+      setHovering(false)
+    }, { signal: this.abort.signal })
+    canvas.addEventListener('pointermove', (e) => {
+      pointer = { x: e.clientX, y: e.clientY }
+    }, { signal: this.abort.signal })
+    canvas.addEventListener('pointerleave', () => {
+      pointer = undefined
+      setHovering(false)
     }, { signal: this.abort.signal })
     canvas.addEventListener('pointerup', (e) => {
       const start = down
       down = undefined
       if (!start || Game.instance().editor || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5)
         return
-
-      const rect = canvas.getBoundingClientRect()
-      const pointer = new Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
-      )
-      const raycaster = Game.instance().rayCaster
-      raycaster.setFromCamera(pointer, Game.instance().camera.instance)
-      const npcs = [...ClientServerNpc.all].filter(npc => npc.model.instance)
-      const hit = raycaster.intersectObjects(npcs.map(npc => npc.model.instance), true)[0]
-      const npc = hit && npcs.find(candidate => candidate.owns(hit.object))
+      const npc = this.npcAt(e.clientX, e.clientY)
       if (npc)
         this.networkManager.sendNpcClick(npc.id)
     }, { signal: this.abort.signal })
+
+    // Ten times a second is plenty for a cursor, and the raycast against a skinned model isn't free
+    const onFrame = () => {
+      if (performance.now() - checkedAt >= 100)
+        checkHover()
+    }
+    Game.instance().on('beforeRender', onFrame)
+    this.abort.signal.addEventListener('abort', () => {
+      Game.instance().off('beforeRender', onFrame)
+      canvas.style.cursor = ''
+    })
   }
 
   destroy(): void {
