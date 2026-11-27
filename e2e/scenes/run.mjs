@@ -38,6 +38,9 @@ async function waitFor(page, fn, arg, timeout = 30000) {
 
 async function joinGame(page, name) {
   await page.goto(base)
+  // The first frames compile the shaders, which blocks the page for a while on software GL (a Windows runner can take
+  // tens of seconds), and a click sent meanwhile times out. Interact once the game draws
+  await waitFor(page, () => (window.Game?.renderer?.frames ?? 0) >= 3, null, 120000)
   await page.locator('.name-input').fill(name)
   await page.locator('.join-btn').click()
   await waitFor(page, () => window.Game?.activeScene?.name === 'main')

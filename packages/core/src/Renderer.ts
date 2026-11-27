@@ -34,6 +34,8 @@ export default class Renderer {
   armatureHelpers: Object3D[] = []
 
   fps = 0
+  /** Frames drawn since the game started, in a VR headset too */
+  frames = 0
   private frameLimiter = new FrameLimiter()
   private effects: { name: string, effect: RenderEffect }[] = []
 
@@ -241,6 +243,7 @@ export default class Renderer {
   }
 
   update(delta: number) {
+    this.frames++
     this.instance.info.reset()
     // Before rendering so uniforms holding it (rain, smoke) see this frame's camera
     Game.instance().camera.updateWorldPosition()

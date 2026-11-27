@@ -9,6 +9,7 @@ import EventEmitter from './EventEmitter'
 export default class LoadingScreen extends EventEmitter {
   private overlay: Mesh<BufferGeometry, MeshBasicNodeMaterial> | undefined
   private readonly uAlpha = uniform(1.0)
+  private stopHidingInXR?: () => void
 
   loaded = false
   progress = 0
@@ -33,6 +34,15 @@ export default class LoadingScreen extends EventEmitter {
       this.overlay = new Mesh(overlayGeometry, overlayMaterial)
       // Its geometry is placed in clip space, where the camera's frustum would cull it
       this.overlay.frustumCulled = false
+      // Not in a VR headset: a quad drawn straight to the screen is no use in the eyes' views, and three can't draw a
+      // material that ignores the camera with the headset's stereo camera. Checked every rendered frame, so a session
+      // starting mid-fade never draws it
+      const overlay = this.overlay
+      const hideInXR = () => {
+        overlay.visible = !Game.instance().renderer.xrPresenting
+      }
+      Game.instance().on('beforeRender', hideInXR)
+      this.stopHidingInXR = () => Game.instance().off('beforeRender', hideInXR)
       Game.instance().scene.add(this.overlay)
 
       resources.on('loaded', () => {
@@ -73,6 +83,8 @@ export default class LoadingScreen extends EventEmitter {
       // Optional: remove overlay from scene after fade completes
       if (progress >= 1) {
         Game.instance().scene.remove(this.overlay!)
+        this.stopHidingInXR?.()
+        this.stopHidingInXR = undefined
       }
     }
   }

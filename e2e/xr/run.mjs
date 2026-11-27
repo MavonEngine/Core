@@ -40,7 +40,7 @@ function installHeadset() {
  * runner can take far longer per frame than a desktop, so a fixed window would fail a session that is rendering
  */
 async function framesDrawn(page, count, ms = 10000) {
-  const frame = () => page.evaluate(() => window.Game.renderer.instance.info.render.frame)
+  const frame = () => page.evaluate(() => window.Game.renderer.frames)
   const start = await frame()
   const until = Date.now() + ms
   while (true) {

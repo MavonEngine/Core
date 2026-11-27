@@ -312,6 +312,39 @@ describe('xr', () => {
   })
 
   describe('renderer fixes', () => {
+    it('lets the headset\'s layer draw to the default framebuffer, which WebXR gives as null', () => {
+      const { xr, webgl } = setup()
+      const drawBuffers = vi.fn()
+      const state = { drawBuffers }
+      Object.assign(webgl, {
+        backend: { state },
+      })
+      const framebuffer = {} as WebGLFramebuffer
+
+      xr.dispatchEvent({ type: 'sessionstart' })
+      xr.dispatchEvent({ type: 'sessionstart' })
+      state.drawBuffers({
+        textures: ['color'],
+      }, framebuffer)
+      state.drawBuffers({
+        textures: ['color'],
+      }, null)
+
+      // A framebuffer of its own goes through as it was, the default one as no render target
+      expect(drawBuffers.mock.calls).toEqual([
+        [
+          {
+            textures: ['color'],
+          },
+          framebuffer,
+        ],
+        [
+          { textures: null },
+          null,
+        ],
+      ])
+    })
+
     it('gives the eyes and the camera the reversed form of the headset\'s projection with a reversed depth buffer', () => {
       const { xr, depth, eyes } = setup()
       depth.reversed = true

@@ -307,6 +307,26 @@ function patchRenderer(renderer: WebGPURenderer) {
     frame = null
     requested = ''
   })
+
+  // The headset's layer may draw to the default framebuffer: WebXR gives its framebuffer as null then (emulators do,
+  // like iwer). three's WebGL backend keys its draw buffer state by the framebuffer and throws on null. The default
+  // framebuffer only has the back buffer, which is what it sets up for no render target, so null goes that way
+  xr.addEventListener('sessionstart', () => {
+    const state = (renderer.backend as { state?: GLDrawBufferState } | undefined)?.state
+    if (!state || state.drawBuffers.allowsNullFramebuffer)
+      return
+    const drawBuffers = state.drawBuffers.bind(state)
+    const patched = ((context, framebuffer) => framebuffer
+      ? drawBuffers(context, framebuffer)
+      : drawBuffers({ ...context, textures: null }, framebuffer)) as GLDrawBufferState['drawBuffers']
+    patched.allowsNullFramebuffer = true
+    state.drawBuffers = patched
+  })
+}
+
+/** The part of three's WebGL backend state that sets which buffers a framebuffer draws to */
+interface GLDrawBufferState {
+  drawBuffers: ((context: { textures: unknown }, framebuffer: WebGLFramebuffer | null) => void) & { allowsNullFramebuffer?: boolean }
 }
 
 /**
