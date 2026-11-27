@@ -147,3 +147,20 @@ describe('pivot', () => {
     expect(bounds(box).min.y).toBeCloseTo(-0.5)
   })
 })
+
+describe('stairs', () => {
+  it('climbs to its height over its depth', () => {
+    const stairs = new PRIMITIVE_REGISTRY.Stairs(new Vector3(), {
+      steps: 4,
+      width: 2,
+      height: 2,
+      depth: 4,
+    }, { pivot: 'base' })
+    stairs.instance.geometry.computeBoundingBox()
+    const box = stairs.instance.geometry.boundingBox!
+    expect(box.min.y).toBeCloseTo(0)
+    expect(box.max.y).toBeCloseTo(2)
+    expect(box.max.x - box.min.x).toBeCloseTo(2)
+    expect(box.max.z - box.min.z).toBeCloseTo(4)
+  })
+})

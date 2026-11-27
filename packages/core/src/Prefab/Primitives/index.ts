@@ -33,6 +33,7 @@ import {
   Vector3,
   WireframeGeometry,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { WithEditorHelper } from '../../Editor/WithEditorHelper'
 import Game from '../../Game'
 import GameObject from '../../World/GameObject'
@@ -322,6 +323,30 @@ export const PRIMITIVE_DEFINITIONS = {
       angle('thetaLength', Math.PI),
     ],
     geometry: p => new SphereGeometry(p.radius, p.widthSegments, p.heightSegments, 0, p.phiLength, 0, p.thetaLength),
+  },
+  Stairs: {
+    label: 'Stairs',
+    params: [
+      segments('steps', 8, 1, 64),
+      size('width'),
+      size('height', 2),
+      size('depth', 3),
+    ],
+    geometry: (p) => {
+      // Solid steps from the ground up, climbing towards -Z
+      const rise = p.height / p.steps
+      const run = p.depth / p.steps
+      const steps: BufferGeometry[] = []
+      for (let i = 0; i < p.steps; i++) {
+        const stepHeight = rise * (i + 1)
+        const step = new BoxGeometry(p.width, stepHeight, run)
+        step.translate(0, stepHeight / 2, -run * (i + 0.5))
+        steps.push(step)
+      }
+      const geometry = mergeGeometries(steps)
+      steps.forEach(step => step.dispose())
+      return geometry.center()
+    },
   },
   Tetrahedron: {
     label: 'Tetrahedron',
@@ -687,6 +712,12 @@ export class SpherePrimitive extends Primitive {
   }
 }
 
+export class StairsPrimitive extends Primitive {
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Stairs, params, options)
+  }
+}
+
 export class TetrahedronPrimitive extends Primitive {
   constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
     super(position, PRIMITIVE_DEFINITIONS.Tetrahedron, params, options)
@@ -734,6 +765,7 @@ export const PRIMITIVE_REGISTRY: Record<string, PrimitiveConstructor> & Record<P
   Ring: RingPrimitive,
   Shape: ShapePrimitive,
   Sphere: SpherePrimitive,
+  Stairs: StairsPrimitive,
   Tetrahedron: TetrahedronPrimitive,
   Torus: TorusPrimitive,
   TorusKnot: TorusKnotPrimitive,
