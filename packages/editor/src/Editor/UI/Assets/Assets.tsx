@@ -23,6 +23,7 @@ import styles from './Assets.module.css'
 import AudioPlayer from './AudioPlayer'
 import ModelViewer from './ModelViewer'
 import ParticleViewer from './ParticleViewer'
+import { primitivePreviews } from './primitivePreviews'
 import TextureViewer, { getTextureUrl } from './TextureViewer'
 
 const NON_KEY_CHARS_RE = /\W+/g
@@ -523,21 +524,37 @@ export default () => {
             : activeCategory === 'Primitives'
               ? PRIMITIVES
                   .filter(p => p.label.toLowerCase().includes(search.toLowerCase()))
-                  .map(primitive => (
-                    <div className={styles.assetRow} key={primitive.name}>
-                      <div
-                        className={styles.assetIcon}
-                        onDragStart={e => onPrimitiveDragStart(e, primitive.name)}
-                        draggable
-                      >
-                        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M16 40 L16 24 L32 16 L48 24 L48 40 L32 48 Z" stroke="#4a9eff" strokeWidth="2" fill="none" />
-                          <path d="M16 24 L32 32 M48 24 L32 32 M32 48 L32 32" stroke="#4a9eff" strokeWidth="1.5" fill="none" opacity="0.5" />
-                        </svg>
+                  .map((primitive) => {
+                    // Rendered once on first open, then cached
+                    const preview = primitivePreviews().get(primitive.name)
+                    return (
+                      <div className={styles.assetRow} key={primitive.name}>
+                        {preview
+                          ? (
+                              <img
+                                src={preview}
+                                alt=""
+                                title={primitive.label}
+                                onDragStart={e => onPrimitiveDragStart(e, primitive.name)}
+                                draggable
+                              />
+                            )
+                          : (
+                              <div
+                                className={styles.assetIcon}
+                                onDragStart={e => onPrimitiveDragStart(e, primitive.name)}
+                                draggable
+                              >
+                                <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M16 40 L16 24 L32 16 L48 24 L48 40 L32 48 Z" stroke="#4a9eff" strokeWidth="2" fill="none" />
+                                  <path d="M16 24 L32 32 M48 24 L32 32 M32 48 L32 32" stroke="#4a9eff" strokeWidth="1.5" fill="none" opacity="0.5" />
+                                </svg>
+                              </div>
+                            )}
+                        {primitive.label}
                       </div>
-                      {primitive.label}
-                    </div>
-                  ))
+                    )
+                  })
               : activeCategory === 'Particles'
                 ? PARTICLES
                     .filter(p => p.label.toLowerCase().includes(search.toLowerCase()))
