@@ -4,7 +4,7 @@ import type { GraphAnalysis } from '@mavonengine/core/Graph/validate'
 import type { NodeProps } from '@xyflow/react'
 import type { FlowNode } from './graphModel'
 import { getNode } from '@mavonengine/core/Graph/NodeRegistry'
-import { GRAPH_COMMENT } from '@mavonengine/core/Graph/types'
+import { GRAPH_COMMENT, GRAPH_GROUP } from '@mavonengine/core/Graph/types'
 import { Handle, NodeResizer, Position } from '@xyflow/react'
 import { createContext, memo, useContext } from 'react'
 import { Color } from 'three'
@@ -146,6 +146,43 @@ function handleClass(type: PortType | undefined) {
     : styles.handle
 }
 
+/** A named box: nodes dragged into it join it and move with it. Dragged by its header, resized from its edges */
+function GroupNode({ id, data, selected }: Pick<NodeProps<FlowNode>, 'id' | 'data' | 'selected'>) {
+  const { setValue } = useContext(GraphContext)
+  const name = String(data.values.name ?? 'Group')
+  return (
+    <div className={`${styles.group} ${selected ? styles.selected : ''}`}>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={200}
+        minHeight={120}
+        lineClassName={styles.groupResize}
+        handleClassName={styles.groupHandle}
+        onResizeEnd={(_, size) => {
+          setValue(id, 'width', Math.round(size.width))
+          setValue(id, 'height', Math.round(size.height))
+        }}
+      />
+      <div className={styles.groupHeader}>
+        <input
+          className={`${styles.groupName} nodrag`}
+          defaultValue={name}
+          key={name}
+          placeholder="Group"
+          onBlur={(e) => {
+            if (e.target.value !== name)
+              setValue(id, 'name', e.target.value)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter')
+              (e.target as HTMLInputElement).blur()
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 /** A note: dragged by its header, written in its body, resized from its edges while selected */
 function CommentNode({ id, data, selected }: Pick<NodeProps<FlowNode>, 'id' | 'data' | 'selected'>) {
   const { setValue } = useContext(GraphContext)
@@ -184,6 +221,8 @@ function GraphNode({ id, data, selected }: NodeProps<FlowNode>) {
 
   if (data.type === GRAPH_COMMENT)
     return <CommentNode id={id} data={data} selected={selected} />
+  if (data.type === GRAPH_GROUP)
+    return <GroupNode id={id} data={data} selected={selected} />
 
   if (!definition) {
     return (

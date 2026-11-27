@@ -64,3 +64,58 @@ describe('comments', () => {
     expect(toFlow(noted).nodes.find(node => node.id === 'note')).toMatchObject({ width: 300, height: 90, zIndex: -1 })
   })
 })
+
+describe('groups', () => {
+  const grouped = () => {
+    const graph = defaultMaterialGraph('stone')
+    return {
+      ...graph,
+      nodes: [
+        {
+          ...graph.nodes[0]!,
+          position: [150, 120] as [number, number],
+          group: 'box',
+        },
+        graph.nodes[1]!,
+        {
+          id: 'box',
+          type: 'graph.group',
+          position: [100, 50] as [number, number],
+          values: { name: 'Base color', width: 300, height: 200 },
+        },
+      ],
+    }
+  }
+
+  it('put a group before its nodes, which sit relative to it in the editor', () => {
+    const { nodes } = toFlow(grouped())
+
+    expect(nodes[0]).toMatchObject({
+      id: 'box',
+      width: 300,
+      height: 200,
+      zIndex: -2,
+    })
+    expect(nodes.find(node => node.id === 'color_1')).toMatchObject({
+      parentId: 'box',
+      position: { x: 50, y: 70 },
+    })
+  })
+
+  it('keep canvas positions and who is in which group in the file', () => {
+    const graph = grouped()
+    const { nodes, edges } = toFlow(graph)
+    const back = fromFlow(graph, nodes, edges, graph.parameters)
+
+    expect(back.nodes.find(node => node.id === 'color_1')).toEqual(expect.objectContaining({
+      position: [150, 120],
+      group: 'box',
+    }))
+    expect(back.nodes.find(node => node.id === 'output')!.group).toBeUndefined()
+  })
+
+  it('don\'t change the graph\'s key', () => {
+    const graph = defaultMaterialGraph('stone')
+    expect(graphKey(grouped())).toBe(graphKey({ ...graph, nodes: graph.nodes }))
+  })
+})

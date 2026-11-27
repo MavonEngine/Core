@@ -423,3 +423,58 @@
     border-radius: 2px;
     background: var(--accent-yellow) !important;
 }
+
+/* ---- Groups */
+
+.group {
+    width: 100%;
+    height: 100%;
+    border: 1px solid rgb(120 160 220 / 45%);
+    border-radius: 6px;
+    background: rgb(120 160 220 / 7%);
+}
+
+.group.selected {
+    border-color: var(--accent-blue);
+}
+
+.groupHeader {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 var(--spacing-md);
+    border-bottom: 1px solid rgb(120 160 220 / 25%);
+    border-radius: 6px 6px 0 0;
+    background: rgb(120 160 220 / 14%);
+    cursor: grab;
+}
+
+.groupName {
+    max-width: 100%;
+    padding: 1px var(--spacing-xs);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-bright);
+    font: inherit;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.groupName:hover,
+.groupName:focus {
+    border-color: var(--border-active);
+    background: var(--bg-input);
+    outline: none;
+}
+
+.groupResize {
+    border-color: var(--accent-blue) !important;
+}
+
+.groupHandle {
+    width: 9px !important;
+    height: 9px !important;
+    border-radius: 2px;
+    background: var(--accent-blue) !important;
+}

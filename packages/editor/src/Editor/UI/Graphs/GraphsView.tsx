@@ -12,14 +12,14 @@ import { materialGraphs, registerGraphAsSubgraph } from '@mavonengine/core/Graph
 import { canConnect, getNode, getNodes } from '@mavonengine/core/Graph/NodeRegistry'
 import { registerBuiltinNodes } from '@mavonengine/core/Graph/Nodes/builtin'
 import { isFunctionGraph, SubgraphError, subgraphType } from '@mavonengine/core/Graph/Nodes/subgraph'
-import { GRAPH_COMMENT, GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
+import { GRAPH_COMMENT, GRAPH_GROUP, GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
 import { analyzeGraph } from '@mavonengine/core/Graph/validate'
 import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { Texture } from 'three'
-import { commentLayout, defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
+import { commentLayout, defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, groupLayout, groupsFirst, newNodeId, PIN_COLORS, toFlow } from './graphModel'
 import GraphNode, { GraphContext } from './GraphNode'
 import styles from './Graphs.module.css'
 import MaterialPreview from './MaterialPreview'
@@ -226,6 +226,54 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
     : undefined)
   const [status, setStatus] = useState<string>()
   const { screenToFlowPosition } = useReactFlow()
+
+  /**
+   * Put each of `ids` in the group its middle is over, or take it out of its group when it is over none. Its place on
+   * the canvas stays: a group's nodes are placed relative to it
+   */
+  const regroup = useCallback((ids: Set<string>) => {
+    setNodes((all) => {
+      const byId = new Map(all.map(node => [node.id, node]))
+      const absolute = (node: FlowNode) => {
+        const parent = node.parentId
+          ? byId.get(node.parentId)
+          : undefined
+        return { x: node.position.x + (parent?.position.x ?? 0), y: node.position.y + (parent?.position.y ?? 0) }
+      }
+      const size = (node: FlowNode) => ({
+        width: node.measured?.width ?? node.width ?? 0,
+        height: node.measured?.height ?? node.height ?? 0,
+      })
+      const groups = all.filter(node => node.data.type === GRAPH_GROUP)
+      let changed = false
+      const next = all.map((node) => {
+        if (!ids.has(node.id) || node.data.type === GRAPH_GROUP)
+          return node
+        const at = absolute(node)
+        const { width, height } = size(node)
+        const middle = { x: at.x + width / 2, y: at.y + height / 2 }
+        const group = groups.find((candidate) => {
+          const box = size(candidate)
+          return middle.x >= candidate.position.x && middle.x <= candidate.position.x + box.width
+            && middle.y >= candidate.position.y && middle.y <= candidate.position.y + box.height
+        })
+        if (group?.id === node.parentId)
+          return node
+        changed = true
+        const { parentId: _, ...loose } = node
+        return group
+          ? {
+              ...loose,
+              parentId: group.id,
+              position: { x: at.x - group.position.x, y: at.y - group.position.y },
+            }
+          : { ...loose, position: at }
+      })
+      return changed
+        ? groupsFirst(next)
+        : all
+    })
+  }, [setNodes])
   const wrapper = useRef<HTMLDivElement>(null)
   // The node list opens where the canvas was clicked, measured from the canvas (under the preview for a material)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -385,8 +433,11 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
         position: palette.flow,
         data: { type, values: {} },
         ...(type === GRAPH_COMMENT && commentLayout({})),
+        ...(type === GRAPH_GROUP && groupLayout({})),
       },
     ])
+    // Added over a group: it goes in it
+    regroup(new Set([id]))
     setPalette(undefined)
   }
 
@@ -416,7 +467,22 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
       return
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const removed = new Set(nodes.filter(node => node.selected).map(node => node.id))
-      setNodes(all => all.filter(node => !removed.has(node.id)))
+      // A deleted group's nodes stay where they are, out of it
+      setNodes((all) => {
+        const byId = new Map(all.map(node => [node.id, node]))
+        return all.filter(node => !removed.has(node.id)).map((node) => {
+          const group = node.parentId && removed.has(node.parentId)
+            ? byId.get(node.parentId)
+            : undefined
+          if (!group)
+            return node
+          const { parentId: _, ...loose } = node
+          return {
+            ...loose,
+            position: { x: node.position.x + group.position.x, y: node.position.y + group.position.y },
+          }
+        })
+      })
       setEdges(all => all.filter(edge => !edge.selected && !removed.has(edge.source) && !removed.has(edge.target)))
     }
   }
@@ -441,6 +507,7 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
                 edges={styledEdges}
                 nodeTypes={nodeTypes}
                 onNodesChange={onNodesChange}
+                onNodeDragStop={(_, __, dragged) => regroup(new Set(dragged.map(node => node.id)))}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 isValidConnection={isValidConnection}

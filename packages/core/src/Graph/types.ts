@@ -82,6 +82,8 @@ export interface GraphNodeData {
   position: [number, number]
   /** Values of the inputs that have no edge, and the node's settings, by port name */
   values?: Record<string, GraphValue>
+  /** The Group node it is in, which the editor moves it with. Its position stays its own, not the group's */
+  group?: string
 }
 
 export interface GraphEndpoint {
@@ -165,6 +167,7 @@ export function parseGraphData(value: unknown, fallbackName = 'untitled'): Graph
       ...(node.values && {
         values: { ...node.values },
       }),
+      ...(typeof node.group === 'string' && node.group && { group: node.group }),
     }
   })
 
@@ -202,3 +205,9 @@ export function isFunctionGraph(graph: Pick<GraphData, 'nodes'>): boolean {
 
 /** A note in a graph, describing what it does. It does nothing itself: compiling and running a graph skip it */
 export const GRAPH_COMMENT = 'graph.comment'
+
+/**
+ * A box in the editor that nodes are put in, to move them together and name a part of the graph. Like a comment, it
+ * does nothing itself
+ */
+export const GRAPH_GROUP = 'graph.group'

@@ -1,7 +1,7 @@
 import type { NodeDefinition, PortSpec } from '../NodeRegistry'
 import type { GraphKind, GraphValue, PinType } from '../types'
 import { registerNode } from '../NodeRegistry'
-import { GRAPH_COMMENT } from '../types'
+import { GRAPH_COMMENT, GRAPH_GROUP } from '../types'
 import { LOGIC_NODES } from './logic'
 import { SUBGRAPH_NODES } from './subgraph'
 import { asFloat, asNumber, asVector, clamp, componentWise, dot, fract, length, smoothstep } from './values'
@@ -147,6 +147,21 @@ const SURFACE: { type: string, label: string, pin: PinType, description: string 
 
 export const BUILTIN_NODES: NodeDefinition[] = [
   // ---- Notes
+  {
+    type: GRAPH_GROUP,
+    label: 'Group',
+    category: 'Utility',
+    description: 'A named box to put nodes in, to move them together. It does nothing',
+    kinds: BOTH,
+    inputs: {},
+    outputs: {},
+    settings: {
+      name: { type: 'string', default: 'Group' },
+      width: { type: 'float', default: 420 },
+      height: { type: 'float', default: 260 },
+    },
+    eval: () => ({}),
+  },
   {
     type: GRAPH_COMMENT,
     label: 'Comment',

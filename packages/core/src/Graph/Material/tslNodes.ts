@@ -251,8 +251,9 @@ const BUILTIN: Record<string, TslImplementation> = {
     value: tslConstant(values.default ?? 0, 'float'),
   }),
   'graph.output': () => ({}),
-  // A note: nothing to build
+  // Notes and boxes: nothing to build
   'graph.comment': () => ({}),
+  'graph.group': () => ({}),
   'material.output': (inputs, { connected, material }) => {
     if (connected.has('color'))
       material.colorNode = inputs.color

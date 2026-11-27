@@ -36,6 +36,22 @@ describe('parseGraphData', () => {
     })
   })
 
+  it('keeps which group a node is in', () => {
+    const graph = parseGraphData({
+      kind: 'logic',
+      nodes: [
+        {
+          id: 'box',
+          type: 'graph.group',
+          values: { name: 'Walk' },
+        },
+        { id: 'tick', type: 'event.tick', group: 'box' },
+        { id: 'loose', type: 'event.start', group: 3 },
+      ],
+    })
+    expect(graph.nodes.map(node => node.group)).toEqual([undefined, 'box', undefined])
+  })
+
   it('says what is wrong with a malformed graph', () => {
     expect(() => parseGraphData(null)).toThrow('JSON object')
     expect(() => parseGraphData({ kind: 'shader' })).toThrow('"kind" must be one of material, logic')

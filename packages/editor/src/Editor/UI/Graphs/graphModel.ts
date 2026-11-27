@@ -1,6 +1,6 @@
 import type { GraphData, GraphEdgeData, GraphParameter, GraphValue, PinType } from '@mavonengine/core/Graph/types'
 import type { Edge, Node } from '@xyflow/react'
-import { GRAPH_COMMENT, GRAPH_FORMAT_VERSION } from '@mavonengine/core/Graph/types'
+import { GRAPH_COMMENT, GRAPH_FORMAT_VERSION, GRAPH_GROUP } from '@mavonengine/core/Graph/types'
 
 /*
  * Between a graph file and React Flow's nodes and edges. React Flow holds the nodes (with their positions and
@@ -28,18 +28,50 @@ export function commentLayout(values: Record<string, GraphValue> | undefined) {
   }
 }
 
-export function toFlow(graph: GraphData): { nodes: FlowNode[], edges: FlowEdge[] } {
+/** A group's size, behind everything else */
+export function groupLayout(values: Record<string, GraphValue> | undefined) {
   return {
-    nodes: graph.nodes.map(node => ({
+    width: Number(values?.width ?? 420),
+    height: Number(values?.height ?? 260),
+    zIndex: -2,
+  }
+}
+
+/** Groups first: React Flow needs a parent before the nodes in it */
+export function groupsFirst<T extends { data: { type: string } }>(nodes: T[]): T[] {
+  return [
+    ...nodes.filter(node => node.data.type === GRAPH_GROUP),
+    ...nodes.filter(node => node.data.type !== GRAPH_GROUP),
+  ]
+}
+
+/**
+ * React Flow's nodes and edges for a graph. A node in a group is the group's child there, placed relative to it, so
+ * it moves with the group; the graph file keeps every position as it is on the canvas
+ */
+export function toFlow(graph: GraphData): { nodes: FlowNode[], edges: FlowEdge[] } {
+  const groups = new Map(graph.nodes.filter(node => node.type === GRAPH_GROUP).map(node => [node.id, node]))
+  const nodes = graph.nodes.map((node): FlowNode => {
+    const group = node.group && node.type !== GRAPH_GROUP
+      ? groups.get(node.group)
+      : undefined
+    return {
       id: node.id,
       type: 'graph',
-      position: { x: node.position[0], y: node.position[1] },
+      position: group
+        ? { x: node.position[0] - group.position[0], y: node.position[1] - group.position[1] }
+        : { x: node.position[0], y: node.position[1] },
       data: {
         type: node.type,
         values: { ...node.values },
       },
+      ...(group && { parentId: group.id }),
       ...(node.type === GRAPH_COMMENT && commentLayout(node.values)),
-    })),
+      ...(node.type === GRAPH_GROUP && groupLayout(node.values)),
+    }
+  })
+  return {
+    nodes: groupsFirst(nodes),
     edges: graph.edges.map(edge => ({
       id: edgeId(edge),
       source: edge.from.node,
@@ -51,21 +83,31 @@ export function toFlow(graph: GraphData): { nodes: FlowNode[], edges: FlowEdge[]
 }
 
 export function fromFlow(base: Pick<GraphData, 'name' | 'kind'>, nodes: FlowNode[], edges: FlowEdge[], parameters: GraphParameter[]): GraphData {
+  const byId = new Map(nodes.map(node => [node.id, node]))
   return {
     version: GRAPH_FORMAT_VERSION,
     kind: base.kind,
     name: base.name,
-    nodes: nodes.map(node => ({
-      id: node.id,
-      type: node.data.type,
-      position: [
-        Math.round(node.position.x),
-        Math.round(node.position.y),
-      ],
-      ...(Object.keys(node.data.values).length && {
-        values: { ...node.data.values },
-      }),
-    })),
+    nodes: nodes.map((node) => {
+      // Back to where it is on the canvas: a group's child is placed relative to the group
+      const group = node.parentId
+        ? byId.get(node.parentId)
+        : undefined
+      const x = node.position.x + (group?.position.x ?? 0)
+      const y = node.position.y + (group?.position.y ?? 0)
+      return {
+        id: node.id,
+        type: node.data.type,
+        position: [
+          Math.round(x),
+          Math.round(y),
+        ] as [number, number],
+        ...(Object.keys(node.data.values).length && {
+          values: { ...node.data.values },
+        }),
+        ...(group && { group: group.id }),
+      }
+    }),
     edges: edges.map(edge => ({
       from: { node: edge.source, port: edge.sourceHandle ?? '' },
       to: { node: edge.target, port: edge.targetHandle ?? '' },
@@ -77,8 +119,8 @@ export function fromFlow(base: Pick<GraphData, 'name' | 'kind'>, nodes: FlowNode
 /** What changes what the graph compiles to: everything except where the nodes sit and what is selected */
 export function graphKey(graph: GraphData): string {
   return JSON.stringify({
-    // Comments change nothing the graph does
-    nodes: graph.nodes.filter(node => node.type !== GRAPH_COMMENT).map(node => [node.id, node.type, node.values]),
+    // Comments and groups change nothing the graph does
+    nodes: graph.nodes.filter(node => node.type !== GRAPH_COMMENT && node.type !== GRAPH_GROUP).map(node => [node.id, node.type, node.values]),
     edges: graph.edges,
     parameters: graph.parameters,
   })

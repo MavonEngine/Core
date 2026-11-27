@@ -4,294 +4,376 @@
   "name": "server-npc",
   "nodes": [
     {
+      "id": "group_start",
+      "type": "graph.group",
+      "position": [
+        0,
+        0
+      ],
+      "values": {
+        "name": "Remember where it started",
+        "width": 740,
+        "height": 410
+      }
+    },
+    {
+      "id": "group_walk",
+      "type": "graph.group",
+      "position": [
+        0,
+        480
+      ],
+      "values": {
+        "name": "Walk",
+        "width": 960,
+        "height": 610
+      }
+    },
+    {
+      "id": "group_turn",
+      "type": "graph.group",
+      "position": [
+        1040,
+        480
+      ],
+      "values": {
+        "name": "Turn around",
+        "width": 1000,
+        "height": 720
+      }
+    },
+    {
+      "id": "group_clicked",
+      "type": "graph.group",
+      "position": [
+        0,
+        1260
+      ],
+      "values": {
+        "name": "Answer clicks",
+        "width": 680,
+        "height": 260
+      }
+    },
+    {
       "id": "about",
       "type": "graph.comment",
       "position": [
-        0,
-        -150
+        20,
+        46
       ],
       "values": {
         "text": "Runs on the server, with the Server NPC as Self: the Logic Graph object in the scene names it as its target. On Start remembers where the NPC started along x, so it knows how far it has walked.",
-        "width": 720,
-        "height": 110
-      }
+        "width": 700,
+        "height": 80
+      },
+      "group": "group_start"
     },
     {
       "id": "about_walking",
       "type": "graph.comment",
       "position": [
-        0,
-        330
+        20,
+        526
       ],
       "values": {
         "text": "Every tick: walk along x by direction \u00d7 speed \u00d7 delta, then face that way. dir, speed and range are this graph's parameters. Rotation y follows the players' convention: \u221290\u00b0 (\u22121.5708) faces +x, so yaw = dir \u00d7 \u22121.5708.",
-        "width": 980,
-        "height": 110
-      }
+        "width": 920,
+        "height": 90
+      },
+      "group": "group_walk"
     },
     {
       "id": "about_turning",
       "type": "graph.comment",
       "position": [
-        1200,
-        920
+        1060,
+        526
       ],
       "values": {
         "text": "Turn around: (x \u2212 start) \u00d7 dir is how far the NPC is past its start in the direction it walks. Once that reaches range, Branch flips dir. The same test covers both ends.",
-        "width": 760,
-        "height": 110
-      }
+        "width": 960,
+        "height": 90
+      },
+      "group": "group_turn"
     },
     {
       "id": "about_clicked",
       "type": "graph.comment",
       "position": [
-        0,
-        1310
+        20,
+        1306
       ],
       "values": {
         "text": "Clicked: when a player clicks the NPC, the server sends `clicked` to the graphs acting on it. Say in Chat posts as the NPC.",
-        "width": 620,
-        "height": 90
-      }
+        "width": 640,
+        "height": 80
+      },
+      "group": "group_clicked"
     },
     {
       "id": "start",
       "type": "event.start",
       "position": [
-        0,
-        0
-      ]
+        20,
+        150
+      ],
+      "group": "group_start"
     },
     {
       "id": "start_position",
       "type": "entity.position",
       "position": [
-        0,
-        120
-      ]
+        20,
+        240
+      ],
+      "group": "group_start"
     },
     {
       "id": "start_split",
       "type": "vector.split",
       "position": [
-        240,
-        120
-      ]
+        250,
+        240
+      ],
+      "group": "group_start"
     },
     {
       "id": "remember_start",
       "type": "variable.set",
       "position": [
         480,
-        0
+        150
       ],
       "values": {
         "name": "startX"
-      }
+      },
+      "group": "group_start"
     },
     {
       "id": "tick",
       "type": "event.tick",
       "position": [
-        0,
-        460
-      ]
+        20,
+        640
+      ],
+      "group": "group_walk"
     },
     {
       "id": "direction",
       "type": "variable.get",
       "position": [
-        0,
-        660
+        20,
+        790
       ],
       "values": {
         "name": "dir"
-      }
+      },
+      "group": "group_walk"
     },
     {
       "id": "speed",
       "type": "input.parameter",
       "position": [
-        0,
-        780
+        20,
+        890
       ],
       "values": {
         "name": "speed"
-      }
+      },
+      "group": "group_walk"
     },
     {
       "id": "velocity",
       "type": "math.multiply",
       "position": [
         240,
-        660
-      ]
+        790
+      ],
+      "group": "group_walk"
     },
     {
       "id": "distance",
       "type": "math.multiply",
       "position": [
-        480,
-        660
-      ]
+        440,
+        790
+      ],
+      "group": "group_walk"
     },
     {
       "id": "step",
       "type": "vector.combine3",
       "position": [
-        720,
-        660
-      ]
+        640,
+        790
+      ],
+      "group": "group_walk"
     },
     {
       "id": "walk",
       "type": "entity.addPosition",
       "position": [
-        480,
-        460
-      ]
+        300,
+        640
+      ],
+      "group": "group_walk"
     },
     {
       "id": "yaw",
       "type": "math.multiply",
       "position": [
-        720,
-        860
+        440,
+        940
       ],
       "values": {
         "b": -1.5708
-      }
+      },
+      "group": "group_walk"
     },
     {
       "id": "facing",
       "type": "vector.combine3",
       "position": [
-        960,
-        860
-      ]
+        640,
+        940
+      ],
+      "group": "group_walk"
     },
     {
       "id": "face",
       "type": "entity.setRotation",
       "position": [
-        760,
-        460
-      ]
+        620,
+        640
+      ],
+      "group": "group_walk"
     },
     {
       "id": "position",
       "type": "entity.position",
       "position": [
-        960,
-        1060
-      ]
+        1060,
+        920
+      ],
+      "group": "group_turn"
     },
     {
       "id": "position_split",
       "type": "vector.split",
       "position": [
-        1200,
-        1060
-      ]
+        1260,
+        920
+      ],
+      "group": "group_turn"
     },
     {
       "id": "start_x",
       "type": "variable.get",
       "position": [
-        1200,
-        1220
+        1260,
+        1080
       ],
       "values": {
         "name": "startX"
-      }
+      },
+      "group": "group_turn"
     },
     {
       "id": "offset",
       "type": "math.subtract",
       "position": [
-        1440,
-        1060
-      ]
+        1460,
+        920
+      ],
+      "group": "group_turn"
     },
     {
       "id": "ahead",
       "type": "math.multiply",
       "position": [
-        1680,
-        1060
-      ]
+        1640,
+        920
+      ],
+      "group": "group_turn"
     },
     {
       "id": "range",
       "type": "input.parameter",
       "position": [
-        1680,
-        1220
+        1640,
+        1040
       ],
       "values": {
         "name": "range"
-      }
+      },
+      "group": "group_turn"
     },
     {
       "id": "past_end",
       "type": "logic.compare",
       "position": [
-        1920,
-        1060
+        1820,
+        920
       ],
       "values": {
         "op": ">="
-      }
+      },
+      "group": "group_turn"
     },
     {
       "id": "turn_around",
       "type": "flow.branch",
       "position": [
-        1040,
-        460
-      ]
+        1060,
+        640
+      ],
+      "group": "group_turn"
     },
     {
       "id": "reversed",
       "type": "math.negate",
       "position": [
-        1040,
-        660
-      ]
+        1320,
+        790
+      ],
+      "group": "group_turn"
     },
     {
       "id": "reverse",
       "type": "variable.set",
       "position": [
-        1300,
-        460
+        1320,
+        640
       ],
       "values": {
         "name": "dir"
-      }
+      },
+      "group": "group_turn"
     },
     {
       "id": "clicked",
       "type": "event.message",
       "position": [
-        0,
-        1420
+        20,
+        1410
       ],
       "values": {
         "name": "clicked"
-      }
+      },
+      "group": "group_clicked"
     },
     {
       "id": "greet",
       "type": "chat.say",
       "position": [
         300,
-        1420
+        1410
       ],
       "values": {
         "message": "Hi I'm a server NPC controlled through logic graph running on the server"
-      }
+      },
+      "group": "group_clicked"
     }
   ],
   "edges": [
