@@ -175,6 +175,46 @@ describe('migrations', () => {
     applyMigrations(migration, [], [...MIGRATIONS, later])
     migration.files.commit()
 
-    expect(readJson('mavonengine.json').migrations).toEqual(['0.0.22-dev-script', '0.0.25-app-name-title', '0.0.30-later'])
+    expect(readJson('mavonengine.json').migrations).toEqual([
+      '0.0.22-dev-script',
+      '0.0.25-app-name-title',
+      '0.0.28-drop-three-perf',
+      '0.0.30-later',
+    ])
+  })
+
+  it('remove three-perf from the client, or the root without one', () => {
+    write('package.json', {
+      scripts: { 'dev': 'mavonengine dev', 'dev:server': 'x' },
+      devDependencies: { 'three-perf': '^1.0.11', 'vite': '^8.0.0' },
+    })
+    write('client/package.json', {
+      dependencies: { 'three': '0.187.0', 'three-perf': '^1.0.11' },
+      devDependencies: { 'three-perf': '^1.0.11', 'typescript': '^5.0.0' },
+    })
+    const migration = ctx('0.0.28')
+    expect(pendingMigrations(migration).map(m => m.id)).toContain('0.0.28-drop-three-perf')
+
+    applyMigrations(migration, pendingMigrations(migration))
+    migration.files.commit()
+
+    expect(readJson('client/package.json')).toEqual({
+      dependencies: { three: '0.187.0' },
+      devDependencies: { typescript: '^5.0.0' },
+    })
+    expect(readJson('package.json').devDependencies).toEqual({ vite: '^8.0.0' })
+    // Gone: it doesn't apply again
+    expect(pendingMigrations(ctx('0.0.28'))).toEqual([])
+  })
+
+  it('leave projects without three-perf alone', () => {
+    write('package.json', {
+      scripts: { 'dev': 'mavonengine dev', 'dev:server': 'x' },
+    })
+    write('client/package.json', {
+      dependencies: { three: '0.187.0' },
+    })
+
+    expect(pendingMigrations(ctx('0.0.28')).map(m => m.id)).not.toContain('0.0.28-drop-three-perf')
   })
 })
