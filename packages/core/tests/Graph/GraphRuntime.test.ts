@@ -288,6 +288,45 @@ describe('graphRuntime', () => {
     expect(log).toHaveBeenCalledWith('3')
   })
 
+  it('lets a run through a Cooldown at most once every few seconds', () => {
+    const log = vi.fn()
+    const runtime = new GraphRuntime(logic([
+      {
+        id: 'on',
+        type: 'event.message',
+        values: { name: 'poke' },
+      },
+      {
+        id: 'wait',
+        type: 'flow.cooldown',
+        values: { seconds: 10 },
+      },
+      {
+        id: 'yes',
+        type: 'action.log',
+        values: { value: 'answered' },
+      },
+      {
+        id: 'no',
+        type: 'action.log',
+        values: { value: 'too soon' },
+      },
+    ], [
+      ['on.then', 'wait.run'],
+      ['wait.then', 'yes.run'],
+      ['wait.blocked', 'no.run'],
+    ]), { log })
+    runtime.start()
+
+    runtime.message('poke', 0)
+    runtime.update(4)
+    runtime.message('poke', 0)
+    runtime.update(6)
+    runtime.message('poke', 0)
+
+    expect(log.mock.calls.flat()).toEqual(['answered', 'too soon', 'answered'])
+  })
+
   it('skips comments', () => {
     const log = vi.fn()
     const runtime = new GraphRuntime(logic([

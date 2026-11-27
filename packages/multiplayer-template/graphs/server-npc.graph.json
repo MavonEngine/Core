@@ -51,7 +51,7 @@
       ],
       "values": {
         "name": "Answer clicks",
-        "width": 680,
+        "width": 880,
         "height": 260
       }
     },
@@ -105,8 +105,8 @@
         1306
       ],
       "values": {
-        "text": "Clicked: when a player clicks the NPC, the server sends `clicked` to the graphs acting on it. Say in Chat posts as the NPC.",
-        "width": 640,
+        "text": "Clicked: when a player clicks the NPC, the server sends `clicked` to the graphs acting on it. Cooldown lets it answer at most once every 10 seconds (clicks sooner do nothing), then Say in Chat posts as the NPC.",
+        "width": 840,
         "height": 80
       },
       "group": "group_clicked"
@@ -364,10 +364,22 @@
       "group": "group_clicked"
     },
     {
+      "id": "cooldown",
+      "type": "flow.cooldown",
+      "position": [
+        280,
+        1410
+      ],
+      "values": {
+        "seconds": 10
+      },
+      "group": "group_clicked"
+    },
+    {
       "id": "greet",
       "type": "chat.say",
       "position": [
-        300,
+        520,
         1410
       ],
       "values": {
@@ -640,6 +652,16 @@
     {
       "from": {
         "node": "clicked",
+        "port": "then"
+      },
+      "to": {
+        "node": "cooldown",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "cooldown",
         "port": "then"
       },
       "to": {

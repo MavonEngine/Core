@@ -210,6 +210,28 @@ export const LOGIC_NODES: NodeDefinition[] = [
     },
   },
   {
+    type: 'flow.cooldown',
+    label: 'Cooldown',
+    category: 'Flow',
+    description: 'Continues at most once every few seconds; sooner runs go to Blocked',
+    kinds: LOGIC,
+    inputs: {
+      ...run,
+      seconds: { type: 'float', label: 'Seconds', default: 1 },
+    },
+    outputs: {
+      then: { type: 'exec', label: 'Then' },
+      blocked: { type: 'exec', label: 'Blocked' },
+    },
+    run: ({ seconds }, { state, time }) => {
+      const last = state.last as number | undefined
+      if (last !== undefined && time - last < asFloat(seconds))
+        return { next: 'blocked' }
+      state.last = time
+      return { next: 'then' }
+    },
+  },
+  {
     type: 'flow.delay',
     label: 'Delay',
     category: 'Flow',
