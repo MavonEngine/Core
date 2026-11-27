@@ -74,9 +74,9 @@ export default class GameSyncManager implements GameObjectInterface {
     )
     const raycaster = Game.instance().rayCaster
     raycaster.setFromCamera(pointer, Game.instance().camera.instance)
-    const npcs = [...ClientServerNpc.all].filter(npc => npc.model.instance)
-    const hit = raycaster.intersectObjects(npcs.map(npc => npc.model.instance), true)[0]
-    return hit && npcs.find(candidate => candidate.owns(hit.object))
+    const npcs = [...ClientServerNpc.all].filter(npc => npc.hitArea)
+    const hit = raycaster.intersectObjects(npcs.map(npc => npc.hitArea!), false)[0]
+    return hit && npcs.find(candidate => candidate.hitArea === hit.object)
   }
 
   /**
@@ -88,14 +88,14 @@ export default class GameSyncManager implements GameObjectInterface {
     const canvas = Game.instance().canvas
     let down: { x: number, y: number } | undefined
     let pointer: { x: number, y: number } | undefined
-    let hovering = false
     let checkedAt = 0
 
+    // Set every time rather than on changes only: anything else that sets the canvas' cursor doesn't leave it wrong
     const setHovering = (value: boolean) => {
-      if (value === hovering)
-        return
-      hovering = value
-      canvas.style.cursor = value ? 'pointer' : ''
+      if (value && canvas.style.cursor !== 'pointer')
+        canvas.style.cursor = 'pointer'
+      else if (!value && canvas.style.cursor === 'pointer')
+        canvas.style.cursor = ''
     }
     const checkHover = () => {
       checkedAt = performance.now()
@@ -108,7 +108,13 @@ export default class GameSyncManager implements GameObjectInterface {
     }, { signal: this.abort.signal })
     canvas.addEventListener('pointermove', (e) => {
       pointer = { x: e.clientX, y: e.clientY }
+      // No button held: not dragging, whatever happened to the pointerup
+      if (e.buttons === 0)
+        down = undefined
     }, { signal: this.abort.signal })
+    // A drag that ends off the canvas, or is cancelled, still ends
+    for (const type of ['pointerup', 'pointercancel', 'blur'] as const)
+      window.addEventListener(type, () => down = undefined, { signal: this.abort.signal })
     canvas.addEventListener('pointerleave', () => {
       pointer = undefined
       setHovering(false)
