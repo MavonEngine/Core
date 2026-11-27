@@ -1,7 +1,7 @@
 import type { SceneObjectData } from '../../src/Scene/types'
 import { Object3D } from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LogicGraphObject, registerLogicGraphServerObject, setGraphSource } from '../../src/Graph/Logic/logicGraphObject'
+import { _resetLogicGraphs, LogicGraphObject, registerLogicGraphServerObject, reloadLogicGraph, sendGraphMessage, setGraphSource, watchLogicGraph } from '../../src/Graph/Logic/logicGraphObject'
 import { parseGraphData } from '../../src/Graph/types'
 import { clearSceneObjects, getSceneObject } from '../../src/Scene/SceneObjectRegistry'
 
@@ -82,6 +82,7 @@ describe('logicGraphObject', () => {
       : Promise.reject(new Error('no such graph')))
   })
   afterEach(() => {
+    _resetLogicGraphs()
     clearSceneObjects()
     vi.clearAllMocks()
   })
@@ -113,6 +114,52 @@ describe('logicGraphObject', () => {
 
     expect(door.rotation.y).toBeCloseTo(2)
     expect(object.rotation.y).toBe(0)
+  })
+
+  it('swaps in a new version of its graph, and keeps the old one when the new one is broken', async () => {
+    const object = new LogicGraphObject(data({ graph: 'spinner' }), undefined, 'server')
+    await flush()
+    const still = parseGraphData({
+      ...spinner,
+      nodes: spinner.nodes.map(node => node.id === 'speed'
+        ? {
+            ...node,
+            values: {
+              a: [0, 0, 0],
+            },
+          }
+        : node),
+    })
+
+    expect(reloadLogicGraph('spinner', still)).toBe(1)
+    object.update(1)
+    expect(object.rotation.y).toBe(0)
+
+    const broken = parseGraphData({
+      ...spinner,
+      nodes: [
+        ...spinner.nodes,
+        { id: 'x', type: 'nope' },
+      ],
+    })
+    expect(() => reloadLogicGraph('spinner', broken)).toThrow('Unknown node type "nope"')
+    expect(reloadLogicGraph('other', spinner)).toBe(0)
+  })
+
+  it('tells watchers the steps it runs, and gets messages', async () => {
+    const object = new LogicGraphObject(data({ graph: 'spinner' }), undefined, 'server')
+    await flush()
+    expect(object.runtime).toBeDefined()
+    const steps: string[] = []
+    const stop = watchLogicGraph('spinner', (node, object) => steps.push(`${object}:${node}`))
+
+    sendGraphMessage('ping')
+    stop()
+    sendGraphMessage('ping')
+
+    expect(steps).toEqual(['logic_1:on', 'logic_1:print'])
+    expect(logger.info).toHaveBeenCalledWith('[spinner] pong')
+    expect(logger.info).toHaveBeenCalledTimes(2)
   })
 
   it('logs why a graph isn\'t running', async () => {

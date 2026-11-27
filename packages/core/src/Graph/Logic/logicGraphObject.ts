@@ -42,13 +42,49 @@ export function setGraphSource(load: (name: string) => Promise<GraphData>) {
   source = load
 }
 
-/** The graphs running on this side, which messages go to */
-const running = new Set<GraphRuntime>()
+/** A graph file, from where this side gets graphs */
+export function loadGraph(name: string): Promise<GraphData> {
+  return source(name)
+}
+
+/** The logic graph objects on this side that run their graph here */
+const live = new Set<LogicGraphObject>()
 
 /** Send a message to every logic graph on this side, as a Send Message node does */
 export function sendGraphMessage(name: string, value: GraphValue = 0) {
-  for (const runtime of [...running])
-    runtime.message(name, value)
+  for (const object of [...live])
+    object.runtime?.message(name, value)
+}
+
+/** Told each step a graph runs: the node, and the logic graph object running it */
+export type GraphStepListener = (node: string, object: string) => void
+const stepListeners = new Map<string, Set<GraphStepListener>>()
+
+/** Follow the steps the graph `name` runs, in every object running it here. Returns a function that stops */
+export function watchLogicGraph(name: string, listener: GraphStepListener): () => void {
+  const listeners = stepListeners.get(name) ?? new Set()
+  listeners.add(listener)
+  stepListeners.set(name, listeners)
+  return () => {
+    listeners.delete(listener)
+    if (!listeners.size)
+      stepListeners.delete(name)
+  }
+}
+
+/**
+ * Run a new version of the graph `name` in every object running it here, from the start (On Start runs again,
+ * variables start over). Throws when it has problems, leaving the old version running. Returns how many it reached
+ */
+export function reloadLogicGraph(name: string, graph: GraphData): number {
+  const objects = [...live].filter(object => object.props.graph === name)
+  // Checked once before touching any, so a broken graph changes nothing
+  if (objects.length)
+    // eslint-disable-next-line no-new -- built only to check it
+    new GraphRuntime(graph)
+  for (const object of objects)
+    object.useGraph(graph)
+  return objects.length
 }
 
 /** Reads and moves an Object3D, or a GameObject's own vectors when it has none */
@@ -130,8 +166,10 @@ export class LogicGraphObject extends GameObject {
     this.props = { ...(data.props as LogicGraphProps | undefined) }
 
     const name = this.props.graph
-    if (name && GRAPH_NAME_RE.test(name))
+    if (name && GRAPH_NAME_RE.test(name)) {
+      live.add(this)
       void this.load(name)
+    }
 
     if (side === 'client') {
       const input = (BaseGame.instance() as { input?: { on(e: string, cb: (ev: KeyboardEvent) => void): void, off(e: string, cb: (ev: KeyboardEvent) => void): void } }).input
@@ -146,22 +184,8 @@ export class LogicGraphObject extends GameObject {
   private async load(name: string) {
     try {
       const graph = await source(name)
-      if (this.garbageCollect)
-        return
-      const logger = BaseGame.instance().logger
-      const target = this.props.target
-      const self = target
-        ? lazyEntity(target, () => sceneEntity(this.scene, target))
-        : graphEntity(this.id, this, undefined)
-      this.runtime = new GraphRuntime(graph, {
-        self,
-        find: id => lazyEntity(id, () => sceneEntity(this.scene, id)),
-        parameters: this.props.parameters,
-        log: message => logger?.info(`[${name}] ${message}`),
-        emit: sendGraphMessage,
-      })
-      running.add(this.runtime)
-      this.runtime.start()
+      if (!this.garbageCollect)
+        this.useGraph(graph)
     }
     catch (err) {
       this.error = (err as Error).message
@@ -169,13 +193,32 @@ export class LogicGraphObject extends GameObject {
     }
   }
 
+  /** Run `graph`, from the start. Throws when it has problems */
+  useGraph(graph: GraphData) {
+    const name = this.props.graph ?? graph.name
+    const logger = BaseGame.instance().logger
+    const target = this.props.target
+    const self = target
+      ? lazyEntity(target, () => sceneEntity(this.scene, target))
+      : graphEntity(this.id, this, undefined)
+    this.runtime = new GraphRuntime(graph, {
+      self,
+      find: id => lazyEntity(id, () => sceneEntity(this.scene, id)),
+      parameters: this.props.parameters,
+      log: message => logger?.info(`[${name}] ${message}`),
+      emit: sendGraphMessage,
+      onStep: node => stepListeners.get(name)?.forEach(listener => listener(node, this.id)),
+    })
+    this.error = undefined
+    this.runtime.start()
+  }
+
   update(delta: number): void {
     this.runtime?.update(delta)
   }
 
   destroy(): void {
-    if (this.runtime)
-      running.delete(this.runtime)
+    live.delete(this)
     this.offKey?.()
     super.destroy()
   }
@@ -201,5 +244,5 @@ export function registerLogicGraphServerObject() {
 /** For tests */
 export function _resetLogicGraphs() {
   registered = false
-  running.clear()
+  live.clear()
 }

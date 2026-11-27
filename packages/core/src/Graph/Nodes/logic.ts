@@ -84,6 +84,7 @@ function transformNodes(name: 'position' | 'rotation' | 'scale', label: string):
         entity,
         amount: {
           type: 'vec3',
+          label: 'Amount',
           default: [0, 0, 0],
         },
       },

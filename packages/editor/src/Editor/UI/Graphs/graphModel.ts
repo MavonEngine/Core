@@ -114,6 +114,35 @@ export function defaultMaterialGraph(name: string): GraphData {
   }
 }
 
+/** A new logic graph: On Start logs a hello */
+export function defaultLogicGraph(name: string): GraphData {
+  return {
+    version: GRAPH_FORMAT_VERSION,
+    kind: 'logic',
+    name,
+    nodes: [
+      {
+        id: 'start_1',
+        type: 'event.start',
+        position: [0, 0],
+      },
+      {
+        id: 'log_1',
+        type: 'action.log',
+        position: [260, 0],
+        values: { value: `${name} started` },
+      },
+    ],
+    edges: [
+      {
+        from: { node: 'start_1', port: 'then' },
+        to: { node: 'log_1', port: 'run' },
+      },
+    ],
+    parameters: [],
+  }
+}
+
 /** A parameter's starting value for its type */
 export function defaultValue(type: PinType): GraphValue {
   switch (type) {
@@ -136,7 +165,7 @@ export function defaultValue(type: PinType): GraphValue {
 }
 
 /** The colors the editor draws ports and edges of each type in */
-export const PIN_COLORS: Record<PinType | 'number', string> = {
+export const PIN_COLORS: Record<PinType | 'number' | 'any', string> = {
   float: '#8fb3ff',
   int: '#5fd1c1',
   bool: '#e06c75',
@@ -149,4 +178,5 @@ export const PIN_COLORS: Record<PinType | 'number', string> = {
   entity: '#56b6c2',
   exec: '#ffffff',
   number: '#a5b4fc',
+  any: '#d4d4d8',
 }

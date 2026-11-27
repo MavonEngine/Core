@@ -3,7 +3,7 @@ import Game from '@mavonengine/core/Game'
 import { useEffect, useRef } from 'react'
 import { AmbientLight, DirectionalLight, Mesh, PerspectiveCamera, Scene, SphereGeometry } from 'three'
 import { WebGPURenderer } from 'three/webgpu'
-import styles from './Materials.module.css'
+import styles from './Graphs.module.css'
 
 /** A slowly turning sphere drawn with `material`, in its own renderer on the game's backend */
 export default function MaterialPreview({ material }: { material?: Material }) {

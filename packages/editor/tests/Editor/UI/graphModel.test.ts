@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultMaterialGraph, fromFlow, graphKey, newNodeId, toFlow } from '../../../src/Editor/UI/Materials/graphModel'
+import { defaultMaterialGraph, fromFlow, graphKey, newNodeId, toFlow } from '../../../src/Editor/UI/Graphs/graphModel'
 
 describe('graph model', () => {
   it('goes to React Flow and back without changing the graph', () => {

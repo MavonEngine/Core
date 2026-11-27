@@ -1,13 +1,13 @@
 import styles from './ActivityBar.module.css'
 
 /** What the editor shows next to the activity bar: the scene editor itself, or a view that takes its place */
-export type Activity = 'scene' | 'materials' | 'server' | 'plugins'
+export type Activity = 'scene' | 'graphs' | 'server' | 'plugins'
 
 const icons: { id: Activity, label: string, path: string, evenOdd?: boolean }[] = [
   { id: 'scene', label: 'Scene', path: 'M17.5 0h-9L7 1.5V6H2.5L1 7.5v13l1.5 1.5h13l1.5-1.5V16h4.5l1.5-1.5v-13L22 0h-4.5zM16 20.5H2.5V7.5H7v8L8.5 17h7.5v3.5zm5.5-6H8.5V1.5h9v4.5H22v8.5z' },
   {
-    id: 'materials',
-    label: 'Materials',
+    id: 'graphs',
+    label: 'Graphs',
     // Three connected nodes
     path: 'M2 3h7v6H2V3zm1.5 1.5v3h4v-3h-4zM15 9h7v6h-7V9zm1.5 1.5v3h4v-3h-4zM2 15h7v6H2v-6zm1.5 1.5v3h4v-3h-4zM9 5.25h2.75v5.5H15v1.5h-4.75v-5.5H9v-1.5zm0 13.5h1.25v-5.5H15v-1.5h-6.25v7H9z',
   },

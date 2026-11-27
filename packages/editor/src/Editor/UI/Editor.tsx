@@ -6,7 +6,7 @@ import Assets from './Assets/Assets'
 import CanvasPanel from './CanvasPanel'
 import DockArea from './DockArea'
 import styles from './Editor.module.css'
-import MaterialsView from './Materials/MaterialsView'
+import GraphsView from './Graphs/GraphsView'
 import PanelHeader from './PanelHeader'
 import PluginsPanel from './Plugins/PluginsPanel'
 import PropertiesPanel from './PropertiesPanel'
@@ -29,9 +29,9 @@ function Editor() {
         <ActivityBar active={activity} onSelect={setActivity} />
         <div className={styles.workspace}>
           {/* Covers the editor rather than replacing it, so the viewport and the docks keep their state underneath */}
-          {activity === 'materials' && (
+          {activity === 'graphs' && (
             <div className={`${styles.panel} ${styles.fullView}`}>
-              <MaterialsView />
+              <GraphsView />
             </div>
           )}
           {(activity === 'server' || activity === 'plugins') && (

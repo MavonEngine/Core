@@ -120,6 +120,7 @@ export class GraphRuntime {
       const result = definition.run?.({}, this.runContext(id, payload))
       if (result === false)
         continue
+      this.options.onStep?.(id)
       this.finishStep(id, result || undefined)
     }
   }

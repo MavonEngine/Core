@@ -310,3 +310,27 @@
 .root .paletteItem:hover {
     background: var(--bg-hover);
 }
+
+.execHandle {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    clip-path: polygon(0 0, 60% 0, 100% 50%, 60% 100%, 0 100%);
+}
+
+.node.event .nodeHeader {
+    background: #4a2a2a;
+}
+
+.node.running {
+    border-color: var(--accent-yellow);
+    box-shadow: 0 0 0 2px rgb(220 220 170 / 45%), 0 2px 8px rgb(0 0 0 / 40%);
+}
+
+.kindTitle {
+    margin-top: var(--spacing-md);
+}
+
+.kindSelect {
+    flex-shrink: 0;
+}

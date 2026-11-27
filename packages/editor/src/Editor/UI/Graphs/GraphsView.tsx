@@ -1,10 +1,12 @@
-import type { GraphData, GraphParameter, GraphValue, PinType } from '@mavonengine/core/Graph/types'
+import type { GraphData, GraphKind, GraphParameter, GraphValue, PinType } from '@mavonengine/core/Graph/types'
 import type { GraphIssue } from '@mavonengine/core/Graph/validate'
 import type { Connection, NodeTypes } from '@xyflow/react'
 import type { Material } from 'three'
 import type { FlowEdge, FlowNode } from './graphModel'
 import type { GraphEditorContext } from './GraphNode'
 import Game from '@mavonengine/core/Game'
+import { GraphRuntime, GraphRuntimeError } from '@mavonengine/core/Graph/Logic/GraphRuntime'
+import { loadGraph, LOGIC_GRAPH_TYPE, reloadLogicGraph, watchLogicGraph } from '@mavonengine/core/Graph/Logic/logicGraphObject'
 import { MaterialGraphError } from '@mavonengine/core/Graph/Material/compileMaterialGraph'
 import { materialGraphs } from '@mavonengine/core/Graph/Material/MaterialGraphs'
 import { canConnect, getNode, getNodes } from '@mavonengine/core/Graph/NodeRegistry'
@@ -15,10 +17,10 @@ import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Texture } from 'three'
-import { defaultMaterialGraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
+import { defaultLogicGraph, defaultMaterialGraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
 import GraphNode, { GraphContext } from './GraphNode'
+import styles from './Graphs.module.css'
 import MaterialPreview from './MaterialPreview'
-import styles from './Materials.module.css'
 import '@xyflow/react/dist/style.css'
 
 const nodeTypes: NodeTypes = { graph: GraphNode }
@@ -53,10 +55,48 @@ async function saveGraph(name: string, graph: GraphData): Promise<string | undef
   }
 }
 
+/** The active scene's objects, to pick entities from */
+function sceneEntities(): { value: string, label: string }[] {
+  return (Game.instance().activeScene?.getEntries() ?? [])
+    .map(entry => ({
+      value: entry.data.id,
+      label: entry.data.name
+        ? `${entry.data.name} (${entry.data.id})`
+        : entry.data.id,
+    }))
+}
+
+/** How long a node stays lit after it ran */
+const ACTIVE_MS = 300
+
+/** The nodes of the logic graph `name` that ran in the last moment, in any object running it here */
+function useActiveNodes(name: string | undefined): Set<string> {
+  const [active, setActive] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (!name)
+      return
+    const lastRun = new Map<string, number>()
+    const stop = watchLogicGraph(name, node => lastRun.set(node, performance.now()))
+    // Checked a few times a second rather than on every step: a tick runs many
+    const timer = setInterval(() => {
+      const now = performance.now()
+      const next = new Set([...lastRun].filter(([, at]) => now - at < ACTIVE_MS).map(([node]) => node))
+      setActive(previous => previous.size === next.size && [...next].every(node => previous.has(node))
+        ? previous
+        : next)
+    }, 100)
+    return () => {
+      stop()
+      clearInterval(timer)
+    }
+  }, [name])
+  return active
+}
+
 /** Picks a node type to add, at where the canvas was right clicked */
-function NodePalette({ at, onPick, onClose }: { at: { x: number, y: number }, onPick(type: string): void, onClose(): void }) {
+function NodePalette({ kind, at, onPick, onClose }: { kind: GraphKind, at: { x: number, y: number }, onPick(type: string): void, onClose(): void }) {
   const [filter, setFilter] = useState('')
-  const nodes = getNodes('material').filter(node => `${node.category} ${node.label} ${node.type}`.toLowerCase().includes(filter.toLowerCase()))
+  const nodes = getNodes(kind).filter(node => `${node.category} ${node.label} ${node.type}`.toLowerCase().includes(filter.toLowerCase()))
   const categories = [
     ...new Set(nodes.map(node => node.category)),
   ]
@@ -154,7 +194,10 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
   const [palette, setPalette] = useState<{ screen: { x: number, y: number }, flow: { x: number, y: number } }>()
   // Made the same way as `graph` below, so an untouched graph compares equal
   const [saved, setSaved] = useState(() => JSON.stringify(fromFlow(initial, flow.nodes, flow.edges, initial.parameters)))
-  const [compiled, setCompiled] = useState<{ material?: Material, issues: GraphIssue[] }>({ issues: [] })
+  const [compiled, setCompiled] = useState<{ material?: Material, issues: GraphIssue[], running?: number }>({ issues: [] })
+  const active = useActiveNodes(initial.kind === 'logic'
+    ? initial.name
+    : undefined)
   const [status, setStatus] = useState<string>()
   const { screenToFlowPosition } = useReactFlow()
   const wrapper = useRef<HTMLDivElement>(null)
@@ -167,14 +210,25 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
   const analysis = useMemo(() => analyzeGraph(graph), [key])
   useEffect(() => {
     try {
-      // Also puts it on the scene's meshes that use this graph
-      setCompiled({ material: materialGraphs.set(graph.name, graph).material, issues: [] })
+      if (graph.kind === 'logic') {
+        // eslint-disable-next-line no-new -- built to check it, also when nothing runs it
+        new GraphRuntime(graph)
+        // Also runs it, from the start, in the scene's logic graph objects using it
+        setCompiled({
+          issues: [],
+          running: reloadLogicGraph(graph.name, graph),
+        })
+      }
+      else {
+        // Also puts it on the scene's meshes that use this graph
+        setCompiled({ material: materialGraphs.set(graph.name, graph).material, issues: [] })
+      }
     }
     catch (err) {
       setCompiled(previous => ({
         // The last material that compiled stays on the preview
-        material: previous.material,
-        issues: err instanceof MaterialGraphError
+        ...previous,
+        issues: err instanceof MaterialGraphError || err instanceof GraphRuntimeError
           ? err.issues
           : [
               { message: (err as Error).message },
@@ -182,7 +236,44 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
       }))
     }
   }, [key])
-  const { material, issues } = compiled
+  const { material, issues, running } = compiled
+
+  // Exec edges white and thick, value edges in their type's color
+  const styledEdges = useMemo(() => edges.map((edge) => {
+    const type = analysis.outputTypes.get(edge.source)?.[edge.sourceHandle ?? '']
+      ?? (getNode(nodes.find(node => node.id === edge.source)?.data.type ?? '')?.outputs[edge.sourceHandle ?? '']?.type === 'exec'
+        ? 'exec'
+        : undefined)
+    return {
+      ...edge,
+      style: {
+        stroke: PIN_COLORS[type ?? 'number'],
+        strokeWidth: type === 'exec'
+          ? 3
+          : 2,
+      },
+      animated: type === 'exec' && (active.has(edge.source) || active.has(edge.target)),
+    }
+  }), [edges, analysis, nodes, active])
+
+  const place = () => {
+    const scene = Game.instance().activeScene
+    if (!scene) {
+      setStatus('No scene to place it in')
+      return
+    }
+    const entry = scene.create(LOGIC_GRAPH_TYPE, {
+      transform: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      props: { graph: graph.name },
+    })
+    setStatus(entry
+      ? `Placed as ${entry.data.id}: pick what it acts on in its properties`
+      : 'Could not place it')
+  }
 
   const setValue = useCallback((id: string, port: string, value: GraphValue) => {
     setNodes(all => all.map(node => node.id === id
@@ -200,8 +291,10 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
     analysis,
     parameters,
     textures: textureNames(),
+    entities: sceneEntities(),
+    active,
     setValue,
-  }), [analysis, parameters, setValue])
+  }), [analysis, parameters, setValue, active])
 
   const onConnect = useCallback((connection: Connection) => {
     const edge = {
@@ -290,7 +383,7 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
         <div className={styles.canvas}>
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={styledEdges}
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -316,12 +409,12 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
             <Background gap={20} />
             <Controls showInteractive={false} />
           </ReactFlow>
-          {palette && <NodePalette at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
+          {palette && <NodePalette kind={graph.kind} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
           <div className={styles.hint}>Right click to add a node · Delete removes the selection</div>
         </div>
 
         <div className={styles.side}>
-          <MaterialPreview material={material} />
+          {graph.kind === 'material' && <MaterialPreview material={material} />}
           <div className={styles.section}>
             <div className={styles.toolbar}>
               <strong>{graph.name}</strong>
@@ -329,6 +422,19 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
             </div>
             {status && <div className={styles.muted}>{status}</div>}
           </div>
+          {graph.kind === 'logic' && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>In the scene</div>
+              <div className={styles.muted}>
+                {running
+                  ? `Running in ${running} object${running === 1
+                    ? ''
+                    : 's'} here, restarted on every change. Steps light up as they run`
+                  : 'Not running here. Place it in the scene, or set a Logic Graph object to it'}
+              </div>
+              <button onClick={place}>Place in scene</button>
+            </div>
+          )}
           <ParameterList parameters={parameters} onChange={setParameters} />
           {issues.length > 0 && (
             <div className={styles.section}>
@@ -353,18 +459,24 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
   )
 }
 
+const KINDS: { kind: GraphKind, title: string, empty: string }[] = [
+  { kind: 'material', title: 'Material graphs', empty: 'No material graphs yet' },
+  { kind: 'logic', title: 'Logic graphs', empty: 'No logic graphs yet' },
+]
+
 /**
- * The project's material graphs: pick or create one on the left, edit it in the node canvas, see it on the preview
- * sphere and on every mesh in the scene that uses it as it changes.
+ * The project's graphs: pick or create one on the left, edit it in the node canvas. A material graph shows on the
+ * preview sphere and on every mesh using it as it changes, a logic graph restarts in every object running it, with
+ * its steps lit up as they run.
  */
-export default function MaterialsView() {
+export default function GraphsView() {
   registerBuiltinNodes()
   const list = useSyncExternalStore(useCallback(listener => materialGraphs.subscribe(listener), []), () => materialGraphs.list)
-  const materials = list.filter(graph => graph.kind === 'material')
-  const [selected, setSelected] = useState<string>()
+  const [selected, setSelected] = useState<{ name: string, kind: GraphKind }>()
   const [loaded, setLoaded] = useState<GraphData>()
   const [error, setError] = useState<string>()
   const [newName, setNewName] = useState('')
+  const [newKind, setNewKind] = useState<GraphKind>('material')
 
   useEffect(() => {
     void materialGraphs.refreshList()
@@ -376,7 +488,10 @@ export default function MaterialsView() {
     if (!selected)
       return
     let live = true
-    materialGraphs.graph(selected).then(
+    const load = selected.kind === 'material'
+      ? materialGraphs.graph(selected.name)
+      : loadGraph(selected.name)
+    load.then(
       graph => live && setLoaded(graph),
       (err: Error) => live && setError(err.message),
     )
@@ -387,14 +502,17 @@ export default function MaterialsView() {
 
   const create = async () => {
     const name = newName
-    const error = await saveGraph(name, defaultMaterialGraph(name))
+    const graph = newKind === 'material'
+      ? defaultMaterialGraph(name)
+      : defaultLogicGraph(name)
+    const error = await saveGraph(name, graph)
     if (error) {
       setError(error)
       return
     }
     setNewName('')
     await materialGraphs.refreshList()
-    setSelected(name)
+    setSelected({ name, kind: newKind })
   }
 
   const nameOk = GRAPH_NAME_RE.test(newName) && !list.some(graph => graph.name === newName)
@@ -402,19 +520,26 @@ export default function MaterialsView() {
   return (
     <div className={styles.root}>
       <div className={styles.list}>
-        <div className={styles.sectionTitle}>Material graphs</div>
-        {materials.map(graph => (
-          <button
-            key={graph.name}
-            className={`${styles.listItem} ${graph.name === selected
-              ? styles.active
-              : ''}`}
-            onClick={() => setSelected(graph.name)}
-          >
-            {graph.name}
-          </button>
-        ))}
-        {!materials.length && <div className={styles.muted}>No material graphs yet</div>}
+        {KINDS.map(({ kind, title, empty }) => {
+          const graphs = list.filter(graph => graph.kind === kind)
+          return (
+            <div key={kind} className={styles.kindTitle}>
+              <div className={styles.sectionTitle}>{title}</div>
+              {graphs.map(graph => (
+                <button
+                  key={graph.name}
+                  className={`${styles.listItem} ${graph.name === selected?.name
+                    ? styles.active
+                    : ''}`}
+                  onClick={() => setSelected({ name: graph.name, kind })}
+                >
+                  {graph.name}
+                </button>
+              ))}
+              {!graphs.length && <div className={styles.muted}>{empty}</div>}
+            </div>
+          )
+        })}
         <div className={styles.newGraph}>
           <input
             className={styles.text}
@@ -427,12 +552,16 @@ export default function MaterialsView() {
                 void create()
             }}
           />
+          <select className={styles.kindSelect} value={newKind} onChange={e => setNewKind(e.target.value as GraphKind)}>
+            <option value="material">Material</option>
+            <option value="logic">Logic</option>
+          </select>
           <button disabled={!nameOk} onClick={() => void create()}>New</button>
         </div>
       </div>
 
       {error && <div className={styles.empty}>{error}</div>}
-      {!error && !selected && <div className={styles.empty}>Pick a material graph, or make a new one</div>}
+      {!error && !selected && <div className={styles.empty}>Pick a graph, or make a new one</div>}
       {!error && loaded && (
         <ReactFlowProvider key={loaded.name}>
           <GraphEditor initial={loaded} onSaved={() => void materialGraphs.refreshList()} />
