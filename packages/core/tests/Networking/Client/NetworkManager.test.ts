@@ -17,6 +17,7 @@ vi.mock('@geckos.io/client', () => ({
 const mockLogger = {
   error: vi.fn(),
   info: vi.fn(),
+  warn: vi.fn(),
 }
 
 const mockGame = {
@@ -82,6 +83,36 @@ describe('networkManager', () => {
     expect(nm.connected).toBe(true)
     mockSocket.onDisconnect.mock.calls[0][0]()
     expect(nm.connected).toBe(false)
+  })
+
+  it('warns with what it knew when the connection drops', () => {
+    const nm = new NetworkManager({})
+    ;(mockSocket as Record<string, unknown>).peerConnection = {
+      localPeerConnection: { connectionState: 'disconnected', iceConnectionState: 'disconnected' },
+    }
+    const listener = vi.fn()
+    nm.on('disconnect', listener)
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    mockSocket.onDisconnect.mock.calls[0][0]()
+    delete (mockSocket as Record<string, unknown>).peerConnection
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('connection disconnected (ice disconnected)'))
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+      closedByClient: false,
+      connectionState: 'disconnected',
+      lastStateAgo: null,
+    }))
+  })
+
+  it('logs a close by destroy() as info, not as a warning', () => {
+    const nm = new NetworkManager({})
+    mockSocket.onConnect.mock.calls[0][0](undefined)
+    // geckos raises the disconnect from inside close()
+    mockSocket.close.mockImplementationOnce(() => mockSocket.onDisconnect.mock.calls[0][0]())
+    nm.destroy()
+
+    expect(mockLogger.warn).not.toHaveBeenCalled()
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('closed by this client'))
   })
 
   it('destroy() closes the socket when connected', () => {
