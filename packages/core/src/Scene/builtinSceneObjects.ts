@@ -16,7 +16,7 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * The client side of the scene object types that come with the engine. None of them exist on the server,
  * they are visuals only; a project registers `server` factories for what the server needs.
  *
- * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, plus the primitive's
+ * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, materialGraph, plus the primitive's
  *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere) pivot ('center' | 'base') and collision.
  *   Missing params use their defaults, a missing pivot is 'center', collision is on unless false.
  *   The server builds their colliders, see primitiveSceneObjects
@@ -61,13 +61,16 @@ function primitiveProps(primitive: Primitive): Props {
   if (mesh instanceof Mesh) {
     props.castShadow = mesh.castShadow
     props.receiveShadow = mesh.receiveShadow
-    if (mesh.material instanceof MeshStandardMaterial) {
-      props.color = `#${mesh.material.color.getHexString()}`
-      props.roughness = mesh.material.roughness
-      props.metalness = mesh.material.metalness
-      if (mesh.material.wireframe)
+    const material = primitive.baseMaterial
+    if (material instanceof MeshStandardMaterial) {
+      props.color = `#${material.color.getHexString()}`
+      props.roughness = material.roughness
+      props.metalness = material.metalness
+      if (material.wireframe)
         props.wireframe = true
     }
+    if (primitive.materialGraph)
+      props.materialGraph = primitive.materialGraph
   }
   return props
 }
@@ -78,14 +81,16 @@ function applyPrimitiveProps(primitive: Primitive, props: Props = {}) {
     return
   mesh.castShadow = bool(props.castShadow) ?? mesh.castShadow
   mesh.receiveShadow = bool(props.receiveShadow) ?? mesh.receiveShadow
-  if (mesh.material instanceof MeshStandardMaterial) {
+  const material = primitive.baseMaterial
+  if (material instanceof MeshStandardMaterial) {
     const color = str(props.color)
     if (color)
-      mesh.material.color.set(color)
-    mesh.material.roughness = num(props.roughness) ?? mesh.material.roughness
-    mesh.material.metalness = num(props.metalness) ?? mesh.material.metalness
-    mesh.material.wireframe = bool(props.wireframe) ?? false
+      material.color.set(color)
+    material.roughness = num(props.roughness) ?? material.roughness
+    material.metalness = num(props.metalness) ?? material.metalness
+    material.wireframe = bool(props.wireframe) ?? false
   }
+  primitive.setMaterialGraph(str(props.materialGraph))
 }
 
 /** Only some lights have a shadow */

@@ -448,3 +448,9 @@ export interface PluginInfoList {
 
 /** Dev server endpoint the editor saves scenes to: POST { name, scene } */
 export const SCENE_SAVE_PATH = '/__mavonengine/scene-save'
+
+/** Dev server endpoint the editor saves graphs to: POST { name, graph } */
+export const GRAPH_SAVE_PATH = '/__mavonengine/graph-save'
+
+/** Dev server endpoint listing the project's graphs: GET → { graphs: { name, kind }[] } */
+export const GRAPHS_LIST_PATH = '/__mavonengine/graphs'

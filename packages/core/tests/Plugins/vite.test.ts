@@ -7,7 +7,7 @@ import { build, createServer } from 'vite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEV_CONTROL_TOKEN_HEADER, PLUGIN_INSTALL_PATH } from '../../src/Plugins/install'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
-import { PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
+import { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
 import { APP_NAME_PLACEHOLDER, fillAppName, generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
@@ -181,6 +181,22 @@ describe('build', () => {
     })
 
     expect(JSON.parse(readFileSync(join(outDir, 'scenes', 'main.json'), 'utf8')).name).toBe('main')
+  })
+
+  it('ships the graph files', async () => {
+    writeFile(join(root, 'graphs', 'lava.graph.json'), '{"version":1,"kind":"material","name":"lava","nodes":[],"edges":[],"parameters":[]}')
+    const outDir = join(root, 'client', 'dist')
+    await build({
+      root: join(root, 'client'),
+      logLevel: 'silent',
+      configFile: false,
+      plugins: [
+        mavonEnginePlugins(),
+      ],
+      build: { outDir, minify: false },
+    })
+
+    expect(JSON.parse(readFileSync(join(outDir, 'graphs', 'lava.graph.json'), 'utf8')).kind).toBe('material')
   })
 })
 
@@ -505,6 +521,54 @@ describe('dev server', () => {
     it('leaves requests for scenes that do not exist to vite', async () => {
       const res = await fetch(`${base}/scenes/missing.json`)
       expect(res.headers.get('cache-control')).not.toBe('no-store')
+    })
+  })
+
+  describe('graphs', () => {
+    const graph = {
+      version: 1,
+      kind: 'material',
+      name: 'lava',
+      nodes: [
+        {
+          id: 'out',
+          type: 'material.output',
+          position: [0, 0],
+        },
+      ],
+      edges: [],
+      parameters: [],
+    }
+    const save = (body: unknown) => fetch(`${base}${GRAPH_SAVE_PATH}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+
+    it('saves a graph to graphs/<name>.graph.json, serves it back and lists it', async () => {
+      const res = await save({ name: 'lava', graph })
+
+      expect(res.status).toBe(200)
+      expect(JSON.parse(readFileSync(join(root, 'graphs', 'lava.graph.json'), 'utf8'))).toEqual(graph)
+
+      const served = await fetch(`${base}/graphs/lava.graph.json`)
+      expect(served.headers.get('cache-control')).toBe('no-store')
+      expect(await served.json()).toEqual(graph)
+
+      const list = await (await fetch(`${base}${GRAPHS_LIST_PATH}`)).json()
+      expect(list.graphs).toContainEqual({ name: 'lava', kind: 'material' })
+    })
+
+    it('rejects bad names and invalid graphs', async () => {
+      for (const name of ['../evil', 'a/b', '']) {
+        const res = await save({ name, graph })
+        expect(res.status).toBe(400)
+      }
+      const res = await save({
+        name: 'lava',
+        graph: { kind: 'shader' },
+      })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toContain('"kind" must be one of')
     })
   })
 
