@@ -18,6 +18,8 @@ export class RapierDebugRenderer {
     this.world = world
     this.mesh = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: 0xFFFFFF, vertexColors: true }))
     this.mesh.frustumCulled = false
+    // Hidden until the first update gives it lines: the renderer warns about a geometry without positions
+    this.mesh.visible = false
     // An overlay, not part of the scene: never picked, and kept out of the editor's scene tree
     this.mesh.raycast = () => {}
     this.mesh.userData.isEditorInternal = true

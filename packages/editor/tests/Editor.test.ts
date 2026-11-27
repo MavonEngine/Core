@@ -48,14 +48,17 @@ vi.mock('../src/Editor/EditorCameraControls', () => ({
   }),
 }))
 
-vi.mock('three/examples/jsm/postprocessing/OutlinePass.js', () => ({
-  OutlinePass: vi.fn().mockImplementation(function () {
-    return {
+vi.mock('three/examples/jsm/tsl/display/OutlineNode.js', async () => {
+  const { float } = await import('three/tsl')
+  return {
+    outline: vi.fn(() => ({
       selectedObjects: [] as Object3D[],
+      visibleEdge: float(0),
+      hiddenEdge: float(0),
       dispose: vi.fn(),
-    }
-  }),
-}))
+    })),
+  }
+})
 
 vi.mock('three/examples/jsm/controls/TransformControls.js', () => ({
   TransformControls: vi.fn().mockImplementation(function () {
@@ -144,9 +147,7 @@ function createMockGame() {
       },
     },
     renderer: {
-      composer: {
-        addPass: vi.fn(),
-      },
+      addEffect: vi.fn(() => vi.fn()),
     },
     sizes: { width: 800, height: 600 },
     canvas: {
@@ -270,10 +271,10 @@ describe('editor', () => {
       expect(mockGame.contextMenuAbort.abort).toHaveBeenCalled()
     })
 
-    it('adds the outline pass to the renderer composer', () => {
+    it('adds the selection outline as a render effect', () => {
       const _editor = new Editor()
 
-      expect(mockGame.renderer.composer.addPass).toHaveBeenCalled()
+      expect(mockGame.renderer.addEffect).toHaveBeenCalledWith('editor-outline', expect.any(Function))
     })
 
     it('sets the camera position', () => {

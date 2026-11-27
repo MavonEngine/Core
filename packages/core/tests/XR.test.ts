@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { EventDispatcher, Group, Matrix4, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget } from 'three'
+import { DirectionalLight, EventDispatcher, Group, Matrix4, PerspectiveCamera, RenderTarget, Scene, Vector4 } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import XR, { reverseDepthMatrix } from '../src/XR'
 
@@ -56,22 +56,23 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     getCamera: () => ({ cameras: eyes }),
     getFrame: vi.fn((): any => ({})),
   })
-  const depth = { reversed: false }
   const draw = vi.fn()
-  const renderTarget = { current: null as WebGLRenderTarget | null }
+  const renderTarget = { current: null as RenderTarget | null }
   const webgl = {
     xr,
-    shadowMap: { autoUpdate: true },
+    reversedDepthBuffer: false,
     getRenderTarget: vi.fn(() => renderTarget.current),
-    setRenderTarget: vi.fn((target: WebGLRenderTarget | null) => renderTarget.current = target),
-    state: {
-      buffers: {
-        depth: {
-          getReversed: () => depth.reversed,
-        },
-      },
-    },
+    setRenderTarget: vi.fn((target: RenderTarget | null) => renderTarget.current = target),
     render: draw,
+  }
+  // Toggles the renderer's reversed depth buffer
+  const depth = {
+    get reversed() {
+      return webgl.reversedDepthBuffer
+    },
+    set reversed(value: boolean) {
+      webgl.reversedDepthBuffer = value
+    },
   }
   const renderer = {
     instance: webgl,
@@ -103,10 +104,7 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     xr,
     game,
     session,
-    // with the mock render, which XR wraps
-    webgl: { ...webgl, render: draw },
-    // with XR's wrapped render
-    patched: webgl,
+    webgl,
     renderTarget,
     depth,
     eyes,
@@ -266,8 +264,12 @@ describe('xr', () => {
 
   it('mirrors the headset to the page from the head, shaped like the window, without touching the headset', () => {
     const { instance, game, webgl, renderTarget } = setup({ mirror: true })
-    const headsetTarget = new WebGLRenderTarget(1, 1)
+    const headsetTarget = new RenderTarget(1, 1)
     renderTarget.current = headsetTarget
+    const sun = new DirectionalLight()
+    sun.castShadow = true
+    const unshadowed = new DirectionalLight()
+    game.scene.add(sun, unshadowed)
     // Where the headset's frame put the camera, in the rig like the real one
     game.camera.rig.add(game.camera.instance)
     game.camera.rig.position.set(10, 0, 0)
@@ -277,7 +279,7 @@ describe('xr', () => {
 
     let during: { xr: boolean, shadows: boolean, target: unknown } | undefined
     webgl.render.mockImplementation(() => {
-      during = { xr: webgl.xr.enabled, shadows: webgl.shadowMap.autoUpdate, target: renderTarget.current }
+      during = { xr: webgl.xr.enabled, shadows: sun.shadow.autoUpdate, target: renderTarget.current }
     })
     webgl.xr.enabled = true
     instance.renderMirror()
@@ -293,7 +295,8 @@ describe('xr', () => {
     // Drawn to the page with XR off and the headset's shadow maps, then everything put back
     expect(during).toEqual({ xr: false, shadows: false, target: null })
     expect(webgl.xr.enabled).toBe(true)
-    expect(webgl.shadowMap.autoUpdate).toBe(true)
+    expect(sun.shadow.autoUpdate).toBe(true)
+    expect(unshadowed.shadow.autoUpdate).toBe(true)
     expect(renderTarget.current).toBe(headsetTarget)
   })
 
@@ -309,21 +312,6 @@ describe('xr', () => {
   })
 
   describe('renderer fixes', () => {
-    it('renders into a render target with the camera it\'s given while presenting, into the headset\'s through it', () => {
-      const { xr, webgl, patched, renderTarget } = setup()
-      xr.isPresenting = true
-      const during: boolean[] = []
-      webgl.render.mockImplementation(() => during.push(xr.enabled))
-
-      renderTarget.current = new WebGLRenderTarget(1, 1)
-      patched.render(new Scene(), new PerspectiveCamera())
-      renderTarget.current = Object.assign(new WebGLRenderTarget(1, 1), { isXRRenderTarget: true })
-      patched.render(new Scene(), new PerspectiveCamera())
-
-      expect(during).toEqual([false, true])
-      expect(xr.enabled).toBe(true)
-    })
-
     it('gives the eyes and the camera the reversed form of the headset\'s projection with a reversed depth buffer', () => {
       const { xr, depth, eyes } = setup()
       depth.reversed = true

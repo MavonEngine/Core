@@ -1,6 +1,7 @@
 import type { World } from '@dimforge/rapier3d-compat'
 import type NetworkManager from './Networking/Client/NetworkManager'
 import type { ClientPlugin, ClientPluginContext, LoadedPlugin } from './Plugins/types'
+import type { RendererParameters } from './Renderer'
 import type GameScene from './Scene/GameScene'
 import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
@@ -97,7 +98,7 @@ export default class Game extends BaseGame {
   constructor(
     sources: Asset[],
     physicsWorld?: World,
-    renderParameters: THREE.WebGLRendererParameters = {},
+    renderParameters: RendererParameters = {},
   ) {
     super(
       // eslint-disable-next-line node/prefer-global/process

@@ -1,11 +1,13 @@
 import type { Vector3 } from 'three'
-import { Color, EqualStencilFunc, IncrementStencilOp, Mesh, PlaneGeometry, ShaderMaterial, Vector3 as Vec3, Vector2 } from 'three'
+import type { MeshBasicNodeMaterial } from 'three/webgpu'
+import type { WaterUniforms } from './waterMaterial'
+import { Mesh, PlaneGeometry } from 'three'
 import { WithEditorHelper } from '../../Editor/WithEditorHelper'
 import Game from '../../Game'
+import { PushPoints } from '../../Shaders/Nodes/pushPoints'
 import GameObject from '../../World/GameObject'
-import FragmentShader from './Fragment.glsl'
-import VertexShader from './Vertex.glsl'
 import WaterManager from './WaterManager'
+import { createWaterMaterial, createWaterUniforms } from './waterMaterial'
 
 const MAX_PUSH_POINTS = 150
 
@@ -29,7 +31,10 @@ const DEFAULT_LOD: WaterLODConfig = {
  * https://threejs-journey.com/lessons/raging-sea
  */
 export default class Water extends WithEditorHelper(GameObject) {
-  material: ShaderMaterial
+  material: MeshBasicNodeMaterial
+  /** The material's settings, e.g. `water.uniforms.uBigWavesElevation.value = 0.5` */
+  readonly uniforms: WaterUniforms = createWaterUniforms()
+  readonly pushPoints = new PushPoints(MAX_PUSH_POINTS)
   private sections: WaterSection[] = []
   private lodConfig: WaterLODConfig
   private sectionCount: number
@@ -46,45 +51,7 @@ export default class Water extends WithEditorHelper(GameObject) {
     this.lodConfig = lod
     this.sectionCount = sectionCount
 
-    this.material = new ShaderMaterial({
-      transparent: true,
-      stencilWrite: true,
-      stencilFunc: EqualStencilFunc,
-      stencilRef: 0,
-      stencilZPass: IncrementStencilOp,
-      fragmentShader: FragmentShader,
-      vertexShader: VertexShader,
-      uniforms: {
-        uTime: { value: 0 },
-
-        uBigWavesElevation: { value: 0.380 },
-        uBigWavesFrequency: {
-          value: new Vector2(0.326, 0.978),
-        },
-        uBigWavesSpeed: { value: 1.0 },
-
-        uDepthColor: {
-          value: new Color('#186691'),
-        },
-        uSurfaceColor: {
-          value: new Color('#9bd8ff'),
-        },
-        uColorOffset: { value: 0.380 },
-        uColorMultiplier: { value: 0.761 },
-
-        pushPositions: {
-          value: Array.from({ length: MAX_PUSH_POINTS }, () => new Vec3()),
-        },
-        pushRadii: {
-          value: Array.from({ length: MAX_PUSH_POINTS }).fill(0),
-        },
-
-        uSunDirection: {
-          value: new Vec3(0, 1, 0),
-        },
-        uSunReflectionStrength: { value: 1.0 },
-      },
-    })
+    this.material = createWaterMaterial(this.uniforms, this.pushPoints)
 
     const sectionSize = size / sectionCount
 
@@ -122,39 +89,39 @@ export default class Water extends WithEditorHelper(GameObject) {
       return
 
     WaterManager.instance.uBigWavesElevationController?.on('change', (ev) => {
-      this.material.uniforms.uBigWavesElevation.value = ev.value
+      this.uniforms.uBigWavesElevation.value = ev.value
     })
 
     WaterManager.instance.uBigWavesFrequencyControllerX?.on('change', (ev) => {
-      this.material.uniforms.uBigWavesFrequency.value.setX(ev.value)
+      this.uniforms.uBigWavesFrequency.value.setX(ev.value)
     })
 
     WaterManager.instance.uBigWavesFrequencyControllerY?.on('change', (ev) => {
-      this.material.uniforms.uBigWavesFrequency.value.setY(ev.value)
+      this.uniforms.uBigWavesFrequency.value.setY(ev.value)
     })
 
     WaterManager.instance.uBigWavesSpeedController?.on('change', (ev) => {
-      this.material.uniforms.uBigWavesSpeed.value = ev.value
+      this.uniforms.uBigWavesSpeed.value = ev.value
     })
 
     WaterManager.instance.uDepthColorController?.on('change', (ev) => {
-      this.material.uniforms.uDepthColor.value = new Color(ev.value)
+      this.uniforms.uDepthColor.value.set(ev.value)
     })
 
     WaterManager.instance.uSurfaceColorController?.on('change', (ev) => {
-      this.material.uniforms.uSurfaceColor.value = new Color(ev.value)
+      this.uniforms.uSurfaceColor.value.set(ev.value)
     })
 
     WaterManager.instance.uColorOffsetController?.on('change', (ev) => {
-      this.material.uniforms.uColorOffset.value = ev.value
+      this.uniforms.uColorOffset.value = ev.value
     })
 
     WaterManager.instance.uColorMultiplierController?.on('change', (ev) => {
-      this.material.uniforms.uColorMultiplier.value = ev.value
+      this.uniforms.uColorMultiplier.value = ev.value
     })
 
     WaterManager.instance.uSunReflectionStrengthController?.on('change', (ev) => {
-      this.material.uniforms.uSunReflectionStrength.value = ev.value
+      this.uniforms.uSunReflectionStrength.value = ev.value
     })
   }
 
@@ -241,19 +208,14 @@ export default class Water extends WithEditorHelper(GameObject) {
   }
 
   setPushPoints(points: { position: Vector3, radius: number }[]) {
-    for (let i = 0; i < MAX_PUSH_POINTS; i++) {
-      if (points[i]) {
-        this.material.uniforms.pushPositions.value[i].copy(points[i].position)
-        this.material.uniforms.pushRadii.value[i] = points[i].radius
-      }
-    }
+    this.pushPoints.set(points)
   }
 
   update(_delta: number): void {
-    this.material.uniforms.uTime.value = Game.instance().clock.getElapsed()
+    this.uniforms.uTime.value = Game.instance().clock.getElapsed()
 
     if (WaterManager.instance) {
-      this.material.uniforms.uSunDirection.value.copy(WaterManager.instance.sunPosition)
+      this.uniforms.uSunDirection.value.copy(WaterManager.instance.sunPosition)
     }
 
     const cameraPos = Game.instance().camera.worldPosition

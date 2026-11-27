@@ -12,9 +12,10 @@ import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
 import { SCENE_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import EventEmitter from '@mavonengine/core/Utils/EventEmitter'
-import { Box3, Mesh, Object3D, Sphere, Vector2, Vector3 } from 'three'
+import { Box3, Mesh, Object3D, Sphere, Vector3 } from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
-import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
+import { outline } from 'three/examples/jsm/tsl/display/OutlineNode.js'
+import { color, vec4 } from 'three/tsl'
 import { applyShadeMode } from './Editor/applyShadeMode'
 import { DEFAULT_SCENE_NAME, demoScene } from './Editor/demoScene'
 import EditorCameraControls from './Editor/EditorCameraControls'
@@ -30,7 +31,9 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   cameraControls!: EditorCameraControls
   reactRoot!: Root
   activeItem?: Object3D<Object3DEventMap> | null
-  outlinePass!: OutlinePass
+  /** Outlines the selection, as a render effect */
+  outlinePass!: ReturnType<typeof outline>
+  private removeOutline?: () => void
   activeToolMode: TransformControlsMode = 'translate'
   transformControls?: TransformControls
   private shadeMode: ShadeMode = 'solid'
@@ -119,13 +122,11 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     Game.instance().camera.instance.rotateY((Math.PI / 360) * 90)
     Game.instance().camera.instance.rotateX((Math.PI / 360) * -45)
 
-    this.outlinePass = new OutlinePass(
-      new Vector2(Game.instance().sizes.width, Game.instance().sizes.height),
-      Game.instance().scene,
-      Game.instance().camera.instance,
-    )
-
-    Game.instance().renderer.composer.addPass(this.outlinePass)
+    this.outlinePass = outline(Game.instance().scene, Game.instance().camera.instance, { selectedObjects: [] })
+    // White where the selection shows, a dim orange where something hides it: three's old OutlinePass colors
+    const { visibleEdge, hiddenEdge } = this.outlinePass
+    const edges = visibleEdge.mul(color(1, 1, 1)).add(hiddenEdge.mul(color(0.1, 0.04, 0.02))).mul(3)
+    this.removeOutline = Game.instance().renderer.addEffect('editor-outline', input => input.add(vec4(edges, 0)))
 
     this.cameraControls = new EditorCameraControls(
       Game.instance().camera.instance,
@@ -459,6 +460,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   destroy(): void {
     this.abort.abort()
     this.reactRoot.unmount()
+    this.removeOutline?.()
     this.outlinePass.dispose()
     this.cameraControls.dispose()
     this.networkOverlay.dispose()

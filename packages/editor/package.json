@@ -47,7 +47,6 @@
     "@wavesurfer/react": "^1.0.12",
     "react-resizable-panels": "^4.24.1",
     "react-rnd": "^10.5.2",
-    "three-perf": "^1.0.11",
     "wavesurfer.js": "^8.1.0"
   },
   "devDependencies": {

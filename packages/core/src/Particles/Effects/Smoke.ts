@@ -1,8 +1,7 @@
 import type { BufferAttribute, Texture } from 'three'
-import { NormalBlending, ShaderMaterial, Vector3 } from 'three'
+import { texture, uniform, uv, vec2, vec4 } from 'three/tsl'
+import { NormalBlending, PointsNodeMaterial, Vector3 } from 'three/webgpu'
 import Game from '../../Game'
-import SmokeFragmentShader from '../Shaders/Smoke/Fragment.glsl'
-import SmokeVertextShader from '../Shaders/Smoke/Vertex.glsl'
 import Emitter from '../System/Emitter'
 import Particle from '../System/Particle'
 import ParticleEffect from '../System/ParticleEffect'
@@ -53,22 +52,23 @@ export class SmokeEmitter extends Emitter {
   }
 
   declare particles: SmokeParticle[]
-  declare material: ShaderMaterial
+  readonly uniforms = {
+    uTime: uniform(0),
+  }
 
   constructor(smokeTexture: Texture, position: Vector3) {
-    super(position, new ShaderMaterial({
-      vertexShader: SmokeVertextShader,
-      fragmentShader: SmokeFragmentShader,
+    super(position, new PointsNodeMaterial({
       transparent: true,
       blending: NormalBlending,
       depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uCameraPosition: { value: Game.instance().camera.worldPosition },
-        uTexture: { value: smokeTexture },
-        uAlpha: { value: 0.5 },
-      },
+      sizeAttenuation: false,
     }), 20, 10)
+
+    // Pixels across, like gl_PointSize was
+    this.material.sizeNode = this.scaleNode.mul(40)
+    // Top down, like gl_PointCoord
+    const tex = texture(smokeTexture, vec2(uv().x, uv().y.oneMinus()))
+    this.material.colorNode = vec4(tex.rgb, tex.a.mul(this.alphaNode))
 
     for (let i = 0; i < this.maxParticles; i++) {
       const particle = new SmokeParticle(Math.random() * this.maxLifeTimeParticle + 1, position)
@@ -79,7 +79,7 @@ export class SmokeEmitter extends Emitter {
   }
 
   update(delta: number): void {
-    this.material.uniforms.uTime.value += delta
+    this.uniforms.uTime.value += delta
 
     for (let i = 0; i < this.maxParticles; i++) {
       const particle = this.particles[i]

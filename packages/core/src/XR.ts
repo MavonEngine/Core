@@ -1,4 +1,5 @@
-import type { Matrix4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import type { Light, LightShadow, Matrix4 } from 'three'
+import type { WebGPURenderer } from 'three/webgpu'
 import type Game from './Game'
 import type Renderer from './Renderer'
 import type XRPanel from './ui/XRPanel'
@@ -40,7 +41,7 @@ export interface XRMirrorOptions {
  * Plays the game in a VR headset through WebXR. Created by `Game.enableXR()`.
  *
  * While a session runs, the headset drives `camera.instance`'s position and rotation, rendering skips the
- * EffectComposer and `renderer.maxFps` is ignored.
+ * render pipeline and `renderer.maxFps` is ignored.
  */
 export default class XR {
   /** The "Enter VR" button, unless `button: false` was passed */
@@ -175,7 +176,7 @@ export default class XR {
    * every frame while presenting and `mirror` is on
    */
   renderMirror() {
-    const webgl = this.renderer.instance
+    const three = this.renderer.instance
     const camera = this.game.camera.instance
     const near = camera.near
     const far = camera.far
@@ -190,18 +191,26 @@ export default class XR {
 
     // With XR off for this one render, three.js draws to the page's canvas instead of the headset
     // The headset's frame already updated the shadow maps, so they're reused rather than rendered again
-    const target = webgl.getRenderTarget()
-    const shadowsAutoUpdate = webgl.shadowMap.autoUpdate
-    webgl.xr.enabled = false
-    webgl.shadowMap.autoUpdate = false
+    const target = three.getRenderTarget()
+    const shadows: LightShadow[] = []
+    this.game.scene.traverseVisible((object) => {
+      const light = object as Light & { shadow?: LightShadow }
+      const shadow = light.shadow
+      if (light.isLight && light.castShadow && shadow?.autoUpdate) {
+        shadow.autoUpdate = false
+        shadows.push(shadow)
+      }
+    })
+    three.xr.enabled = false
     try {
-      webgl.setRenderTarget(null)
-      webgl.render(this.game.scene, this.mirrorCamera)
+      three.setRenderTarget(null)
+      three.render(this.game.scene, this.mirrorCamera)
     }
     finally {
-      webgl.xr.enabled = true
-      webgl.shadowMap.autoUpdate = shadowsAutoUpdate
-      webgl.setRenderTarget(target)
+      three.xr.enabled = true
+      for (const shadow of shadows)
+        shadow.autoUpdate = true
+      three.setRenderTarget(target)
     }
   }
 
@@ -246,24 +255,22 @@ export default class XR {
 }
 
 /**
- * Fixes for what three.js's WebXR leaves to the game:
+ * Fixes for what three.js's WebXR leaves to the game, with a reversed depth buffer (`reversedDepthBuffer: true`):
  *
- * - **Reversed depth** (`reversedDepthBuffer: true`): three gives each eye the headset's projection, which maps depth
- *   the GL way (-1 near, 1 far). Seeing a reversed depth buffer the renderer takes the eyes for cameras not yet set up
- *   for it and recomputes their projection from their default 50 degree fov, once, and from then on renders the
- *   headset's GL projection into the reversed buffer: the depth test inverted, the far side drawn over the near.
- *   After three found the view's frustum from the GL projections (it reads the near and far planes off them), the
- *   eyes, and the game's camera that three gives their union, get the reversed form instead.
+ * - **The eyes' projection**: three gives each eye the headset's projection, which maps depth the GL way (-1 near,
+ *   1 far), and renders it into the reversed buffer as it is: the depth test inverted, the far side drawn over the
+ *   near. After three found the view's frustum from the GL projections (it reads the near and far planes off them),
+ *   the eyes, and the game's camera that three gives their union, get the reversed form instead.
  * - **Reversed depth for the compositor**: the headset reads the depth buffer to correct the picture for the head's
  *   movement since it was rendered (positional timewarp, space warp), by the session's depthNear and depthFar. Read
  *   the GL way, a reversed buffer puts the far landscape right at the eyes, and it jitters as the head moves. The
  *   session is given them swapped (WebXR lets depthNear be the larger), which is how reversed depth reads, and the
  *   headset's projections come with the near plane at +1: they're turned the GL way for three first.
- * - **Off-screen renders**: while presenting, `render()` draws through the headset's cameras whatever it's given,
- *   into a render target too, e.g. an environment map, a lookup table or a mirror. Renders into a target that isn't
- *   the headset's render with the camera they were given, as three's own Reflector does it.
+ *
+ * Renders into a render target while presenting (environment maps, mirrors) need no fix: the renderer only uses the
+ * headset's cameras for the canvas.
  */
-function patchRenderer(renderer: WebGLRenderer) {
+function patchRenderer(renderer: WebGPURenderer) {
   const xr = renderer.xr
   const updateCamera = xr.updateCamera.bind(xr)
   // The eyes' GL projections this frame, as three reads them: updateCamera can run more than once a frame
@@ -272,12 +279,12 @@ function patchRenderer(renderer: WebGLRenderer) {
   let requested = ''
 
   xr.updateCamera = (camera: PerspectiveCamera) => {
-    if (!renderer.state.buffers.depth.getReversed()) {
+    if (!renderer.reversedDepthBuffer) {
       updateCamera(camera)
       return
     }
 
-    const eyes = xr.getCamera().cameras
+    const eyes = xr.getCamera().cameras as PerspectiveCamera[]
     if (xr.getFrame() !== frame) {
       frame = xr.getFrame()
       eyes.forEach((eye, i) => (glEyes[i] ??= eye.projectionMatrix.clone()).copy(glDepthOrder(eye.projectionMatrix, camera.near)))
@@ -300,22 +307,6 @@ function patchRenderer(renderer: WebGLRenderer) {
     frame = null
     requested = ''
   })
-
-  const render = renderer.render.bind(renderer)
-  renderer.render = (scene, camera) => {
-    const target = renderer.getRenderTarget() as (WebGLRenderTarget & { isXRRenderTarget?: boolean }) | null
-    if (!xr.enabled || !xr.isPresenting || !target || target.isXRRenderTarget) {
-      render(scene, camera)
-      return
-    }
-    xr.enabled = false
-    try {
-      render(scene, camera)
-    }
-    finally {
-      xr.enabled = true
-    }
-  }
 }
 
 /**
