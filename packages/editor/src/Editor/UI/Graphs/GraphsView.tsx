@@ -17,6 +17,7 @@ import { analyzeGraph } from '@mavonengine/core/Graph/validate'
 import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Group, Panel, Separator } from 'react-resizable-panels'
 import { Texture } from 'three'
 import { defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
 import GraphNode, { GraphContext } from './GraphNode'
@@ -226,6 +227,8 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
   const [status, setStatus] = useState<string>()
   const { screenToFlowPosition } = useReactFlow()
   const wrapper = useRef<HTMLDivElement>(null)
+  // The node list opens where the canvas was clicked, measured from the canvas (under the preview for a material)
+  const canvasRef = useRef<HTMLDivElement>(null)
 
   const graph = useMemo(() => fromFlow(initial, nodes, edges, parameters), [initial, nodes, edges, parameters])
   const key = graphKey(graph)
@@ -429,49 +432,66 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
             wrapper.current?.focus()
         }}
       >
-        <div className={styles.canvas}>
-          <ReactFlow
-            nodes={nodes}
-            edges={styledEdges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            isValidConnection={isValidConnection}
-            nodesConnectable={!readOnly}
-            edgesReconnectable={!readOnly}
-            deleteKeyCode={null}
-            colorMode="dark"
-            fitView
-            fitViewOptions={{ maxZoom: 1 }}
-            onPaneClick={() => setPalette(undefined)}
-            onPaneContextMenu={(e) => {
-              e.preventDefault()
-              if (readOnly)
-                return
-              const bounds = wrapper.current!.getBoundingClientRect()
-              setPalette({
-                screen: { x: e.clientX - bounds.left, y: e.clientY - bounds.top },
-                flow: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
-              })
-            }}
-            defaultEdgeOptions={{
-              style: { stroke: PIN_COLORS.number, strokeWidth: 2 },
-            }}
-          >
-            <Background gap={20} />
-            <Controls showInteractive={false} />
-          </ReactFlow>
-          {palette && <NodePalette kind={graph.kind} exclude={subgraphType(graph.name)} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
-          <div className={styles.hint}>
-            {readOnly
-              ? `From the plugin ${plugin}: copy it into the project to change it`
-              : 'Right click to add a node · Delete removes the selection'}
-          </div>
-        </div>
+        {(() => {
+          const canvas = (
+            <div className={styles.canvas} ref={canvasRef}>
+              <ReactFlow
+                nodes={nodes}
+                edges={styledEdges}
+                nodeTypes={nodeTypes}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                isValidConnection={isValidConnection}
+                nodesConnectable={!readOnly}
+                edgesReconnectable={!readOnly}
+                deleteKeyCode={null}
+                colorMode="dark"
+                fitView
+                fitViewOptions={{ maxZoom: 1 }}
+                onPaneClick={() => setPalette(undefined)}
+                onPaneContextMenu={(e) => {
+                  e.preventDefault()
+                  if (readOnly)
+                    return
+                  const bounds = canvasRef.current!.getBoundingClientRect()
+                  setPalette({
+                    screen: { x: e.clientX - bounds.left, y: e.clientY - bounds.top },
+                    flow: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+                  })
+                }}
+                defaultEdgeOptions={{
+                  style: { stroke: PIN_COLORS.number, strokeWidth: 2 },
+                }}
+              >
+                <Background gap={20} />
+                <Controls showInteractive={false} />
+              </ReactFlow>
+              {palette && <NodePalette kind={graph.kind} exclude={subgraphType(graph.name)} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
+              <div className={styles.hint}>
+                {readOnly
+                  ? `From the plugin ${plugin}: copy it into the project to change it`
+                  : 'Right click to add a node · Delete removes the selection'}
+              </div>
+            </div>
+          )
+          // A material: its preview over the top half, the nodes under it
+          return graph.kind === 'material' && !isFunction
+            ? (
+                <Group orientation="vertical" className={styles.split}>
+                  <Panel id="preview" defaultSize="50%" minSize="15%">
+                    <MaterialPreview material={material} fill />
+                  </Panel>
+                  <Separator className={styles.splitHandle} />
+                  <Panel id="nodes" minSize="20%">
+                    {canvas}
+                  </Panel>
+                </Group>
+              )
+            : canvas
+        })()}
 
         <div className={styles.side}>
-          {graph.kind === 'material' && !isFunction && <MaterialPreview material={material} />}
           <div className={styles.section}>
             <div className={styles.toolbar}>
               <strong>{graph.name}</strong>

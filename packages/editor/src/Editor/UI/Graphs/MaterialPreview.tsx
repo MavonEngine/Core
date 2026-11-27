@@ -6,7 +6,8 @@ import { WebGPURenderer } from 'three/webgpu'
 import styles from './Graphs.module.css'
 
 /** A slowly turning sphere drawn with `material`, in its own renderer on the game's backend */
-export default function MaterialPreview({ material }: { material?: Material }) {
+/** `fill` takes its container's whole size, otherwise it is a square as wide as its container */
+export default function MaterialPreview({ material, fill }: { material?: Material, fill?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const meshRef = useRef<Mesh>(null)
 
@@ -78,7 +79,7 @@ export default function MaterialPreview({ material }: { material?: Material }) {
   }, [material])
 
   return (
-    <div className={styles.previewBox}>
+    <div className={fill ? styles.previewFill : styles.previewBox}>
       <canvas ref={canvasRef} className={styles.preview} />
     </div>
   )
