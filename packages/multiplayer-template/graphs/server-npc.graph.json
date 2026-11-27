@@ -383,7 +383,7 @@
         1410
       ],
       "values": {
-        "message": "Hi I'm a server NPC controlled through logic graph running on the server"
+        "message": "Hi! I'm an NPC controlled by a logic graph running on the server."
       },
       "group": "group_clicked"
     }
