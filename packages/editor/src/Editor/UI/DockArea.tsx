@@ -81,7 +81,10 @@ export default function DockArea({ location, builtins }: { location: EditorPanel
       ))}
 
       {active?.custom && (
-        <div className={editorStyles.panelBody}>
+        <div className={active.custom.padded === false
+          ? styles.unpadded
+          : editorStyles.panelBody}
+        >
           <PanelErrorBoundary key={active.custom.id} title={active.custom.title}>
             <CustomPanel panel={active.custom} />
           </PanelErrorBoundary>

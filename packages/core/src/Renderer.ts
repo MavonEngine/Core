@@ -2,7 +2,7 @@ import type { FpsGraphBladeApi } from '@tweakpane/plugin-essentials'
 import type { Node, Object3D, WebGPURendererParameters } from 'three/webgpu'
 import { Inspector } from 'three/examples/jsm/inspector/Inspector.js'
 import { pass } from 'three/tsl'
-import { Mesh, PCFShadowMap, RenderPipeline, SkeletonHelper, SkinnedMesh, WebGPURenderer } from 'three/webgpu'
+import { InspectorBase, Mesh, PCFShadowMap, RenderPipeline, SkeletonHelper, SkinnedMesh, WebGPURenderer } from 'three/webgpu'
 import Game from './Game'
 import FrameLimiter from './Utils/FrameLimiter'
 import SkeletonAxesHelper from './Utils/SkeletonAxesHelper'
@@ -29,7 +29,7 @@ export default class Renderer {
     armature: false,
   }
 
-  /** three.js's inspector (frame timings, draw calls, memory), while `options.perf` is on */
+  /** three.js's inspector (frame timings, draw calls, memory), while one is attached. See `attachInspector()` */
   inspector?: Inspector
   armatureHelpers: Object3D[] = []
 
@@ -164,12 +164,34 @@ export default class Renderer {
     this.pipeline.needsUpdate = true
   }
 
+  /**
+   * Start three.js's inspector: frame and GPU timings, draw calls, memory, the shaders. Its UI goes into `container`,
+   * or floats over the page next to the canvas without one. Replaces an inspector that runs already.
+   */
+  attachInspector(container?: HTMLElement): Inspector {
+    this.detachInspector()
+    const inspector = new Inspector()
+    // Placed before the renderer gets it, which otherwise puts it next to the canvas
+    container?.appendChild(inspector.domElement)
+    this.inspector = inspector
+    this.instance.inspector = inspector
+    return inspector
+  }
+
+  /** Stop the inspector and remove its UI, so its GPU timing no longer costs anything */
+  detachInspector() {
+    if (!this.inspector)
+      return
+    this.inspector = undefined
+    // Swapping it out disposes the old one
+    this.instance.inspector = new InspectorBase()
+  }
+
   private setInspector(visible: boolean) {
-    if (visible && !this.inspector) {
-      this.inspector = new Inspector()
-      this.instance.inspector = this.inspector
-    }
-    this.inspector?.setVisible(visible)
+    if (visible)
+      this.attachInspector()
+    else
+      this.detachInspector()
   }
 
   /** Whether a WebXR session is rendering to a headset */

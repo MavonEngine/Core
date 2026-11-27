@@ -1,0 +1,36 @@
+/* three's inspector is built to float over the page: here it fills the dock instead */
+.root {
+    position: relative;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.root :global(.three-inspector) {
+    position: absolute;
+    inset: 0;
+}
+
+/* Its own open / close button, the strip shown while closed, the resize handle and the dock controls */
+.root :global(.profiler-toggle),
+.root :global(.profiler-mini-panel),
+.root :global(.panel-resizer),
+.root :global(.profiler-controls) {
+    display: none !important;
+}
+
+.root :global(.profiler-panel) {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    transform: none !important;
+    z-index: auto !important;
+    border-top: none;
+    backdrop-filter: none;
+}
+
+.root :global(.profiler-panel .profiler-header) {
+    width: 100% !important;
+}
