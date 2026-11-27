@@ -371,3 +371,55 @@
 .splitHandle[data-separator='active'] {
     background: var(--accent-blue);
 }
+
+/* ---- Comments */
+
+.comment {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    border: 1px solid rgb(220 220 170 / 35%);
+    border-radius: 4px;
+    background: rgb(220 220 170 / 8%);
+    color: var(--text-primary);
+}
+
+.comment.selected {
+    border-color: var(--accent-yellow);
+}
+
+.commentHeader {
+    padding: 2px var(--spacing-md);
+    color: var(--accent-yellow);
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: grab;
+}
+
+.commentText {
+    flex: 1;
+    min-height: 0;
+    margin: 0 var(--spacing-sm) var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-md);
+    line-height: 1.4;
+    resize: none;
+    outline: none;
+}
+
+.commentResize {
+    border-color: var(--accent-yellow) !important;
+}
+
+.commentHandle {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 2px;
+    background: var(--accent-yellow) !important;
+}

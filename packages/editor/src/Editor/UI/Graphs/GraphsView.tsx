@@ -12,14 +12,14 @@ import { materialGraphs, registerGraphAsSubgraph } from '@mavonengine/core/Graph
 import { canConnect, getNode, getNodes } from '@mavonengine/core/Graph/NodeRegistry'
 import { registerBuiltinNodes } from '@mavonengine/core/Graph/Nodes/builtin'
 import { isFunctionGraph, SubgraphError, subgraphType } from '@mavonengine/core/Graph/Nodes/subgraph'
-import { GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
+import { GRAPH_COMMENT, GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
 import { analyzeGraph } from '@mavonengine/core/Graph/validate'
 import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { Texture } from 'three'
-import { defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
+import { commentLayout, defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
 import GraphNode, { GraphContext } from './GraphNode'
 import styles from './Graphs.module.css'
 import MaterialPreview from './MaterialPreview'
@@ -384,6 +384,7 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
         type: 'graph',
         position: palette.flow,
         data: { type, values: {} },
+        ...(type === GRAPH_COMMENT && commentLayout({})),
       },
     ])
     setPalette(undefined)

@@ -43,3 +43,24 @@ describe('graph model', () => {
     expect(newNodeId('math.add', ['add_1', 'add_2'])).toBe('add_3')
   })
 })
+
+describe('comments', () => {
+  it('don\'t change the graph\'s key, and keep their size', () => {
+    const graph = defaultMaterialGraph('stone')
+    const noted = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'note',
+          type: 'graph.comment',
+          position: [0, 0] as [number, number],
+          values: { text: 'Grey stone', width: 300, height: 90 },
+        },
+      ],
+    }
+
+    expect(graphKey(noted)).toBe(graphKey(graph))
+    expect(toFlow(noted).nodes.find(node => node.id === 'note')).toMatchObject({ width: 300, height: 90, zIndex: -1 })
+  })
+})

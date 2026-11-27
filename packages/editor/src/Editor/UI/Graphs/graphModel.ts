@@ -1,6 +1,6 @@
 import type { GraphData, GraphEdgeData, GraphParameter, GraphValue, PinType } from '@mavonengine/core/Graph/types'
 import type { Edge, Node } from '@xyflow/react'
-import { GRAPH_FORMAT_VERSION } from '@mavonengine/core/Graph/types'
+import { GRAPH_COMMENT, GRAPH_FORMAT_VERSION } from '@mavonengine/core/Graph/types'
 
 /*
  * Between a graph file and React Flow's nodes and edges. React Flow holds the nodes (with their positions and
@@ -19,6 +19,15 @@ export function edgeId(edge: GraphEdgeData): string {
   return `${edge.from.node}:${edge.from.port}->${edge.to.node}:${edge.to.port}`
 }
 
+/** A comment's size, and behind the nodes it describes */
+export function commentLayout(values: Record<string, GraphValue> | undefined) {
+  return {
+    width: Number(values?.width ?? 260),
+    height: Number(values?.height ?? 120),
+    zIndex: -1,
+  }
+}
+
 export function toFlow(graph: GraphData): { nodes: FlowNode[], edges: FlowEdge[] } {
   return {
     nodes: graph.nodes.map(node => ({
@@ -29,6 +38,7 @@ export function toFlow(graph: GraphData): { nodes: FlowNode[], edges: FlowEdge[]
         type: node.type,
         values: { ...node.values },
       },
+      ...(node.type === GRAPH_COMMENT && commentLayout(node.values)),
     })),
     edges: graph.edges.map(edge => ({
       id: edgeId(edge),
@@ -67,7 +77,8 @@ export function fromFlow(base: Pick<GraphData, 'name' | 'kind'>, nodes: FlowNode
 /** What changes what the graph compiles to: everything except where the nodes sit and what is selected */
 export function graphKey(graph: GraphData): string {
   return JSON.stringify({
-    nodes: graph.nodes.map(node => [node.id, node.type, node.values]),
+    // Comments change nothing the graph does
+    nodes: graph.nodes.filter(node => node.type !== GRAPH_COMMENT).map(node => [node.id, node.type, node.values]),
     edges: graph.edges,
     parameters: graph.parameters,
   })

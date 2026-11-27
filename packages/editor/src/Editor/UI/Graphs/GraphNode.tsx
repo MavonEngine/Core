@@ -4,7 +4,8 @@ import type { GraphAnalysis } from '@mavonengine/core/Graph/validate'
 import type { NodeProps } from '@xyflow/react'
 import type { FlowNode } from './graphModel'
 import { getNode } from '@mavonengine/core/Graph/NodeRegistry'
-import { Handle, Position } from '@xyflow/react'
+import { GRAPH_COMMENT } from '@mavonengine/core/Graph/types'
+import { Handle, NodeResizer, Position } from '@xyflow/react'
 import { createContext, memo, useContext } from 'react'
 import { Color } from 'three'
 import { PIN_COLORS } from './graphModel'
@@ -145,9 +146,44 @@ function handleClass(type: PortType | undefined) {
     : styles.handle
 }
 
+/** A note: dragged by its header, written in its body, resized from its edges while selected */
+function CommentNode({ id, data, selected }: Pick<NodeProps<FlowNode>, 'id' | 'data' | 'selected'>) {
+  const { setValue } = useContext(GraphContext)
+  const text = String(data.values.text ?? '')
+  return (
+    <div className={`${styles.comment} ${selected ? styles.selected : ''}`}>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={160}
+        minHeight={70}
+        lineClassName={styles.commentResize}
+        handleClassName={styles.commentHandle}
+        onResizeEnd={(_, size) => {
+          setValue(id, 'width', Math.round(size.width))
+          setValue(id, 'height', Math.round(size.height))
+        }}
+      />
+      <div className={styles.commentHeader}>Comment</div>
+      <textarea
+        className={`${styles.commentText} nodrag nowheel`}
+        placeholder="Describe what this part of the graph does"
+        defaultValue={text}
+        key={text}
+        onBlur={(e) => {
+          if (e.target.value !== text)
+            setValue(id, 'text', e.target.value)
+        }}
+      />
+    </div>
+  )
+}
+
 function GraphNode({ id, data, selected }: NodeProps<FlowNode>) {
   const { analysis, parameters, textures, entities, active, setValue } = useContext(GraphContext)
   const definition = getNode(data.type)
+
+  if (data.type === GRAPH_COMMENT)
+    return <CommentNode id={id} data={data} selected={selected} />
 
   if (!definition) {
     return (

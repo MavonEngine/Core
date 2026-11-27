@@ -1,6 +1,7 @@
 import type { NodeDefinition, PortSpec } from '../NodeRegistry'
 import type { GraphKind, GraphValue, PinType } from '../types'
 import { registerNode } from '../NodeRegistry'
+import { GRAPH_COMMENT } from '../types'
 import { LOGIC_NODES } from './logic'
 import { SUBGRAPH_NODES } from './subgraph'
 import { asFloat, asNumber, asVector, clamp, componentWise, dot, fract, length, smoothstep } from './values'
@@ -145,6 +146,23 @@ const SURFACE: { type: string, label: string, pin: PinType, description: string 
 ]
 
 export const BUILTIN_NODES: NodeDefinition[] = [
+  // ---- Notes
+  {
+    type: GRAPH_COMMENT,
+    label: 'Comment',
+    category: 'Utility',
+    description: 'A note describing the graph. It does nothing',
+    kinds: BOTH,
+    inputs: {},
+    outputs: {},
+    settings: {
+      text: { type: 'string', default: '' },
+      width: { type: 'float', default: 260 },
+      height: { type: 'float', default: 120 },
+    },
+    eval: () => ({}),
+  },
+
   // ---- Inputs
   ...CONSTANT_TYPES.map(({ type, label, value }): NodeDefinition => ({
     type: `input.${type}`,

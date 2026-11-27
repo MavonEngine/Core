@@ -4,6 +4,58 @@
   "name": "server-npc",
   "nodes": [
     {
+      "id": "about",
+      "type": "graph.comment",
+      "position": [
+        0,
+        -150
+      ],
+      "values": {
+        "text": "Runs on the server, with the Server NPC as Self: the Logic Graph object in the scene names it as its target. On Start remembers where the NPC started along x, so it knows how far it has walked.",
+        "width": 720,
+        "height": 110
+      }
+    },
+    {
+      "id": "about_walking",
+      "type": "graph.comment",
+      "position": [
+        0,
+        330
+      ],
+      "values": {
+        "text": "Every tick: walk along x by direction \u00d7 speed \u00d7 delta, then face that way. dir, speed and range are this graph's parameters. Rotation y follows the players' convention: \u221290\u00b0 (\u22121.5708) faces +x, so yaw = dir \u00d7 \u22121.5708.",
+        "width": 980,
+        "height": 110
+      }
+    },
+    {
+      "id": "about_turning",
+      "type": "graph.comment",
+      "position": [
+        1200,
+        920
+      ],
+      "values": {
+        "text": "Turn around: (x \u2212 start) \u00d7 dir is how far the NPC is past its start in the direction it walks. Once that reaches range, Branch flips dir. The same test covers both ends.",
+        "width": 760,
+        "height": 110
+      }
+    },
+    {
+      "id": "about_clicked",
+      "type": "graph.comment",
+      "position": [
+        0,
+        1310
+      ],
+      "values": {
+        "text": "Clicked: when a player clicks the NPC, the server sends `clicked` to the graphs acting on it. Say in Chat posts as the NPC.",
+        "width": 620,
+        "height": 90
+      }
+    },
+    {
       "id": "start",
       "type": "event.start",
       "position": [
@@ -43,7 +95,7 @@
       "type": "event.tick",
       "position": [
         0,
-        360
+        460
       ]
     },
     {
@@ -51,7 +103,7 @@
       "type": "variable.get",
       "position": [
         0,
-        560
+        660
       ],
       "values": {
         "name": "dir"
@@ -62,7 +114,7 @@
       "type": "input.parameter",
       "position": [
         0,
-        680
+        780
       ],
       "values": {
         "name": "speed"
@@ -73,7 +125,7 @@
       "type": "math.multiply",
       "position": [
         240,
-        560
+        660
       ]
     },
     {
@@ -81,7 +133,7 @@
       "type": "math.multiply",
       "position": [
         480,
-        560
+        660
       ]
     },
     {
@@ -89,7 +141,7 @@
       "type": "vector.combine3",
       "position": [
         720,
-        560
+        660
       ]
     },
     {
@@ -97,7 +149,7 @@
       "type": "entity.addPosition",
       "position": [
         480,
-        360
+        460
       ]
     },
     {
@@ -105,7 +157,7 @@
       "type": "math.multiply",
       "position": [
         720,
-        760
+        860
       ],
       "values": {
         "b": -1.5708
@@ -116,7 +168,7 @@
       "type": "vector.combine3",
       "position": [
         960,
-        760
+        860
       ]
     },
     {
@@ -124,7 +176,7 @@
       "type": "entity.setRotation",
       "position": [
         760,
-        360
+        460
       ]
     },
     {
@@ -132,7 +184,7 @@
       "type": "entity.position",
       "position": [
         960,
-        960
+        1060
       ]
     },
     {
@@ -140,7 +192,7 @@
       "type": "vector.split",
       "position": [
         1200,
-        960
+        1060
       ]
     },
     {
@@ -148,7 +200,7 @@
       "type": "variable.get",
       "position": [
         1200,
-        1120
+        1220
       ],
       "values": {
         "name": "startX"
@@ -159,7 +211,7 @@
       "type": "math.subtract",
       "position": [
         1440,
-        960
+        1060
       ]
     },
     {
@@ -167,7 +219,7 @@
       "type": "math.multiply",
       "position": [
         1680,
-        960
+        1060
       ]
     },
     {
@@ -175,7 +227,7 @@
       "type": "input.parameter",
       "position": [
         1680,
-        1120
+        1220
       ],
       "values": {
         "name": "range"
@@ -186,7 +238,7 @@
       "type": "logic.compare",
       "position": [
         1920,
-        960
+        1060
       ],
       "values": {
         "op": ">="
@@ -197,7 +249,7 @@
       "type": "flow.branch",
       "position": [
         1040,
-        360
+        460
       ]
     },
     {
@@ -205,7 +257,7 @@
       "type": "math.negate",
       "position": [
         1040,
-        560
+        660
       ]
     },
     {
@@ -213,7 +265,7 @@
       "type": "variable.set",
       "position": [
         1300,
-        360
+        460
       ],
       "values": {
         "name": "dir"
@@ -224,7 +276,7 @@
       "type": "event.message",
       "position": [
         0,
-        1320
+        1420
       ],
       "values": {
         "name": "clicked"
@@ -235,10 +287,10 @@
       "type": "chat.say",
       "position": [
         300,
-        1320
+        1420
       ],
       "values": {
-        "message": "Hi I'm a server NPC controller through logic graph running on the server"
+        "message": "Hi I'm a server NPC controlled through logic graph running on the server"
       }
     }
   ],

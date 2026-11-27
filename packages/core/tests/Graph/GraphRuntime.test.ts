@@ -288,6 +288,29 @@ describe('graphRuntime', () => {
     expect(log).toHaveBeenCalledWith('3')
   })
 
+  it('skips comments', () => {
+    const log = vi.fn()
+    const runtime = new GraphRuntime(logic([
+      {
+        id: 'note',
+        type: 'graph.comment',
+        values: { text: 'Says hello once' },
+      },
+      { id: 'start', type: 'event.start' },
+      {
+        id: 'hello',
+        type: 'action.log',
+        values: { value: 'hello' },
+      },
+    ], [
+      ['start.then', 'hello.run'],
+    ]), { log })
+
+    runtime.start()
+
+    expect(log).toHaveBeenCalledWith('hello')
+  })
+
   it('stops a run that loops forever', () => {
     const log = vi.fn()
     const runtime = new GraphRuntime(logic([

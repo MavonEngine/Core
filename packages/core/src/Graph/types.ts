@@ -199,3 +199,6 @@ export const GRAPH_OUTPUT = 'graph.output'
 export function isFunctionGraph(graph: Pick<GraphData, 'nodes'>): boolean {
   return graph.nodes.some(node => node.type === GRAPH_OUTPUT)
 }
+
+/** A note in a graph, describing what it does. It does nothing itself: compiling and running a graph skip it */
+export const GRAPH_COMMENT = 'graph.comment'

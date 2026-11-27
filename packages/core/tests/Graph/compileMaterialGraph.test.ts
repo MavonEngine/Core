@@ -158,6 +158,25 @@ describe('compileMaterialGraph', () => {
     expect(material.metalnessNode).toBeTruthy()
   })
 
+  it('skips comments', () => {
+    const { material } = compileMaterialGraph(graph({
+      nodes: [
+        {
+          id: 'note',
+          type: 'graph.comment',
+          position: [0, 0],
+          values: { text: 'Plain white' },
+        },
+        {
+          id: 'out',
+          type: 'material.output',
+          position: [0, 0],
+        },
+      ],
+    }))
+    expect(material.colorNode).toBeNull()
+  })
+
   it('throws with every problem in the graph', () => {
     expect(() => compileMaterialGraph(graph({}))).toThrow(MaterialGraphError)
     expect(() => compileMaterialGraph(graph({}))).toThrow('exactly one Material Output node, it has 0')
