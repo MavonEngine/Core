@@ -190,3 +190,12 @@ export function parseGraphData(value: unknown, fallbackName = 'untitled'): Graph
     parameters,
   }
 }
+
+/** The ends of a subgraph, see Nodes/subgraph */
+export const GRAPH_INPUT = 'graph.input'
+export const GRAPH_OUTPUT = 'graph.output'
+
+/** Whether a graph is a function, used as a node in other graphs: it has a Graph Output */
+export function isFunctionGraph(graph: Pick<GraphData, 'nodes'>): boolean {
+  return graph.nodes.some(node => node.type === GRAPH_OUTPUT)
+}

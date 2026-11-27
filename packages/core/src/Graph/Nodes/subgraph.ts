@@ -2,6 +2,7 @@ import type { NodeDefinition, NodeEvalContext, PortSpec } from '../NodeRegistry'
 import type { GraphData, GraphKind, GraphValue, PinType } from '../types'
 import type { GraphAnalysis, GraphIssue } from '../validate'
 import { getNode, isStep, registerNode } from '../NodeRegistry'
+import { GRAPH_INPUT, GRAPH_OUTPUT } from '../types'
 import { analyzeGraph } from '../validate'
 import { registerBuiltinNodes } from './builtin'
 
@@ -13,8 +14,7 @@ import { registerBuiltinNodes } from './builtin'
 
 const BOTH: GraphKind[] = ['material', 'logic']
 
-export const GRAPH_INPUT = 'graph.input'
-export const GRAPH_OUTPUT = 'graph.output'
+export { GRAPH_INPUT, GRAPH_OUTPUT, isFunctionGraph } from '../types'
 
 const PORT_TYPES: PinType[] = [
   'float',
@@ -84,11 +84,6 @@ export function subgraphName(type: string): string | undefined {
   return type.startsWith('subgraph:')
     ? type.slice('subgraph:'.length)
     : undefined
-}
-
-/** Whether a graph is a function, used as a node in other graphs: it has a Graph Output */
-export function isFunctionGraph(graph: Pick<GraphData, 'nodes'>): boolean {
-  return graph.nodes.some(node => node.type === GRAPH_OUTPUT)
 }
 
 /** A subgraph's ports, from its Graph Input and Graph Output nodes */

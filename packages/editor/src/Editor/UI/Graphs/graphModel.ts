@@ -143,6 +143,36 @@ export function defaultLogicGraph(name: string): GraphData {
   }
 }
 
+/** A new subgraph: one input handed straight to one output, to build on */
+export function defaultSubgraph(name: string, kind: GraphData['kind']): GraphData {
+  return {
+    version: GRAPH_FORMAT_VERSION,
+    kind,
+    name,
+    nodes: [
+      {
+        id: 'in_1',
+        type: 'graph.input',
+        position: [0, 0],
+        values: { name: 'in', type: 'float', default: 0 },
+      },
+      {
+        id: 'out_1',
+        type: 'graph.output',
+        position: [320, 0],
+        values: { name: 'out', type: 'float' },
+      },
+    ],
+    edges: [
+      {
+        from: { node: 'in_1', port: 'value' },
+        to: { node: 'out_1', port: 'value' },
+      },
+    ],
+    parameters: [],
+  }
+}
+
 /** A parameter's starting value for its type */
 export function defaultValue(type: PinType): GraphValue {
   switch (type) {

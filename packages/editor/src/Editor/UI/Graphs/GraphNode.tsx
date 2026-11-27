@@ -30,6 +30,17 @@ export const GraphContext = createContext<GraphEditorContext>({
   setValue: () => {},
 })
 
+const SUBGRAPH_PORT_TYPES = [
+  'float',
+  'vec2',
+  'vec3',
+  'vec4',
+  'color',
+  'bool',
+  'string',
+  'entity',
+]
+
 const COMPARE_OPS = ['<', '<=', '==', '!=', '>=', '>']
 
 /** Hex for a color input, from a linear color value */
@@ -180,6 +191,8 @@ function GraphNode({ id, data, selected }: NodeProps<FlowNode>) {
               return pick(textures)
             if (key === 'op' && data.type === 'logic.compare')
               return pick(COMPARE_OPS, false)
+            if (key === 'type' && (data.type === 'graph.input' || data.type === 'graph.output'))
+              return pick(SUBGRAPH_PORT_TYPES, false)
             if (key === 'id' && data.type === 'entity.byId')
               return pick(entities)
             return <ValueField type={spec.type} value={value(key, spec)} onChange={v => setValue(id, key, v)} />

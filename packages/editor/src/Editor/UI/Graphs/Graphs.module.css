@@ -38,6 +38,7 @@
 
 .newGraph {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
     margin-top: var(--spacing-md);
 }
@@ -332,7 +333,13 @@
 }
 
 .kindSelect {
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+/* The name on its own line, the kind and New below it */
+.newGraph .text {
+    flex-basis: 100%;
 }
 
 .pluginBadge {

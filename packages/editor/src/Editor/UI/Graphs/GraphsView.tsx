@@ -8,16 +8,17 @@ import Game from '@mavonengine/core/Game'
 import { GraphRuntime, GraphRuntimeError } from '@mavonengine/core/Graph/Logic/GraphRuntime'
 import { loadGraph, LOGIC_GRAPH_TYPE, logicGraphUsers, reloadLogicGraph, watchLogicGraph } from '@mavonengine/core/Graph/Logic/logicGraphObject'
 import { MaterialGraphError } from '@mavonengine/core/Graph/Material/compileMaterialGraph'
-import { materialGraphs } from '@mavonengine/core/Graph/Material/MaterialGraphs'
+import { materialGraphs, registerGraphAsSubgraph } from '@mavonengine/core/Graph/Material/MaterialGraphs'
 import { canConnect, getNode, getNodes } from '@mavonengine/core/Graph/NodeRegistry'
 import { registerBuiltinNodes } from '@mavonengine/core/Graph/Nodes/builtin'
+import { isFunctionGraph, SubgraphError, subgraphType } from '@mavonengine/core/Graph/Nodes/subgraph'
 import { GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
 import { analyzeGraph } from '@mavonengine/core/Graph/validate'
 import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Texture } from 'three'
-import { defaultLogicGraph, defaultMaterialGraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
+import { defaultLogicGraph, defaultMaterialGraph, defaultSubgraph, defaultValue, edgeId, fromFlow, graphKey, newNodeId, PIN_COLORS, toFlow } from './graphModel'
 import GraphNode, { GraphContext } from './GraphNode'
 import styles from './Graphs.module.css'
 import MaterialPreview from './MaterialPreview'
@@ -105,9 +106,11 @@ function useActiveNodes(name: string | undefined): Set<string> {
 }
 
 /** Picks a node type to add, at where the canvas was right clicked */
-function NodePalette({ kind, at, onPick, onClose }: { kind: GraphKind, at: { x: number, y: number }, onPick(type: string): void, onClose(): void }) {
+function NodePalette({ kind, exclude, at, onPick, onClose }: { kind: GraphKind, exclude?: string, at: { x: number, y: number }, onPick(type: string): void, onClose(): void }) {
   const [filter, setFilter] = useState('')
-  const nodes = getNodes(kind).filter(node => `${node.category} ${node.label} ${node.type}`.toLowerCase().includes(filter.toLowerCase()))
+  const nodes = getNodes(kind)
+    .filter(node => node.type !== exclude)
+    .filter(node => `${node.category} ${node.label} ${node.type}`.toLowerCase().includes(filter.toLowerCase()))
   // A plugin's nodes are grouped under it
   const group = (node: { category: string, plugin?: string }) => node.plugin
     ? `${node.category} · ${node.plugin}`
@@ -232,9 +235,15 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
   const analysis = useMemo(() => analyzeGraph(graph), [key])
   // Opening a graph changes nothing: only edits restart it in the scene
   const [openedKey] = useState(key)
+  const isFunction = isFunctionGraph(graph)
   useEffect(() => {
     try {
-      if (graph.kind === 'logic') {
+      if (isFunctionGraph(graph)) {
+        // A subgraph: registered again, so graphs using it get its new ports and insides
+        registerGraphAsSubgraph(graph.name, graph)
+        setCompiled({ issues: [] })
+      }
+      else if (graph.kind === 'logic') {
         // eslint-disable-next-line no-new -- built to check it, also when nothing runs it
         new GraphRuntime(graph)
         // Also runs it, from the start, in the scene's logic graph objects using it
@@ -254,7 +263,7 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
       setCompiled(previous => ({
         // The last material that compiled stays on the preview
         ...previous,
-        issues: err instanceof MaterialGraphError || err instanceof GraphRuntimeError
+        issues: err instanceof MaterialGraphError || err instanceof GraphRuntimeError || err instanceof SubgraphError
           ? err.issues
           : [
               { message: (err as Error).message },
@@ -453,7 +462,7 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
             <Background gap={20} />
             <Controls showInteractive={false} />
           </ReactFlow>
-          {palette && <NodePalette kind={graph.kind} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
+          {palette && <NodePalette kind={graph.kind} exclude={subgraphType(graph.name)} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
           <div className={styles.hint}>
             {readOnly
               ? `From the plugin ${plugin}: copy it into the project to change it`
@@ -462,7 +471,7 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
         </div>
 
         <div className={styles.side}>
-          {graph.kind === 'material' && <MaterialPreview material={material} />}
+          {graph.kind === 'material' && !isFunction && <MaterialPreview material={material} />}
           <div className={styles.section}>
             <div className={styles.toolbar}>
               <strong>{graph.name}</strong>
@@ -472,7 +481,25 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
             </div>
             {status && <div className={styles.muted}>{status}</div>}
           </div>
-          {graph.kind === 'logic' && (
+          {isFunction && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>Subgraph</div>
+              <div className={styles.muted}>
+                {`A node named ${parseGraphName(graph.name)?.name ?? graph.name} in other ${graph.kind} graphs, under Subgraphs. Graph Inputs are its inputs, Graph Outputs its outputs`}
+              </div>
+              <div>
+                In:
+                {' '}
+                {graph.nodes.filter(node => node.type === 'graph.input').map(node => String(node.values?.name ?? 'in')).join(', ') || 'none'}
+              </div>
+              <div>
+                Out:
+                {' '}
+                {graph.nodes.filter(node => node.type === 'graph.output').map(node => String(node.values?.name ?? 'out')).join(', ')}
+              </div>
+            </div>
+          )}
+          {graph.kind === 'logic' && !isFunction && (
             <div className={styles.section}>
               <div className={styles.sectionTitle}>In the scene</div>
               <div className={styles.muted}>
@@ -509,6 +536,9 @@ function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSav
   )
 }
 
+/** What New makes */
+type NewKind = 'material' | 'logic' | 'material-subgraph' | 'logic-subgraph'
+
 const KINDS: { kind: GraphKind, title: string, empty: string }[] = [
   { kind: 'material', title: 'Material graphs', empty: 'No material graphs yet' },
   { kind: 'logic', title: 'Logic graphs', empty: 'No logic graphs yet' },
@@ -526,7 +556,7 @@ export default function GraphsView() {
   const [loaded, setLoaded] = useState<GraphData>()
   const [error, setError] = useState<string>()
   const [newName, setNewName] = useState('')
-  const [newKind, setNewKind] = useState<GraphKind>('material')
+  const [newKind, setNewKind] = useState<NewKind>('material')
 
   useEffect(() => {
     void materialGraphs.refreshList()
@@ -552,9 +582,14 @@ export default function GraphsView() {
 
   const create = async () => {
     const name = newName
+    const kind: GraphKind = newKind.startsWith('logic')
+      ? 'logic'
+      : 'material'
     const graph = newKind === 'material'
       ? defaultMaterialGraph(name)
-      : defaultLogicGraph(name)
+      : newKind === 'logic'
+        ? defaultLogicGraph(name)
+        : defaultSubgraph(name, kind)
     const error = await saveGraph(name, graph)
     if (error) {
       setError(error)
@@ -562,7 +597,7 @@ export default function GraphsView() {
     }
     setNewName('')
     await materialGraphs.refreshList()
-    setSelected({ name, kind: newKind })
+    setSelected({ name, kind })
   }
 
   const nameOk = GRAPH_NAME_RE.test(newName) && !list.some(graph => graph.name === newName)
@@ -591,6 +626,7 @@ export default function GraphsView() {
                         </>
                       )
                     : graph.name}
+                  {graph.function && <span className={styles.pluginBadge}>subgraph</span>}
                 </button>
               ))}
               {!graphs.length && <div className={styles.muted}>{empty}</div>}
@@ -609,9 +645,11 @@ export default function GraphsView() {
                 void create()
             }}
           />
-          <select className={styles.kindSelect} value={newKind} onChange={e => setNewKind(e.target.value as GraphKind)}>
+          <select className={styles.kindSelect} value={newKind} onChange={e => setNewKind(e.target.value as NewKind)}>
             <option value="material">Material</option>
             <option value="logic">Logic</option>
+            <option value="material-subgraph">Material subgraph</option>
+            <option value="logic-subgraph">Logic subgraph</option>
           </select>
           <button disabled={!nameOk} onClick={() => void create()}>New</button>
         </div>
