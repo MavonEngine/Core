@@ -99,6 +99,23 @@ describe('server', () => {
     expect((server.game.world as ServerWorld).players).toHaveLength(0)
     expect(server.game.world.entities.items.has(randomId)).toBe(false)
   })
+  it('logs why a player disconnected', () => {
+    const server = new TestServer(logger)
+    const info = vi.spyOn(server.logger, 'info')
+
+    let disconnectCallback: (reason?: string) => void = () => { }
+    mockGeckosOnConnection.mock.calls[0][0]({
+      id: 'p-reason',
+      on: vi.fn(),
+      onDisconnect: (cb: (reason?: string) => void) => {
+        disconnectCallback = cb
+      },
+    })
+
+    disconnectCallback('disconnected')
+
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/^Disconnected: p-reason \(disconnected after .*s, last heard from .*s ago\)$/))
+  })
 
   it('should respond with pong', () => {
     const _server = new TestServer(logger)
@@ -1101,7 +1118,11 @@ describe('server', () => {
           peer: 'p1',
           tick: undefined,
           sequenceId: undefined,
-          info: undefined,
+          info: {
+            reason: null,
+            connectedFor: expect.any(Number),
+            lastHeardAgo: expect.any(Number),
+          },
         },
       ])
 

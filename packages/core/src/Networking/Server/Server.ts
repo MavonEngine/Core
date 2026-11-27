@@ -207,6 +207,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private lastStates = new Map<string, SyncStateSummary>()
   /** The transport's byte counters per channel, as they were when bandwidth was last recorded */
   private transportBytes = new Map<string, { sent: number, received: number }>()
+  /** When each connection opened and when its client was last heard from (ping or command), for the disconnect log */
+  private peerTimes = new Map<string, { connectedAt: number, lastHeardAt: number }>()
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -305,6 +307,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       // Before anything is sent or listened to, so the game's own messages are recorded too
       this.tapChannel(channel)
 
+      const connectedAt = Date.now()
+      this.peerTimes.set(channel.id!, { connectedAt, lastHeardAt: connectedAt })
+      const heard = () => {
+        const times = this.peerTimes.get(channel.id!)
+        if (times)
+          times.lastHeardAt = Date.now()
+      }
+
       const client = this.onConnection(channel)
       if (client instanceof Player)
         client.channel = channel
@@ -317,6 +327,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       channel.on(ClientCommand.CL_EDITOR, () => this.attachEditor(channel))
 
       channel.on('ping', () => {
+        heard()
         const pong = () => channel.emit('pong')
 
         if (this.latencySimulator) {
@@ -327,17 +338,34 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         }
       })
 
-      channel.onDisconnect(() => {
+      // geckos passes the peer connection's state: 'disconnected' (packets stopped), 'failed', or 'closed' (on purpose)
+      channel.onDisconnect((reason?: string) => {
         const playerId = channel.id!
+        const now = Date.now()
+        const times = this.peerTimes.get(playerId)
+        this.peerTimes.delete(playerId)
+        const connectedFor = times
+          ? now - times.connectedAt
+          : null
+        const lastHeardAgo = times
+          ? now - times.lastHeardAt
+          : null
+        const seconds = (ms: number | null) => ms === null
+          ? 'n/a'
+          : `${(ms / 1000).toFixed(1)}s`
+        const summary = `${reason ?? 'unknown'} after ${seconds(connectedFor)}, last heard from ${seconds(lastHeardAgo)} ago`
 
-        this.net.event('disconnect', { peer: playerId })
+        this.net.event('disconnect', {
+          peer: playerId,
+          info: { reason: reason ?? null, connectedFor, lastHeardAgo },
+        })
         this.lastStates.delete(playerId)
         // Count what it sent and received since the last sample before its counters are gone
         this.recordTransportBytes(channel)
         this.transportBytes.delete(playerId)
 
         if (this.editorChannels.delete(playerId)) {
-          this.logger.info(`Editor disconnected: ${playerId}`)
+          this.logger.info(`Editor disconnected: ${playerId} (${summary})`)
           return
         }
 
@@ -373,11 +401,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
           }
         })
 
-        this.logger.info('Disconnected', playerId)
+        this.logger.info(`Disconnected: ${playerId} (${summary})`)
         this.logger.info(`${(this.game.world as ServerWorld).players.length - 1} total players connected`)
       })
 
-      channel.on('command', data => this.bufferIncomingCommand(channel, data))
+      channel.on('command', (data) => {
+        heard()
+        this.bufferIncomingCommand(channel, data)
+      })
     })
 
     this.game.onUpdate(delta => this.tick(delta))
