@@ -21,6 +21,7 @@ import { recordPrefabUsage } from '../../recordPrefabUsage'
 import Window from '../Window'
 import styles from './Assets.module.css'
 import AudioPlayer from './AudioPlayer'
+import { lightPreviews } from './lightPreviews'
 import ModelViewer from './ModelViewer'
 import ParticleViewer from './ParticleViewer'
 import { primitivePreviews } from './primitivePreviews'
@@ -497,30 +498,46 @@ export default () => {
           {activeCategory === 'Lights'
             ? LIGHTS
                 .filter(l => l.label.toLowerCase().includes(search.toLowerCase()))
-                .map(light => (
-                  <div className={styles.assetRow} key={light.name}>
-                    <div
-                      className={styles.assetIcon}
-                      onDragStart={e => onLightDragStart(e, light.name)}
-                      draggable
-                    >
-                      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="32" cy="28" r="10" stroke="#FFD700" strokeWidth="2" fill="none" />
-                        <line x1="32" y1="8" x2="32" y2="14" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="32" y1="42" x2="32" y2="48" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="12" y1="28" x2="18" y2="28" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="46" y1="28" x2="52" y2="28" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="17" y1="13" x2="21" y2="17" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="43" y1="39" x2="47" y2="43" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="47" y1="13" x2="43" y2="17" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="21" y1="39" x2="17" y2="43" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="28" y1="50" x2="36" y2="50" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
-                        <line x1="29" y1="54" x2="35" y2="54" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-                      </svg>
+                .map((light) => {
+                  // Rendered once on first open, then cached
+                  const preview = lightPreviews().get(light.name)
+                  return (
+                    <div className={styles.assetRow} key={light.name}>
+                      {preview
+                        ? (
+                            <img
+                              src={preview}
+                              alt=""
+                              title={light.label}
+                              onDragStart={e => onLightDragStart(e, light.name)}
+                              draggable
+                            />
+                          )
+                        : (
+                            <div
+                              className={styles.assetIcon}
+                              onDragStart={e => onLightDragStart(e, light.name)}
+                              draggable
+                            >
+                              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="32" cy="28" r="10" stroke="#FFD700" strokeWidth="2" fill="none" />
+                                <line x1="32" y1="8" x2="32" y2="14" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="32" y1="42" x2="32" y2="48" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="12" y1="28" x2="18" y2="28" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="46" y1="28" x2="52" y2="28" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="17" y1="13" x2="21" y2="17" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="43" y1="39" x2="47" y2="43" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="47" y1="13" x2="43" y2="17" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="21" y1="39" x2="17" y2="43" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="28" y1="50" x2="36" y2="50" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" />
+                                <line x1="29" y1="54" x2="35" y2="54" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+                              </svg>
+                            </div>
+                          )}
+                      {light.label}
                     </div>
-                    {light.label}
-                  </div>
-                ))
+                  )
+                })
             : activeCategory === 'Primitives'
               ? PRIMITIVES
                   .filter(p => p.label.toLowerCase().includes(search.toLowerCase()))

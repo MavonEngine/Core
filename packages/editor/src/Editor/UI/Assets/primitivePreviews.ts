@@ -13,11 +13,9 @@ import {
   Scene,
   Sphere,
   Vector3,
-  WebGLRenderer,
 } from 'three'
+import { withPreviewRenderer } from './previewRenderer'
 
-/** Rendered at twice the 64px tile so previews stay sharp on high density screens */
-const SIZE = 128
 /** A three-quarter view from above, so solid shapes show three sides and flat ones aren't seen edge on */
 const VIEW = new Vector3(1, 0.8, 1.4).normalize()
 
@@ -32,18 +30,7 @@ let cache: Map<string, string> | undefined
 export function primitivePreviews(): Map<string, string> {
   if (cache)
     return cache
-  cache = new Map()
-
-  let renderer: WebGLRenderer
-  try {
-    renderer = new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
-  }
-  catch {
-    return cache
-  }
-  renderer.setPixelRatio(1)
-  renderer.setSize(SIZE, SIZE, false)
-  renderer.setClearColor(0x000000, 0)
+  const images = new Map<string, string>()
 
   const scene = new Scene()
   scene.add(new AmbientLight(0xFFFFFF, 0.6))
@@ -64,7 +51,7 @@ export function primitivePreviews(): Map<string, string> {
   })
   const lineMaterial = new LineBasicMaterial({ color: 0x4A9EFF })
 
-  try {
+  withPreviewRenderer((renderer) => {
     for (const [name, definition] of Object.entries(PRIMITIVE_DEFINITIONS)) {
       const geometry: BufferGeometry = buildPrimitiveGeometry(definition, resolveParams(definition))
       const object = 'lines' in definition && definition.lines
@@ -74,20 +61,17 @@ export function primitivePreviews(): Map<string, string> {
 
       frame(camera, object)
       renderer.render(scene, camera)
-      cache.set(name, renderer.domElement.toDataURL('image/png'))
+      images.set(name, renderer.domElement.toDataURL('image/png'))
 
       scene.remove(object)
       geometry.dispose()
     }
-  }
-  finally {
-    meshMaterial.dispose()
-    lineMaterial.dispose()
-    renderer.dispose()
-    renderer.forceContextLoss()
-  }
+  })
+  meshMaterial.dispose()
+  lineMaterial.dispose()
 
-  return cache
+  cache = images
+  return images
 }
 
 /** Points the camera at the object from VIEW, close enough that it fills most of the image */

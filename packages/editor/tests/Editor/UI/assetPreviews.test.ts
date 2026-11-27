@@ -1,3 +1,4 @@
+import { LIGHT_REGISTRY } from '@mavonengine/core/Prefab/Lights/index'
 import { PRIMITIVE_DEFINITIONS } from '@mavonengine/core/Prefab/Primitives/definitions'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,9 +23,13 @@ vi.mock('three', async (importOriginal) => {
         setPixelRatio: vi.fn(),
         setSize: vi.fn(),
         setClearColor: vi.fn(),
+        shadowMap: { enabled: false },
         render: (scene: import('three').Scene) => {
-          // The object being previewed is the only non light in the scene
-          const object = scene.children.find(c => !(c as { isLight?: boolean }).isLight)!
+          // Primitives: the one object besides the lights. Lights: the one light in the scene
+          const lights = scene.children.filter(c => (c as { isLight?: boolean }).isLight)
+          const object = lights.length === 1
+            ? lights[0]
+            : scene.children.find(c => !(c as { isLight?: boolean }).isLight)!
           current = object.type
           renderer.rendered.push(current)
         },
@@ -38,9 +43,20 @@ vi.mock('three', async (importOriginal) => {
   }
 })
 
+vi.mock('@mavonengine/core/Game', () => ({
+  default: {
+    instance: vi.fn(),
+  },
+}))
+
 async function load() {
   vi.resetModules()
   return (await import('../../../src/Editor/UI/Assets/primitivePreviews')).primitivePreviews
+}
+
+async function loadLights() {
+  vi.resetModules()
+  return (await import('../../../src/Editor/UI/Assets/lightPreviews')).lightPreviews
 }
 
 describe('primitive previews', () => {
@@ -78,5 +94,33 @@ describe('primitive previews', () => {
     renderer.fail = true
     const primitivePreviews = await load()
     expect(primitivePreviews().size).toBe(0)
+  })
+})
+
+describe('light previews', () => {
+  beforeEach(() => {
+    renderer.instances = 0
+    renderer.fail = false
+    renderer.dispose.mockClear()
+    renderer.forceContextLoss.mockClear()
+  })
+
+  it('renders every registered light, each on its own, then releases the WebGL context', async () => {
+    const lightPreviews = await loadLights()
+    const previews = lightPreviews()
+
+    expect([
+      ...previews.keys(),
+    ].sort()).toEqual(Object.keys(LIGHT_REGISTRY).sort())
+    expect(previews.get('SpotLight')).toContain('SpotLight')
+    expect(previews.get('HemisphereLight')).toContain('HemisphereLight')
+    expect(renderer.instances).toBe(1)
+    expect(renderer.forceContextLoss).toHaveBeenCalledOnce()
+  })
+
+  it('is empty without WebGL', async () => {
+    renderer.fail = true
+    const lightPreviews = await loadLights()
+    expect(lightPreviews().size).toBe(0)
   })
 })
