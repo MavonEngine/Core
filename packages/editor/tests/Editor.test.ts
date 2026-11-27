@@ -38,14 +38,12 @@ beforeAll(() => {
   }
 })
 
-vi.mock('three/examples/jsm/controls/FlyControls.js', () => ({
-  FlyControls: vi.fn().mockImplementation(function () {
+vi.mock('../src/Editor/EditorCameraControls', () => ({
+  default: vi.fn().mockImplementation(function () {
     return {
-      autoForward: false,
-      dragToLook: false,
-      movementSpeed: 0,
-      rollSpeed: 0,
+      enabled: true,
       update: vi.fn(),
+      dispose: vi.fn(),
     }
   }),
 }))
@@ -301,12 +299,12 @@ describe('editor', () => {
   })
 
   describe('update', () => {
-    it('delegates to flyControls.update with the given delta', () => {
+    it('delegates to cameraControls.update with the given delta', () => {
       const editor = new Editor()
 
       editor.update(0.016)
 
-      expect(editor.flyControls.update).toHaveBeenCalledWith(0.016)
+      expect(editor.cameraControls.update).toHaveBeenCalledWith(0.016)
     })
   })
 
