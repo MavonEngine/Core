@@ -166,6 +166,7 @@ export default class Game extends BaseGame {
     this.renderer.instance.setAnimationLoop((now: number) => {
       if (this.renderer.shouldRender(now)) {
         // Measured since the last rendered frame, so the skipped frames' time isn't lost
+        this.clock.update(now)
         const delta = this.clock.getDelta()
 
         this.particleSystem.update(delta)

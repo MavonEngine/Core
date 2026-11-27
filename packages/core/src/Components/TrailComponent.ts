@@ -40,7 +40,7 @@ export default class TrailComponent implements GameObjectInterface {
     const startPos = entity.position.clone()
     this.points.push({
       position: startPos,
-      timestamp: Game.instance().clock.getElapsedTime() ?? 0,
+      timestamp: Game.instance().clock.getElapsed(),
     })
 
     if (Game.instance().debug.active) {
@@ -72,7 +72,7 @@ export default class TrailComponent implements GameObjectInterface {
       const newPoint = currentPosition.clone()
       this.points.push({
         position: newPoint,
-        timestamp: Game.instance().clock.getElapsedTime() ?? 0,
+        timestamp: Game.instance().clock.getElapsed(),
       })
 
       if (this.points.length > this.maxPoints) {

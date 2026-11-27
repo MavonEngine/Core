@@ -250,7 +250,7 @@ export default class Water extends WithEditorHelper(GameObject) {
   }
 
   update(_delta: number): void {
-    this.material.uniforms.uTime.value = Game.instance().clock.elapsedTime
+    this.material.uniforms.uTime.value = Game.instance().clock.getElapsed()
 
     if (WaterManager.instance) {
       this.material.uniforms.uSunDirection.value.copy(WaterManager.instance.sunPosition)
