@@ -383,7 +383,7 @@
         1410
       ],
       "values": {
-        "message": "Hi! I'm an NPC controlled by a logic graph running on the server."
+        "message": "Hi! I'm an NPC controlled by a logic graph running on the server. See how logic graphs work: https://mavonengine.com/logic-graphs"
       },
       "group": "group_clicked"
     }
