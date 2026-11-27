@@ -16,7 +16,8 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * they are visuals only; a project registers `server` factories for what the server needs.
  *
  * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, plus the primitive's
- *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere). Missing params use their defaults
+ *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere) and pivot ('center' | 'base').
+ *   Missing params use their defaults, a missing pivot is 'center'
  * - `Light:<AmbientLight|DirectionalLight|…>` props: color, intensity, castShadow, shadowMapSize (+ shadowArea, shadowFar for directional lights)
  * - `Model` props: resource (name of a loaded gltfModel), castShadow, receiveShadow
  * - `prefab:<key>` any prefab of the prefab registry, by its key
@@ -55,7 +56,7 @@ function bool(v: unknown) {
 }
 
 function primitiveProps(primitive: Primitive): Props {
-  const props: Props = { ...primitive.params }
+  const props: Props = { ...primitive.params, pivot: primitive.pivot }
   const mesh = primitive.instance
   if (mesh instanceof Mesh) {
     props.castShadow = mesh.castShadow
@@ -197,7 +198,10 @@ export function registerBuiltinSceneObjects() {
       label: name,
       client(data) {
         const position = new Vector3(...data.transform.position)
-        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined)
+        const pivot = data.props?.pivot === 'base'
+          ? 'base'
+          : 'center'
+        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined, { pivot })
         applyPrimitiveProps(primitive, data.props)
         return primitive
       },

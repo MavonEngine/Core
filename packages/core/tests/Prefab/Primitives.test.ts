@@ -114,3 +114,36 @@ describe('primitive', () => {
     expect(new PRIMITIVE_REGISTRY.Box(new Vector3()).instance).toBeInstanceOf(Mesh)
   })
 })
+
+describe('pivot', () => {
+  function bounds(primitive: InstanceType<typeof SpherePrimitive>) {
+    primitive.instance.geometry.computeBoundingBox()
+    return primitive.instance.geometry.boundingBox!
+  }
+
+  it('centers by default', () => {
+    const sphere = new SpherePrimitive(new Vector3())
+    expect(sphere.pivot).toBe('center')
+    expect(bounds(sphere).min.y).toBeCloseTo(-1)
+  })
+
+  it.each(Object.entries(PRIMITIVE_REGISTRY))('%s rests on y = 0 with a base pivot', (_name, PrimitiveClass) => {
+    const primitive = new PrimitiveClass(new Vector3(), undefined, { pivot: 'base' })
+    expect(bounds(primitive).min.y).toBeCloseTo(0)
+  })
+
+  it('keeps the base on the ground when made taller', () => {
+    const box = new BoxPrimitive(new Vector3(), undefined, { pivot: 'base' })
+    box.setParam('height', 4)
+    expect(bounds(box).min.y).toBeCloseTo(0)
+    expect(bounds(box).max.y).toBeCloseTo(4)
+  })
+
+  it('switches between pivots', () => {
+    const box = new BoxPrimitive(new Vector3())
+    box.setPivot('base')
+    expect(bounds(box).min.y).toBeCloseTo(0)
+    box.setPivot('center')
+    expect(bounds(box).min.y).toBeCloseTo(-0.5)
+  })
+})

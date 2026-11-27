@@ -403,16 +403,37 @@ export function resolveParams(definition: PrimitiveDefinition, given: Partial<Re
   return params
 }
 
+/**
+ * Where the primitive's origin sits: `center` of its geometry (three.js default) or the `base`,
+ * so it stands on whatever it is placed on and grows upwards when made taller.
+ */
+export type PrimitivePivot = 'center' | 'base'
+
+export interface PrimitiveOptions {
+  pivot?: PrimitivePivot
+}
+
+/** Moves a geometry up so its lowest point is at y = 0 */
+function moveToBase(geometry: BufferGeometry): BufferGeometry {
+  geometry.computeBoundingBox()
+  const bottom = geometry.boundingBox?.min.y ?? 0
+  if (bottom !== 0)
+    geometry.translate(0, -bottom, 0)
+  return geometry
+}
+
 export abstract class Primitive extends WithEditorHelper(GameObject) {
   public instance: Mesh | LineSegments
   readonly definition: PrimitiveDefinition
   private _params: GeometryParams
+  private _pivot: PrimitivePivot
 
-  constructor(position: Vector3, definition: PrimitiveDefinition, params?: Partial<GeometryParams>) {
+  constructor(position: Vector3, definition: PrimitiveDefinition, params?: Partial<GeometryParams>, options: PrimitiveOptions = {}) {
     super(undefined, position)
     this.definition = definition
     this._params = resolveParams(definition, params)
-    const geometry = definition.geometry(this._params)
+    this._pivot = options.pivot ?? 'center'
+    const geometry = this.buildGeometry()
     this.instance = definition.lines
       ? new LineSegments(geometry, new LineBasicMaterial({ color: 0x4A9EFF }))
       : new Mesh(geometry, new MeshStandardMaterial({ color: 0x888888 }))
@@ -422,6 +443,7 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
       onMove: (delta: Vector3) => this.instance.position.add(delta),
       properties: [
         ...this.materialProperties(),
+        this.pivotProperty(),
         ...this.geometryProperties(),
       ],
     })
@@ -442,8 +464,42 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
     if (this.definition.params.every(p => next[p.key] === this._params[p.key]))
       return
     this._params = next
+    this.rebuild()
+  }
+
+  get pivot(): PrimitivePivot {
+    return this._pivot
+  }
+
+  /** Moves the origin. The origin stays where it is in the world, so the shape shifts around it. */
+  setPivot(pivot: PrimitivePivot): void {
+    if (pivot === this._pivot)
+      return
+    this._pivot = pivot
+    this.rebuild()
+  }
+
+  private buildGeometry(): BufferGeometry {
+    const geometry = this.definition.geometry(this._params)
+    return this._pivot === 'base'
+      ? moveToBase(geometry)
+      : geometry
+  }
+
+  private rebuild(): void {
     this.instance.geometry.dispose()
-    this.instance.geometry = this.definition.geometry(next)
+    this.instance.geometry = this.buildGeometry()
+  }
+
+  private pivotProperty(): PropertyField {
+    return {
+      type: 'checkbox',
+      label: 'pivot at base',
+      getValue: () => this._pivot === 'base',
+      setValue: (v: boolean) => this.setPivot(v
+        ? 'base'
+        : 'center'),
+    }
   }
 
   setParam(key: string, value: number): void {
@@ -525,77 +581,77 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
   }
 }
 
-export type PrimitiveConstructor = new (position: Vector3, params?: Partial<GeometryParams>) => Primitive
+export type PrimitiveConstructor = new (position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) => Primitive
 
 export class BoxPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Box, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Box, params, options)
   }
 }
 
 export class CapsulePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Capsule, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Capsule, params, options)
   }
 }
 
 export class CirclePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Circle, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Circle, params, options)
   }
 }
 
 export class ConePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Cone, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Cone, params, options)
   }
 }
 
 export class CylinderPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Cylinder, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Cylinder, params, options)
   }
 }
 
 export class DodecahedronPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Dodecahedron, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Dodecahedron, params, options)
   }
 }
 
 export class EdgesPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Edges, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Edges, params, options)
   }
 }
 
 export class ExtrudePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Extrude, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Extrude, params, options)
   }
 }
 
 export class IcosahedronPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Icosahedron, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Icosahedron, params, options)
   }
 }
 
 export class LathePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Lathe, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Lathe, params, options)
   }
 }
 
 export class OctahedronPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Octahedron, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Octahedron, params, options)
   }
 }
 
 export class PlanePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Plane, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Plane, params, options)
   }
 
   get width(): number {
@@ -608,56 +664,56 @@ export class PlanePrimitive extends Primitive {
 }
 
 export class PolyhedronPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Polyhedron, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Polyhedron, params, options)
   }
 }
 
 export class RingPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Ring, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Ring, params, options)
   }
 }
 
 export class ShapePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Shape, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Shape, params, options)
   }
 }
 
 export class SpherePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Sphere, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Sphere, params, options)
   }
 }
 
 export class TetrahedronPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Tetrahedron, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Tetrahedron, params, options)
   }
 }
 
 export class TorusPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Torus, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Torus, params, options)
   }
 }
 
 export class TorusKnotPrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.TorusKnot, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.TorusKnot, params, options)
   }
 }
 
 export class TubePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Tube, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Tube, params, options)
   }
 }
 
 export class WireframePrimitive extends Primitive {
-  constructor(position: Vector3, params?: Partial<GeometryParams>) {
-    super(position, PRIMITIVE_DEFINITIONS.Wireframe, params)
+  constructor(position: Vector3, params?: Partial<GeometryParams>, options?: PrimitiveOptions) {
+    super(position, PRIMITIVE_DEFINITIONS.Wireframe, params, options)
   }
 }
 

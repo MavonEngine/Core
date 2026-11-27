@@ -246,13 +246,14 @@ export default () => {
         const dropPos = new Vector3()
         window.Game.rayCaster.ray.intersectPlane(groundPlane, dropPos)
 
-        if (placeInScene(primitiveType(primitiveName), dropPos, { castShadow: true, receiveShadow: true })) {
+        // Dropped shapes stand on the ground instead of sinking halfway into it
+        if (placeInScene(primitiveType(primitiveName), dropPos, { castShadow: true, receiveShadow: true, pivot: 'base' })) {
           window.Game.editor?.trigger('assetDropped')
           window.Game.logger?.info(`Spawned ${primitiveName} primitive at ${dropPos.toArray()}`)
           return
         }
 
-        const primitive = new PrimitiveClass(dropPos)
+        const primitive = new PrimitiveClass(dropPos, undefined, { pivot: 'base' })
         window.Game.world.add({ [`primitive_${primitiveName.toLowerCase()}_${Date.now()}`]: primitive })
         window.Game.editor?.trigger('assetDropped')
         window.Game.logger?.info(`Spawned ${primitiveName} primitive at ${dropPos.toArray()}`)
