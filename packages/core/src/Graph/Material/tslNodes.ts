@@ -227,6 +227,11 @@ const BUILTIN: Record<string, TslImplementation> = {
     value: valueNoise2D(position),
   }),
 
+  // Inside a subgraph its node hands in the inputs (see registerMaterialSubgraph); on its own, the default
+  'graph.input': (_, { values }) => ({
+    value: tslConstant(values.default ?? 0, 'float'),
+  }),
+  'graph.output': () => ({}),
   'material.output': (inputs, { connected, material }) => {
     if (connected.has('color'))
       material.colorNode = inputs.color

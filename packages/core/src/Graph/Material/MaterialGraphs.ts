@@ -4,8 +4,28 @@ import type { CompiledMaterial } from './compileMaterialGraph'
 import { Texture } from 'three'
 import Game from '../../Game'
 import { GRAPHS_LIST_PATH } from '../../Plugins/types'
+import { loadSubgraphs, registerSubgraph } from '../Nodes/subgraph'
 import { graphUrl, parseGraphData } from '../types'
-import { compileMaterialGraph } from './compileMaterialGraph'
+import { compileMaterialGraph, registerMaterialSubgraph } from './compileMaterialGraph'
+
+/** A graph from the dev server or the release, named as asked for (a plugin's file only has its part of the name) */
+export async function fetchGraph(name: string): Promise<GraphData> {
+  const response = await fetch(graphUrl(name), { cache: 'no-store' })
+  if (!response.ok)
+    throw new Error(`Could not load graph ${name}: ${response.status} ${response.statusText}`)
+  return {
+    ...parseGraphData(await response.json(), name),
+    name,
+  }
+}
+
+/** Register a function graph as a node, with its TSL implementation for a material one */
+export function registerGraphAsSubgraph(name: string, graph: GraphData) {
+  if (graph.kind === 'material')
+    registerMaterialSubgraph(name, graph)
+  else
+    registerSubgraph(name, graph)
+}
 
 export interface GraphListing {
   /** `lava`, or `@acme/water:ocean` for a plugin's */
@@ -13,6 +33,8 @@ export interface GraphListing {
   kind: GraphData['kind']
   /** The plugin that ships it. Plugins' graphs can't be saved over, only copied into the project */
   plugin?: string
+  /** A function graph (it has Graph Outputs): used as a node in other graphs, not on its own */
+  function?: boolean
 }
 
 interface Entry {
@@ -36,7 +58,10 @@ export class MaterialGraphLibrary {
     return this.listing
   }
 
-  /** Ask the dev server which graphs the project has */
+  /**
+   * Ask the dev server which graphs the project has, and make its function graphs usable as nodes (subgraphs), so the
+   * editor offers them
+   */
   async refreshList(): Promise<GraphListing[]> {
     try {
       const response = await fetch(GRAPHS_LIST_PATH, { cache: 'no-store' })
@@ -46,6 +71,14 @@ export class MaterialGraphLibrary {
     catch {
       // Not the dev server
     }
+    await Promise.all(this.listing.filter(graph => graph.function).map(async (listing) => {
+      try {
+        registerGraphAsSubgraph(listing.name, await fetchGraph(listing.name))
+      }
+      catch {
+        // A broken subgraph: the graphs using it report its nodes as unknown
+      }
+    }))
     this.changed()
     return this.listing
   }
@@ -79,9 +112,9 @@ export class MaterialGraphLibrary {
     return (await this.entry(name)).compiled
   }
 
-  /** The graph's data as last loaded or set */
+  /** The graph's data as last loaded or set. Not compiled: it can be any graph, a subgraph or a logic graph too */
   async graph(name: string): Promise<GraphData> {
-    return (await this.entry(name)).graph
+    return this.entries.get(name)?.graph ?? fetchGraph(name)
   }
 
   private entry(name: string): Promise<Entry> {
@@ -92,14 +125,8 @@ export class MaterialGraphLibrary {
     let pending = this.loading.get(name)
     if (!pending) {
       pending = (async () => {
-        const response = await fetch(graphUrl(name), { cache: 'no-store' })
-        if (!response.ok)
-          throw new Error(`Could not load graph ${name}: ${response.status} ${response.statusText}`)
-        // Named as asked for: a plugin's file only has its own part of `<package>:<name>`
-        const graph = {
-          ...parseGraphData(await response.json(), name),
-          name,
-        }
+        const graph = await fetchGraph(name)
+        await loadSubgraphs(graph, fetchGraph, registerGraphAsSubgraph)
         await Game.instance().resourcesReady()
         const loaded = {
           graph,

@@ -228,7 +228,7 @@ class ClientLogicGraph extends WithEditorHelper(LogicGraphObject) {
           label: 'graph',
           options: () => [
             { value: '', label: 'None' },
-            ...materialGraphs.list.filter(graph => graph.kind === 'logic').map(graph => ({ value: graph.name, label: graph.name })),
+            ...materialGraphs.list.filter(graph => graph.kind === 'logic' && !graph.function).map(graph => ({ value: graph.name, label: graph.name })),
           ],
           getValue: () => this.props.graph ?? '',
           setValue: v => setProp({ graph: v || undefined }),

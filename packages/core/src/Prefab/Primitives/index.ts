@@ -211,7 +211,7 @@ export abstract class Primitive extends WithEditorHelper(GameObject) {
         options: () => [
           { value: '', label: 'None' },
           ...materialGraphs.list
-            .filter(graph => graph.kind === 'material')
+            .filter(graph => graph.kind === 'material' && !graph.function)
             .map(graph => ({ value: graph.name, label: graph.name })),
         ],
         getValue: () => this._materialGraph ?? '',

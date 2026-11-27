@@ -5,6 +5,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { dirname, extname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { graphFilePath, readGraphFile, resolveGraphFile, writeGraphFile } from '../Graph/loadGraphFile.js'
+import { isFunctionGraph } from '../Graph/Nodes/subgraph.js'
 import { GRAPH_NAME_RE, GRAPHS_DIR } from '../Graph/types.js'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
@@ -570,10 +571,19 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       try {
         const graph = readGraphFile(join(dir, file))
         const name = file.slice(0, -GRAPH_EXT.length)
+        // A function graph is used as a node in others
+        const fn = isFunctionGraph(graph)
+          ? { function: true }
+          : {}
         return [
           plugin
-            ? { name: `${plugin}:${name}`, kind: graph.kind, plugin }
-            : { name, kind: graph.kind },
+            ? {
+                name: `${plugin}:${name}`,
+                kind: graph.kind,
+                plugin,
+                ...fn,
+              }
+            : { name, kind: graph.kind, ...fn },
         ]
       }
       catch (err) {

@@ -6,6 +6,7 @@ import { Object3D, Vector3 } from 'three'
 import BaseGame from '../../BaseGame'
 import { getSceneObject, registerSceneObject } from '../../Scene/SceneObjectRegistry'
 import GameObject from '../../World/GameObject'
+import { loadSubgraphs } from '../Nodes/subgraph'
 import { graphUrl, isGraphName, parseGraphData } from '../types'
 import { GraphRuntime } from './GraphRuntime'
 
@@ -188,6 +189,7 @@ export class LogicGraphObject extends GameObject {
   private async load(name: string) {
     try {
       const graph = await source(name)
+      await loadSubgraphs(graph, source)
       if (!this.garbageCollect)
         this.useGraph(graph)
     }

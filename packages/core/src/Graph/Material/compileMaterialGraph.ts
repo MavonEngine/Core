@@ -1,13 +1,14 @@
 import type { Texture } from 'three'
-import type { GraphData, GraphParameter, GraphValue, PinType } from '../types'
-import type { GraphIssue } from '../validate'
-import type { TslNode } from './tslNodes'
+import type { GraphData, GraphNodeData, GraphParameter, GraphValue, PinType } from '../types'
+import type { GraphAnalysis, GraphIssue } from '../validate'
+import type { TslNode, TslNodeContext } from './tslNodes'
 import { uniform } from 'three/tsl'
 import { Color, MeshStandardNodeMaterial, Vector2, Vector3, Vector4 } from 'three/webgpu'
 import { getNode } from '../NodeRegistry'
 import { registerBuiltinNodes } from '../Nodes/builtin'
+import { GRAPH_INPUT, GRAPH_OUTPUT, registerSubgraph } from '../Nodes/subgraph'
 import { analyzeGraph } from '../validate'
-import { getTslNode, tslConstant, tslConvert } from './tslNodes'
+import { getTslNode, registerTslNode, tslConstant, tslConvert } from './tslNodes'
 
 export interface CompileMaterialOptions {
   /** Textures for Texture nodes, by the name set on the node. Defaults to none: they show magenta */
@@ -93,11 +94,32 @@ export function compileMaterialGraph(graph: GraphData, options: CompileMaterialO
     parameters[parameter.name] = node as unknown as ParameterUniform
   }
 
+  buildTslNodes({ outputTypes, incoming, order }, {
+    parameter: name => parameterNodes[name],
+    texture: name => options.textures?.(name),
+    material,
+  })
+
+  return { material, parameters }
+}
+
+/** What the nodes of a graph being built share: the graph's parameters, the textures, the material */
+export type TslBuildContext = Pick<TslNodeContext, 'parameter' | 'texture' | 'material'>
+
+/**
+ * Build a graph's nodes as TSL, in order: each input gets what its edge brings (converted to the input's type) or its
+ * value. Returns every node's outputs. `override` hands a node's outputs in place of building it (a subgraph's inputs)
+ */
+export function buildTslNodes(
+  analysis: Pick<GraphAnalysis, 'outputTypes' | 'incoming' | 'order'>,
+  context: TslBuildContext,
+  override?: (node: GraphNodeData) => Record<string, TslNode> | undefined,
+): Map<string, Record<string, TslNode>> {
+  const { outputTypes, incoming, order } = analysis
   const built = new Map<string, Record<string, TslNode>>()
   for (const node of order) {
     const definition = getNode(node.type)!
     const edges = incoming.get(node.id) ?? {}
-    const values = { ...node.values }
     const inputs: Record<string, TslNode> = {}
 
     for (const [port, spec] of Object.entries(definition.inputs)) {
@@ -121,14 +143,48 @@ export function compileMaterialGraph(graph: GraphData, options: CompileMaterialO
       }
     }
 
-    built.set(node.id, getTslNode(node.type)!(inputs, {
-      values,
+    built.set(node.id, override?.(node) ?? getTslNode(node.type)!(inputs, {
+      ...context,
+      values: { ...node.values },
       connected: new Set(Object.keys(edges)),
-      parameter: name => parameterNodes[name],
-      texture: name => options.textures?.(name),
-      material,
     }))
+    // A Graph Output keeps what it was given, for the subgraph's node to hand on
+    if (node.type === GRAPH_OUTPUT)
+      built.set(node.id, { value: inputs.value })
   }
+  return built
+}
 
-  return { material, parameters }
+/** Subgraphs being inlined, to refuse one that uses itself */
+const inlining = new Set<string>()
+
+/**
+ * Make the graph `name` usable as a node in material graphs: registered as a subgraph, with a TSL implementation
+ * that inlines its nodes. Throws a SubgraphError when it can't be one
+ */
+export function registerMaterialSubgraph(name: string, graph: GraphData): void {
+  registerBuiltinNodes()
+  const definition = registerSubgraph(name, graph)
+  if (graph.kind !== 'material')
+    return
+  const analysis = analyzeGraph(graph)
+  registerTslNode(definition.type, (inputs, context) => {
+    if (inlining.has(name))
+      throw new Error(`Subgraph "${name}" uses itself`)
+    inlining.add(name)
+    try {
+      const built = buildTslNodes(analysis, context, node => node.type === GRAPH_INPUT
+        ? { value: inputs[String(node.values?.name ?? 'in')] }
+        : undefined)
+      const outputs: Record<string, TslNode> = {}
+      for (const node of graph.nodes) {
+        if (node.type === GRAPH_OUTPUT)
+          outputs[String(node.values?.name ?? 'out')] = built.get(node.id)?.value
+      }
+      return outputs
+    }
+    finally {
+      inlining.delete(name)
+    }
+  })
 }
