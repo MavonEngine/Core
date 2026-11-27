@@ -106,13 +106,13 @@ export function compileMaterialGraph(graph: GraphData, options: CompileMaterialO
       if (edge) {
         const source = built.get(edge.from.node)?.[edge.from.port]
         // A fixed type converts what arrives (float into a color); `number` inputs take it as it is
-        inputs[port] = spec.type === 'number' || spec.type === arriving
+        inputs[port] = spec.type === 'number' || spec.type === 'any' || spec.type === arriving
           ? source
           : tslConvert(source, spec.type)
       }
       else {
         const value = node.values?.[port] ?? spec.default
-        const type = spec.type === 'number'
+        const type = spec.type === 'number' || spec.type === 'any'
           ? (Array.isArray(value)
               ? (`vec${value.length}` as PinType)
               : 'float')

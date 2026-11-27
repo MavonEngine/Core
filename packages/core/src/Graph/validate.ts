@@ -1,5 +1,5 @@
 import type { NodeDefinition } from './NodeRegistry'
-import type { GraphData, GraphEdgeData, GraphNodeData, GraphValue, PinType } from './types'
+import type { GraphData, GraphEdgeData, GraphEndpoint, GraphNodeData, GraphValue, PinType } from './types'
 import { canConnect, getNode, widestType } from './NodeRegistry'
 
 export interface GraphIssue {
@@ -14,8 +14,10 @@ export interface GraphAnalysis {
   issues: GraphIssue[]
   /** Every node's output types, by node id then port */
   outputTypes: Map<string, Record<string, PinType>>
-  /** The edge into each input, by node id then port */
+  /** The edge into each value input, by node id then port */
   incoming: Map<string, Record<string, GraphEdgeData>>
+  /** Where each exec output leads, by node id then port */
+  execOut: Map<string, Record<string, GraphEndpoint>>
   /** The nodes in an order where each comes after the nodes its values come from. Nodes in a cycle are left out */
   order: GraphNodeData[]
 }
@@ -43,7 +45,7 @@ export function typeOfValue(value: GraphValue | undefined): PinType | undefined 
 function unconnectedType(definition: NodeDefinition, port: string, node: GraphNodeData): PinType {
   const spec = definition.inputs[port]!
   const value = node.values?.[port] ?? spec.default
-  if (spec.type !== 'number')
+  if (spec.type !== 'number' && spec.type !== 'any')
     return spec.type
   return typeOfValue(value) ?? 'float'
 }
@@ -69,6 +71,7 @@ export function analyzeGraph(graph: GraphData): GraphAnalysis {
   }
 
   const incoming = new Map<string, Record<string, GraphEdgeData>>()
+  const execOut = new Map<string, Record<string, GraphEndpoint>>()
   // Value dependencies: exec edges order the steps of a logic graph, they don't carry values
   const dependsOn = new Map<string, Set<string>>(graph.nodes.map(node => [
     node.id,
@@ -92,6 +95,26 @@ export function analyzeGraph(graph: GraphData): GraphAnalysis {
       issues.push({ node: edge.to.node, port: edge.to.port, message: `${to.label} has no input "${edge.to.port}"` })
       continue
     }
+    const fromType = from.outputs[edge.from.port]!.type
+    const toType = to.inputs[edge.to.port]!.type
+    if ((fromType === 'exec') !== (toType === 'exec')) {
+      issues.push({ node: edge.to.node, port: edge.to.port, message: `${to.label}'s "${edge.to.port}" can't be connected to the ${fromType === 'exec'
+        ? 'exec'
+        : 'value'} output "${edge.from.port}"` })
+      continue
+    }
+    // Steps: an exec output leads to one step, a step can be reached from many
+    if (fromType === 'exec') {
+      const outs = execOut.get(edge.from.node) ?? {}
+      if (outs[edge.from.port]) {
+        issues.push({ node: edge.from.node, port: edge.from.port, message: `${from.label}'s exec output "${edge.from.port}" has more than one edge` })
+        continue
+      }
+      outs[edge.from.port] = edge.to
+      execOut.set(edge.from.node, outs)
+      continue
+    }
+
     const ports = incoming.get(edge.to.node) ?? {}
     if (ports[edge.to.port]) {
       issues.push({ node: edge.to.node, port: edge.to.port, message: `${to.label}'s input "${edge.to.port}" has more than one edge` })
@@ -99,8 +122,7 @@ export function analyzeGraph(graph: GraphData): GraphAnalysis {
     }
     ports[edge.to.port] = edge
     incoming.set(edge.to.node, ports)
-    if (from.outputs[edge.from.port]!.type !== 'exec')
-      dependsOn.get(edge.to.node)!.add(edge.from.node)
+    dependsOn.get(edge.to.node)!.add(edge.from.node)
   }
 
   // Kahn's algorithm: what's left at the end is in a cycle
@@ -149,13 +171,23 @@ export function analyzeGraph(graph: GraphData): GraphAnalysis {
 
     const outputs: Record<string, PinType> = {}
     for (const [port, spec] of Object.entries(definition.outputs)) {
+      // An `any` output passes on its first `any` input's type
+      const anyInput = Object.entries(definition.inputs).find(([name, input]) => input.type === 'any' && inputs[name])
       outputs[port] = resolved[port]
         ?? (spec.type === 'number'
           ? widestType(numberInputs)
-          : spec.type)
+          : spec.type === 'any'
+            ? (anyInput ? inputs[anyInput[0]]! : 'float')
+            : spec.type)
     }
     outputTypes.set(node.id, outputs)
   }
 
-  return { issues, outputTypes, incoming, order }
+  return {
+    issues,
+    outputTypes,
+    incoming,
+    execOut,
+    order,
+  }
 }

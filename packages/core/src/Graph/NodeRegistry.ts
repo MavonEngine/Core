@@ -16,7 +16,22 @@ export interface NodeTypeContext {
   graph: GraphData
 }
 
-/** What an `eval` implementation gets besides its inputs */
+/**
+ * Something a logic graph acts on: the object running it, or another scene object by id. Entity values in a graph
+ * are these ids
+ */
+export interface GraphEntity {
+  id: string
+  getPosition(): number[]
+  setPosition(value: number[]): void
+  /** Euler angles in radians, XYZ */
+  getRotation(): number[]
+  setRotation(value: number[]): void
+  getScale(): number[]
+  setScale(value: number[]): void
+}
+
+/** What an `eval` or `run` implementation gets besides its inputs */
 export interface NodeEvalContext {
   /** The graph's parameter values by name */
   parameters: Record<string, GraphValue>
@@ -24,7 +39,32 @@ export interface NodeEvalContext {
   values: Record<string, GraphValue>
   /** Seconds since the graph started running */
   time: number
+  /** The object running the graph, in a logic graph */
+  self?: GraphEntity
+  /** A scene object by id, or the object running the graph for an empty id */
+  entity?(id: string): GraphEntity | undefined
+  /** The graph's variables, in a logic graph */
+  variables?: Map<string, GraphValue>
 }
+
+/** What a `run` implementation (a step of a logic graph) gets besides its inputs */
+export interface NodeRunContext extends NodeEvalContext {
+  /** What the event carries, in an event node's `run` */
+  event: Record<string, GraphValue>
+  /** This node's own memory, kept between runs (a counter, a timer) */
+  state: Record<string, unknown>
+  /** Continue from the exec output `port` in `seconds` */
+  after(seconds: number, port: string): void
+  /** Send a message to every logic graph on this side, which their Message event nodes get */
+  emit(name: string, value: GraphValue): void
+  log(message: string): void
+}
+
+/**
+ * What a step did: which exec outputs to continue from (the first exec output when left out, none for an empty
+ * list) and the values of its data outputs. An event node returns false when the event isn't for it
+ */
+export type NodeRunResult = { next?: string | string[], outputs?: Record<string, GraphValue> } | false | void
 
 /**
  * A type of node. Its implementations come separately: `eval` here for logic graphs, the TSL one through
@@ -52,8 +92,22 @@ export interface NodeDefinition {
    * Returns some or all outputs; the rest follow the usual rules
    */
   resolveOutputs?(context: NodeTypeContext): Partial<Record<string, PinType>>
-  /** Its outputs from its inputs, for logic graphs */
+  /** Its outputs from its inputs, for logic graphs. For nodes without exec ports, worked out when read */
   eval?(inputs: Record<string, GraphValue>, context: NodeEvalContext): Record<string, GraphValue>
+  /**
+   * A logic graph event: the runtime event (`start`, `tick`, `message`...) that runs this node, which then continues
+   * from its exec output. Its `run` gets the event and can turn it down
+   */
+  trigger?: string
+  /** A step of a logic graph, for nodes with exec ports: run when an exec edge reaches it */
+  run?(inputs: Record<string, GraphValue>, context: NodeRunContext): NodeRunResult
+}
+
+/** Whether a node takes part in a logic graph's steps: it has exec ports, or is an event */
+export function isStep(definition: NodeDefinition): boolean {
+  return !!definition.trigger
+    || Object.values(definition.inputs).some(port => port.type === 'exec')
+    || Object.values(definition.outputs).some(port => port.type === 'exec')
 }
 
 const registry = new Map<string, NodeDefinition>()
@@ -104,6 +158,8 @@ export function componentCount(type: PinType): number | undefined {
 export function canConnect(from: PinType, to: PortType): boolean {
   if (from === to)
     return true
+  if (to === 'any')
+    return from !== 'exec'
   const fromCount = componentCount(from)
   if (fromCount === undefined)
     return false

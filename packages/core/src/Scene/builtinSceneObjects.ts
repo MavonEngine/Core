@@ -1,10 +1,16 @@
 import type { Group, Light, LightShadow } from 'three'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { LogicGraphProps, LogicGraphSide } from '../Graph/Logic/logicGraphObject'
 import type { LightPrimitive } from '../Prefab/Lights/index'
 import type { Primitive } from '../Prefab/Primitives/index'
+import type GameScene from './GameScene'
+import type { SceneObjectData } from './types'
 import { Mesh, MeshStandardMaterial, OrthographicCamera, Vector3 } from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { WithEditorHelper } from '../Editor/WithEditorHelper'
 import Game from '../Game'
+import { LOGIC_GRAPH_TYPE, LogicGraphObject, runsOn } from '../Graph/Logic/logicGraphObject'
+import { materialGraphs } from '../Graph/Material/MaterialGraphs'
 import { LIGHT_REGISTRY } from '../Prefab/Lights/index'
 import { getPrefab, spawnPrefab } from '../Prefab/PrefabRegistry'
 import { PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
@@ -23,6 +29,8 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * - `Light:<AmbientLight|DirectionalLight|…>` props: color, intensity, castShadow, shadowMapSize (+ shadowArea, shadowFar for directional lights)
  * - `Model` props: resource (name of a loaded gltfModel), castShadow, receiveShadow
  * - `prefab:<key>` any prefab of the prefab registry, by its key
+ * - `LogicGraph` props: graph, side ('client' | 'server' | 'both'), target, parameters. Runs a logic graph, see
+ *   Graph/Logic/logicGraphObject (which the server registers too)
  */
 
 export { primitiveType } from './primitiveSceneObjects'
@@ -190,6 +198,66 @@ export class ModelObject extends GameObject {
   }
 }
 
+const SIDES: LogicGraphSide[] = ['client', 'server', 'both']
+
+/**
+ * A logic graph on the client, with an editor helper to select, move and set it up by. It runs here only when its
+ * side includes the client, but is always built so the editor shows it
+ */
+class ClientLogicGraph extends WithEditorHelper(LogicGraphObject) {
+  constructor(data: SceneObjectData, scene: GameScene | undefined) {
+    const props = data.props as LogicGraphProps | undefined
+    // Not running on this side: no graph to load
+    super(runsOn(props?.side, 'client')
+      ? data
+      : {
+          ...data,
+          props: { ...props, graph: undefined },
+        }, scene, 'client')
+    this.props.graph = props?.graph
+
+    const setProp = (changes: Partial<LogicGraphProps>) => this.scene?.setProps(this.id, {
+      ...this.props,
+      ...changes,
+    })
+    this.registerEditorHelper(this.position.clone(), `Logic: ${props?.graph || 'no graph'}`, {
+      onMove: delta => this.position.add(delta),
+      properties: [
+        {
+          type: 'select',
+          label: 'graph',
+          options: () => [
+            { value: '', label: 'None' },
+            ...materialGraphs.list.filter(graph => graph.kind === 'logic').map(graph => ({ value: graph.name, label: graph.name })),
+          ],
+          getValue: () => this.props.graph ?? '',
+          setValue: v => setProp({ graph: v || undefined }),
+          refresh: () => materialGraphs.refreshList(),
+        },
+        {
+          type: 'select',
+          label: 'runs on',
+          options: () => SIDES.map(side => ({ value: side, label: side })),
+          getValue: () => this.props.side ?? 'client',
+          setValue: v => setProp({ side: v as LogicGraphSide }),
+        },
+        {
+          type: 'select',
+          label: 'self',
+          options: () => [
+            { value: '', label: 'This object' },
+            ...(this.scene?.getEntries() ?? [])
+              .filter(entry => entry.data.id !== this.id)
+              .map(entry => ({ value: entry.data.id, label: entry.data.name ?? entry.data.id })),
+          ],
+          getValue: () => this.props.target ?? '',
+          setValue: v => setProp({ target: v || undefined }),
+        },
+      ],
+    })
+  }
+}
+
 let registered = false
 
 export function registerBuiltinSceneObjects() {
@@ -240,6 +308,13 @@ export function registerBuiltinSceneObjects() {
       return model
     },
     serialize: model => ({ resource: model.resource, castShadow: model.castShadow, receiveShadow: model.receiveShadow }),
+  })
+
+  registerSceneObject<ClientLogicGraph>({
+    type: LOGIC_GRAPH_TYPE,
+    label: 'Logic Graph',
+    client: (data, { scene }) => new ClientLogicGraph(data, scene),
+    serialize: object => ({ ...object.props }),
   })
 
   registerSceneObjectResolver((type) => {

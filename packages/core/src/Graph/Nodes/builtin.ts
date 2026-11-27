@@ -1,6 +1,7 @@
 import type { NodeDefinition, PortSpec } from '../NodeRegistry'
 import type { GraphKind, GraphValue, PinType } from '../types'
 import { registerNode } from '../NodeRegistry'
+import { LOGIC_NODES } from './logic'
 import { asFloat, asNumber, asVector, clamp, componentWise, dot, fract, length, smoothstep } from './values'
 
 /*
@@ -503,6 +504,9 @@ export const BUILTIN_NODES: NodeDefinition[] = [
 
 /** Register the engine's node types. Safe to call more than once */
 export function registerBuiltinNodes(): void {
-  for (const node of BUILTIN_NODES)
+  for (const node of [
+    ...BUILTIN_NODES,
+    ...LOGIC_NODES,
+  ])
     registerNode(node)
 }

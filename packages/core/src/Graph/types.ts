@@ -31,10 +31,10 @@ export type PinType
     | 'exec'
 
 /**
- * A port's type: one pin type, or `number` for any of float and the vectors. A node whose ports are `number` works
+ * A port's type: one pin type, `any` for any value (not exec), or `number` for any of float and the vectors. A node whose ports are `number` works
  * component wise, and its `number` outputs take the widest of its `number` inputs' types (float + vec3 gives vec3).
  */
-export type PortType = PinType | 'number'
+export type PortType = PinType | 'number' | 'any'
 
 export type GraphValue = number | boolean | string | number[]
 

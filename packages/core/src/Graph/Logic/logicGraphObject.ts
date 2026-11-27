@@ -1,0 +1,205 @@
+import type GameScene from '../../Scene/GameScene'
+import type { SceneObjectData, SceneSide } from '../../Scene/types'
+import type { GraphEntity } from '../NodeRegistry'
+import type { GraphData, GraphValue } from '../types'
+import { Object3D, Vector3 } from 'three'
+import BaseGame from '../../BaseGame'
+import { getSceneObject, registerSceneObject } from '../../Scene/SceneObjectRegistry'
+import GameObject from '../../World/GameObject'
+import { GRAPH_NAME_RE, GRAPHS_DIR, parseGraphData } from '../types'
+import { GraphRuntime } from './GraphRuntime'
+
+/*
+ * Logic graphs in a scene: a `LogicGraph` scene object loads a graph file and runs it, every tick, on the side(s)
+ * its `side` prop names. Its `target` prop names the scene object the graph's Self is; without one it is itself.
+ */
+
+export const LOGIC_GRAPH_TYPE = 'LogicGraph'
+
+export type LogicGraphSide = SceneSide | 'both'
+
+export interface LogicGraphProps {
+  /** The graph file's name: graphs/<graph>.graph.json */
+  graph?: string
+  /** Where it runs. Default `client` */
+  side?: LogicGraphSide
+  /** The id of the scene object the graph acts on as Self. Default this object */
+  target?: string
+  /** Values for the graph's parameters */
+  parameters?: Record<string, GraphValue>
+}
+
+/** Where graphs come from: fetched from the dev server or the release on the client, read from disk on the server */
+let source: (name: string) => Promise<GraphData> = async (name) => {
+  const response = await fetch(`/${GRAPHS_DIR}/${name}.graph.json`, { cache: 'no-store' })
+  if (!response.ok)
+    throw new Error(`Could not load graph ${name}: ${response.status} ${response.statusText}`)
+  return parseGraphData(await response.json(), name)
+}
+
+/** Load graphs from somewhere else. The server reads them from the project's graphs/ */
+export function setGraphSource(load: (name: string) => Promise<GraphData>) {
+  source = load
+}
+
+/** The graphs running on this side, which messages go to */
+const running = new Set<GraphRuntime>()
+
+/** Send a message to every logic graph on this side, as a Send Message node does */
+export function sendGraphMessage(name: string, value: GraphValue = 0) {
+  for (const runtime of [...running])
+    runtime.message(name, value)
+}
+
+/** Reads and moves an Object3D, or a GameObject's own vectors when it has none */
+export function graphEntity(id: string, object: GameObject, target?: Object3D): GraphEntity {
+  const position = target?.position ?? object.position
+  const scale = target?.scale ?? object.scale
+  return {
+    id,
+    getPosition: () => position.toArray(),
+    setPosition: ([x = 0, y = 0, z = 0]) => {
+      position.set(x, y, z)
+    },
+    getRotation: () => target
+      ? [target.rotation.x, target.rotation.y, target.rotation.z]
+      : object.rotation.toArray(),
+    setRotation: ([x = 0, y = 0, z = 0]) => {
+      if (target)
+        target.rotation.set(x, y, z)
+      else
+        object.rotation.set(x, y, z)
+    },
+    getScale: () => scale.toArray(),
+    setScale: ([x = 1, y = 1, z = 1]) => {
+      scale.set(x, y, z)
+    },
+  }
+}
+
+/** A scene object as a graph entity: the Object3D the editor moves, as GameScene finds it */
+function sceneEntity(scene: GameScene | undefined, id: string): GraphEntity | undefined {
+  const entry = scene?.get(id)
+  const object = entry?.object
+  if (!entry || !object)
+    return undefined
+  const definition = getSceneObject(entry.data.type)
+  const instance = (object as { instance?: unknown }).instance
+  const target = definition?.transformTarget?.(object)
+    ?? (instance instanceof Object3D
+      ? instance
+      : undefined)
+  return graphEntity(id, object, target)
+}
+
+/** An entity found again on every use, so it follows the scene object when the editor rebuilds it */
+function lazyEntity(id: string, find: () => GraphEntity | undefined): GraphEntity {
+  const at = <T>(fn: (e: GraphEntity) => T, fallback: T) => {
+    const entity = find()
+    return entity
+      ? fn(entity)
+      : fallback
+  }
+  return {
+    id,
+    getPosition: () => at(e => e.getPosition(), [0, 0, 0]),
+    setPosition: v => at(e => e.setPosition(v), undefined),
+    getRotation: () => at(e => e.getRotation(), [0, 0, 0]),
+    setRotation: v => at(e => e.setRotation(v), undefined),
+    getScale: () => at(e => e.getScale(), [1, 1, 1]),
+    setScale: v => at(e => e.setScale(v), undefined),
+  }
+}
+
+export function runsOn(side: LogicGraphSide | undefined, here: SceneSide): boolean {
+  return (side ?? 'client') === 'both' || (side ?? 'client') === here
+}
+
+/**
+ * A logic graph running in a scene. It has a transform of its own, which is Self when no target is set
+ */
+export class LogicGraphObject extends GameObject {
+  runtime?: GraphRuntime
+  /** Why the graph isn't running, if it failed to load */
+  error?: string
+  readonly props: LogicGraphProps
+  private readonly offKey?: () => void
+
+  constructor(data: SceneObjectData, protected readonly scene: GameScene | undefined, readonly side: SceneSide) {
+    super(data.id, new Vector3(...data.transform.position), new Vector3(...data.transform.rotation), new Vector3(...data.transform.scale))
+    this.props = { ...(data.props as LogicGraphProps | undefined) }
+
+    const name = this.props.graph
+    if (name && GRAPH_NAME_RE.test(name))
+      void this.load(name)
+
+    if (side === 'client') {
+      const input = (BaseGame.instance() as { input?: { on(e: string, cb: (ev: KeyboardEvent) => void): void, off(e: string, cb: (ev: KeyboardEvent) => void): void } }).input
+      if (input) {
+        const onKey = (ev: KeyboardEvent) => this.runtime?.trigger('keydown', { code: ev.code })
+        input.on('keydown', onKey)
+        this.offKey = () => input.off('keydown', onKey)
+      }
+    }
+  }
+
+  private async load(name: string) {
+    try {
+      const graph = await source(name)
+      if (this.garbageCollect)
+        return
+      const logger = BaseGame.instance().logger
+      const target = this.props.target
+      const self = target
+        ? lazyEntity(target, () => sceneEntity(this.scene, target))
+        : graphEntity(this.id, this, undefined)
+      this.runtime = new GraphRuntime(graph, {
+        self,
+        find: id => lazyEntity(id, () => sceneEntity(this.scene, id)),
+        parameters: this.props.parameters,
+        log: message => logger?.info(`[${name}] ${message}`),
+        emit: sendGraphMessage,
+      })
+      running.add(this.runtime)
+      this.runtime.start()
+    }
+    catch (err) {
+      this.error = (err as Error).message
+      BaseGame.instance().logger?.warn(`Logic graph ${this.id} (${name}) is not running: ${this.error}`)
+    }
+  }
+
+  update(delta: number): void {
+    this.runtime?.update(delta)
+  }
+
+  destroy(): void {
+    if (this.runtime)
+      running.delete(this.runtime)
+    this.offKey?.()
+    super.destroy()
+  }
+}
+
+let registered = false
+
+/** Make `LogicGraph` scene objects loadable on the server. The client registers its own, with an editor helper */
+export function registerLogicGraphServerObject() {
+  if (registered)
+    return
+  registered = true
+  registerSceneObject<LogicGraphObject>({
+    type: LOGIC_GRAPH_TYPE,
+    label: 'Logic Graph',
+    server: (data, { scene }) => runsOn((data.props as LogicGraphProps | undefined)?.side, 'server')
+      ? new LogicGraphObject(data, scene, 'server')
+      : undefined,
+    serialize: object => ({ ...object.props }),
+  })
+}
+
+/** For tests */
+export function _resetLogicGraphs() {
+  registered = false
+  running.clear()
+}

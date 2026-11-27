@@ -27,6 +27,8 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { graphFilePath, readGraphFile } from '../../Graph/loadGraphFile'
+import { registerLogicGraphServerObject, setGraphSource } from '../../Graph/Logic/logicGraphObject'
 import { currentNotifier, setNotifier } from '../../Notifications/Notifiable'
 import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
 import { tableName } from '../../Plugins/Database/tables'
@@ -267,6 +269,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
     registerPrimitiveServerObjects()
+    registerLogicGraphServerObject()
+    // Logic graphs come from the project's graphs/, read fresh each time a scene builds them
+    setGraphSource(async (name) => {
+      const root = this.projectRoot
+      if (!root)
+        throw new Error('Set the server\'s `root` option to load logic graphs')
+      return readGraphFile(graphFilePath(root, name))
+    })
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
     this.gameSocket = geckos({
