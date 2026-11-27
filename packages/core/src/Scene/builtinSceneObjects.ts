@@ -9,6 +9,7 @@ import { LIGHT_REGISTRY } from '../Prefab/Lights/index'
 import { getPrefab, spawnPrefab } from '../Prefab/PrefabRegistry'
 import { PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
 import GameObject from '../World/GameObject'
+import { primitiveOptionsFromProps, primitiveType } from './primitiveSceneObjects'
 import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectRegistry'
 
 /**
@@ -16,16 +17,15 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * they are visuals only; a project registers `server` factories for what the server needs.
  *
  * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, plus the primitive's
- *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere) and pivot ('center' | 'base').
- *   Missing params use their defaults, a missing pivot is 'center'
+ *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere) pivot ('center' | 'base') and collision.
+ *   Missing params use their defaults, a missing pivot is 'center', collision is on unless false.
+ *   The server builds their colliders, see primitiveSceneObjects
  * - `Light:<AmbientLight|DirectionalLight|…>` props: color, intensity, castShadow, shadowMapSize (+ shadowArea, shadowFar for directional lights)
  * - `Model` props: resource (name of a loaded gltfModel), castShadow, receiveShadow
  * - `prefab:<key>` any prefab of the prefab registry, by its key
  */
 
-export function primitiveType(name: string) {
-  return `Primitive:${name}`
-}
+export { primitiveType } from './primitiveSceneObjects'
 
 export function lightType(name: string) {
   return `Light:${name}`
@@ -56,7 +56,7 @@ function bool(v: unknown) {
 }
 
 function primitiveProps(primitive: Primitive): Props {
-  const props: Props = { ...primitive.params, pivot: primitive.pivot }
+  const props: Props = { ...primitive.params, pivot: primitive.pivot, collision: primitive.collision }
   const mesh = primitive.instance
   if (mesh instanceof Mesh) {
     props.castShadow = mesh.castShadow
@@ -198,10 +198,7 @@ export function registerBuiltinSceneObjects() {
       label: name,
       client(data) {
         const position = new Vector3(...data.transform.position)
-        const pivot = data.props?.pivot === 'base'
-          ? 'base'
-          : 'center'
-        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined, { pivot })
+        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined, primitiveOptionsFromProps(data.props))
         applyPrimitiveProps(primitive, data.props)
         return primitive
       },
