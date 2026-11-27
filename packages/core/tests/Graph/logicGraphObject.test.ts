@@ -153,7 +153,8 @@ describe('logicGraphObject', () => {
     const steps: string[] = []
     const stop = watchLogicGraph('spinner', (node, object) => steps.push(`${object}:${node}`))
 
-    sendGraphMessage('ping')
+    sendGraphMessage('ping', 0, 'someone-else')
+    sendGraphMessage('ping', 0, 'logic_1')
     stop()
     sendGraphMessage('ping')
 

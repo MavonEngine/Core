@@ -55,10 +55,16 @@ export function loadGraph(name: string): Promise<GraphData> {
 /** The logic graph objects on this side that run their graph here */
 const live = new Set<LogicGraphObject>()
 
-/** Send a message to every logic graph on this side, as a Send Message node does */
-export function sendGraphMessage(name: string, value: GraphValue = 0) {
-  for (const object of [...live])
-    object.runtime?.message(name, value)
+/**
+ * Send a message to the logic graphs on this side, which their On Message nodes with the same name get. To every one,
+ * as a Send Message node does, or with `target` only to those acting on that scene object (their Self): say, the NPC a
+ * player clicked
+ */
+export function sendGraphMessage(name: string, value: GraphValue = 0, target?: string) {
+  for (const object of [...live]) {
+    if (target === undefined || (object.props.target ?? object.id) === target)
+      object.runtime?.message(name, value)
+  }
 }
 
 /** Told each step a graph runs: the node, and the logic graph object running it */

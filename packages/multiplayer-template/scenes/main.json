@@ -77,6 +77,31 @@
         "maxScale": 0.015,
         "seed": 1
       }
+    },
+    {
+      "id": "server_npc",
+      "type": "ServerNpc",
+      "name": "Server NPC",
+      "transform": {
+        "position": [0, 0, -6],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      }
+    },
+    {
+      "id": "server_npc_logic",
+      "type": "LogicGraph",
+      "name": "Server NPC logic",
+      "transform": {
+        "position": [0, 0, -6],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "props": {
+        "graph": "server-npc",
+        "side": "server",
+        "target": "server_npc"
+      }
     }
   ]
 }

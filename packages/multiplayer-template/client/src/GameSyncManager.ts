@@ -6,9 +6,15 @@ import Game from '@mavonengine/core/Game'
 import NetworkedActor from '@mavonengine/core/Networking/NetworkedActor'
 import NetworkedEntityFactory from '@mavonengine/core/Networking/NetworkedEntityFactory'
 import NetworkedGameObject from '@mavonengine/core/Networking/NetworkedGameObject'
+import { registerChatNodes } from '@template/server/Base/Npc/sayInChat'
 import { ServerCommand } from '@template/server/Commands/Server'
+import { Vector2 } from 'three'
 import Character from './Entities/Player'
+import ClientServerNpc from './Entities/ServerNpc'
 import Trees from './World/Trees'
+
+// The Say in Chat node: graphs using it run on the server, but the editor needs to know it to edit them
+registerChatNodes()
 
 export default class GameSyncManager implements GameObjectInterface {
   private networkManager: NetworkManager
@@ -44,7 +50,7 @@ export default class GameSyncManager implements GameObjectInterface {
         ? this.playerController?.player
         : Game.instance().world.entities.items.get(chat.playerId)
 
-      if (entity instanceof Character) {
+      if (entity instanceof Character || entity instanceof ClientServerNpc) {
         entity.showChatBubble(chat.message)
       }
     })
@@ -52,9 +58,45 @@ export default class GameSyncManager implements GameObjectInterface {
     this.networkManager.socket.on(ServerCommand.SV_REMOVE_ENTITY, (data: any) => {
       this.handleEntityRemove(data.id)
     })
+
+    this.listenForNpcClicks()
+  }
+
+  private readonly abort = new AbortController()
+
+  /**
+   * A click on an NPC (not a drag, which orbits the camera) tells the server, whose logic graph for it answers.
+   * Not in the editor, where clicks select objects
+   */
+  private listenForNpcClicks() {
+    const canvas = Game.instance().canvas
+    let down: { x: number, y: number } | undefined
+    canvas.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY }
+    }, { signal: this.abort.signal })
+    canvas.addEventListener('pointerup', (e) => {
+      const start = down
+      down = undefined
+      if (!start || Game.instance().editor || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5)
+        return
+
+      const rect = canvas.getBoundingClientRect()
+      const pointer = new Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      const raycaster = Game.instance().rayCaster
+      raycaster.setFromCamera(pointer, Game.instance().camera.instance)
+      const npcs = [...ClientServerNpc.all]
+      const hit = raycaster.intersectObjects(npcs.map(npc => npc.mesh), false)[0]
+      const npc = hit && npcs.find(candidate => candidate.mesh === hit.object)
+      if (npc)
+        this.networkManager.sendNpcClick(npc.id)
+    }, { signal: this.abort.signal })
   }
 
   destroy(): void {
+    this.abort.abort()
     this.trees?.destroy()
     this.trees = null
     this.networkManager.destroy()

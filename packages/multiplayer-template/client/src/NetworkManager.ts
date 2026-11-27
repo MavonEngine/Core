@@ -58,6 +58,15 @@ export default class NetworkManager extends BaseNetworkManager {
     this.networkState.value.connected = false
   }
 
+  /** Tell the server the player clicked an NPC: its logic graph answers */
+  sendNpcClick(npcId: string) {
+    this.socket.emit(
+      ClientCommand.CL_NPC_CLICK,
+      { npcId, sequenceId: 0 },
+      { reliable: true },
+    )
+  }
+
   sendChat(message: string) {
     this.socket.emit(
       ClientCommand.CL_CHAT,

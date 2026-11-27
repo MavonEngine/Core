@@ -2,12 +2,15 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type { ServerChannel } from '@geckos.io/server'
 import type { ServerOptions } from '@mavonengine/core/Networking/Server/Server'
 import type winston from 'winston'
-import type { CL_CHAT, CL_INIT, CL_MOVE } from './Commands/Client'
+import type { CL_CHAT, CL_INIT, CL_MOVE, CL_NPC_CLICK } from './Commands/Client'
 import type { SV_TREES } from './Commands/Server'
+import { sendGraphMessage } from '@mavonengine/core/Graph/Logic/logicGraphObject'
 import BaseServer from '@mavonengine/core/Networking/Server/Server'
 import { registerSceneObject } from '@mavonengine/core/Scene/SceneObjectRegistry'
 import { randRange } from '@mavonengine/core/Utils/Math'
 import { Vector3 } from 'three'
+import { onSayInChat, registerChatNodes } from './Base/Npc/sayInChat'
+import ServerNpc, { SERVER_NPC_TYPE } from './Base/Npc/ServerNpc'
 import TreeField, { TREE_FIELD_TYPE } from './Base/Vegetation/TreeField'
 import { ClientCommand } from './Commands/Client'
 import { ServerCommand } from './Commands/Server'
@@ -23,6 +26,16 @@ registerSceneObject<TreeField>({
   server: data => new TreeField(data),
 })
 
+/** A character the server moves through a logic graph, see Base/Npc/ServerNpc */
+registerSceneObject<ServerNpc>({
+  type: SERVER_NPC_TYPE,
+  label: 'Server NPC',
+  server: data => new ServerNpc(data.id),
+})
+
+// The Say in Chat node, for logic graphs running here
+registerChatNodes()
+
 export default class Server extends BaseServer<Player> {
   constructor(logger: winston.Logger, physicsWorld?: RAPIER.World, options?: ServerOptions) {
     super(logger, physicsWorld, options)
@@ -30,6 +43,16 @@ export default class Server extends BaseServer<Player> {
     // Also runs when the scene file changes (the editor saved it): every client gets the new trees
     this.game.on('sceneLoaded', () => {
       this.gameSocket.emit(ServerCommand.SV_TREES, this.treesPacket(), { reliable: true })
+    })
+
+    // Say in Chat nodes post as their graph's Self: an NPC speaks under its name, with a chat bubble over it
+    onSayInChat((speakerId, message) => {
+      const speaker = this.game.world.entities.items.get(speakerId) as { name?: string } | undefined
+      this.gameSocket.emit(ServerCommand.SV_CHAT, {
+        playerId: speakerId,
+        playerName: speaker?.name ?? 'Server',
+        message,
+      }, { reliable: true })
     })
   }
 
@@ -79,6 +102,13 @@ export default class Server extends BaseServer<Player> {
         playerName: player.name || 'Unknown',
         message: cmd.message,
       }, { reliable: true })
+    })
+
+    // A player clicked an NPC: its logic graphs get a `clicked` message, with who clicked
+    channel.on(ClientCommand.CL_NPC_CLICK, (command) => {
+      const cmd = command as CL_NPC_CLICK
+      if (this.game.world.entities.items.get(cmd.npcId) instanceof ServerNpc)
+        sendGraphMessage('clicked', player.name ?? '', cmd.npcId)
     })
 
     channel.onDisconnect(() => {
