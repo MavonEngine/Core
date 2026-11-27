@@ -84,3 +84,8 @@ body,
 [data-panel-resize-handle-id][data-resize-handle-active] {
   background-color: var(--accent-blue);
 }
+
+/* The scene's object labels (.point, on <body>) would show through a view covering the scene */
+body.editor-full-view > .point {
+  visibility: hidden;
+}

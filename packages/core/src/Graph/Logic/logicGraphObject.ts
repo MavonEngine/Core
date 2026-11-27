@@ -6,7 +6,7 @@ import { Object3D, Vector3 } from 'three'
 import BaseGame from '../../BaseGame'
 import { getSceneObject, registerSceneObject } from '../../Scene/SceneObjectRegistry'
 import GameObject from '../../World/GameObject'
-import { GRAPH_NAME_RE, GRAPHS_DIR, parseGraphData } from '../types'
+import { graphUrl, isGraphName, parseGraphData } from '../types'
 import { GraphRuntime } from './GraphRuntime'
 
 /*
@@ -19,7 +19,7 @@ export const LOGIC_GRAPH_TYPE = 'LogicGraph'
 export type LogicGraphSide = SceneSide | 'both'
 
 export interface LogicGraphProps {
-  /** The graph file's name: graphs/<graph>.graph.json */
+  /** The graph: `name` for graphs/<name>.graph.json, `<package>:<name>` for a plugin's */
   graph?: string
   /** Where it runs. Default `client` */
   side?: LogicGraphSide
@@ -31,10 +31,14 @@ export interface LogicGraphProps {
 
 /** Where graphs come from: fetched from the dev server or the release on the client, read from disk on the server */
 let source: (name: string) => Promise<GraphData> = async (name) => {
-  const response = await fetch(`/${GRAPHS_DIR}/${name}.graph.json`, { cache: 'no-store' })
+  const response = await fetch(graphUrl(name), { cache: 'no-store' })
   if (!response.ok)
     throw new Error(`Could not load graph ${name}: ${response.status} ${response.statusText}`)
-  return parseGraphData(await response.json(), name)
+  // Named as asked for: a plugin's file only has its own part of `<package>:<name>`
+  return {
+    ...parseGraphData(await response.json(), name),
+    name,
+  }
 }
 
 /** Load graphs from somewhere else. The server reads them from the project's graphs/ */
@@ -166,7 +170,7 @@ export class LogicGraphObject extends GameObject {
     this.props = { ...(data.props as LogicGraphProps | undefined) }
 
     const name = this.props.graph
-    if (name && GRAPH_NAME_RE.test(name)) {
+    if (name && isGraphName(name)) {
       live.add(this)
       void this.load(name)
     }
@@ -239,6 +243,11 @@ export function registerLogicGraphServerObject() {
       : undefined,
     serialize: object => ({ ...object.props }),
   })
+}
+
+/** How many objects run the graph `name` on this side */
+export function logicGraphUsers(name: string): number {
+  return [...live].filter(object => object.props.graph === name).length
 }
 
 /** For tests */

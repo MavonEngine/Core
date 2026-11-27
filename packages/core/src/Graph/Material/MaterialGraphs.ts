@@ -4,12 +4,15 @@ import type { CompiledMaterial } from './compileMaterialGraph'
 import { Texture } from 'three'
 import Game from '../../Game'
 import { GRAPHS_LIST_PATH } from '../../Plugins/types'
-import { GRAPH_NAME_RE, GRAPHS_DIR, parseGraphData } from '../types'
+import { graphUrl, parseGraphData } from '../types'
 import { compileMaterialGraph } from './compileMaterialGraph'
 
 export interface GraphListing {
+  /** `lava`, or `@acme/water:ocean` for a plugin's */
   name: string
   kind: GraphData['kind']
+  /** The plugin that ships it. Plugins' graphs can't be saved over, only copied into the project */
+  plugin?: string
 }
 
 interface Entry {
@@ -89,12 +92,14 @@ export class MaterialGraphLibrary {
     let pending = this.loading.get(name)
     if (!pending) {
       pending = (async () => {
-        if (!GRAPH_NAME_RE.test(name))
-          throw new Error(`Invalid graph name "${name}"`)
-        const response = await fetch(`/${GRAPHS_DIR}/${name}.graph.json`, { cache: 'no-store' })
+        const response = await fetch(graphUrl(name), { cache: 'no-store' })
         if (!response.ok)
           throw new Error(`Could not load graph ${name}: ${response.status} ${response.statusText}`)
-        const graph = parseGraphData(await response.json(), name)
+        // Named as asked for: a plugin's file only has its own part of `<package>:<name>`
+        const graph = {
+          ...parseGraphData(await response.json(), name),
+          name,
+        }
         await Game.instance().resourcesReady()
         const loaded = {
           graph,

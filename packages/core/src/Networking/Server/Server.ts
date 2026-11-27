@@ -27,8 +27,9 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
-import { graphFilePath, readGraphFile } from '../../Graph/loadGraphFile'
+import { readGraph } from '../../Graph/loadGraphFile'
 import { registerLogicGraphServerObject, setGraphSource } from '../../Graph/Logic/logicGraphObject'
+import { pluginNodeType, registerNode } from '../../Graph/NodeRegistry'
 import { currentNotifier, setNotifier } from '../../Notifications/Notifiable'
 import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
 import { tableName } from '../../Plugins/Database/tables'
@@ -270,12 +271,12 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game.world = new ServerWorld()
     registerPrimitiveServerObjects()
     registerLogicGraphServerObject()
-    // Logic graphs come from the project's graphs/, read fresh each time a scene builds them
+    // Logic graphs come from the project's graphs/ and the plugins', read fresh each time a scene builds them
     setGraphSource(async (name) => {
       const root = this.projectRoot
       if (!root)
         throw new Error('Set the server\'s `root` option to load logic graphs')
-      return readGraphFile(graphFilePath(root, name))
+      return readGraph(root, name)
     })
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
@@ -926,6 +927,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
+      },
+      registerNode: (definition) => {
+        const type = pluginNodeType(loaded.package, definition.type)
+        registerNode({ ...definition, type, plugin: loaded.package })
+        return type
       },
     }), this.logger, 'server')
     return host

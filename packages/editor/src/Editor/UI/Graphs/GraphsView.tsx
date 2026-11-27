@@ -6,12 +6,12 @@ import type { FlowEdge, FlowNode } from './graphModel'
 import type { GraphEditorContext } from './GraphNode'
 import Game from '@mavonengine/core/Game'
 import { GraphRuntime, GraphRuntimeError } from '@mavonengine/core/Graph/Logic/GraphRuntime'
-import { loadGraph, LOGIC_GRAPH_TYPE, reloadLogicGraph, watchLogicGraph } from '@mavonengine/core/Graph/Logic/logicGraphObject'
+import { loadGraph, LOGIC_GRAPH_TYPE, logicGraphUsers, reloadLogicGraph, watchLogicGraph } from '@mavonengine/core/Graph/Logic/logicGraphObject'
 import { MaterialGraphError } from '@mavonengine/core/Graph/Material/compileMaterialGraph'
 import { materialGraphs } from '@mavonengine/core/Graph/Material/MaterialGraphs'
 import { canConnect, getNode, getNodes } from '@mavonengine/core/Graph/NodeRegistry'
 import { registerBuiltinNodes } from '@mavonengine/core/Graph/Nodes/builtin'
-import { GRAPH_NAME_RE } from '@mavonengine/core/Graph/types'
+import { GRAPH_NAME_RE, parseGraphName } from '@mavonengine/core/Graph/types'
 import { analyzeGraph } from '@mavonengine/core/Graph/validate'
 import { GRAPH_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import { Background, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
@@ -52,6 +52,17 @@ async function saveGraph(name: string, graph: GraphData): Promise<string | undef
   }
   catch (err) {
     return (err as Error).message
+  }
+}
+
+/** A project graph name for a copy of `name` that isn't taken */
+function copyName(name: string): string {
+  const taken = new Set(materialGraphs.list.filter(graph => !graph.plugin).map(graph => graph.name))
+  if (!taken.has(name))
+    return name
+  for (let i = 2; ; i++) {
+    if (!taken.has(`${name}-${i}`))
+      return `${name}-${i}`
   }
 }
 
@@ -97,8 +108,12 @@ function useActiveNodes(name: string | undefined): Set<string> {
 function NodePalette({ kind, at, onPick, onClose }: { kind: GraphKind, at: { x: number, y: number }, onPick(type: string): void, onClose(): void }) {
   const [filter, setFilter] = useState('')
   const nodes = getNodes(kind).filter(node => `${node.category} ${node.label} ${node.type}`.toLowerCase().includes(filter.toLowerCase()))
+  // A plugin's nodes are grouped under it
+  const group = (node: { category: string, plugin?: string }) => node.plugin
+    ? `${node.category} · ${node.plugin}`
+    : node.category
   const categories = [
-    ...new Set(nodes.map(node => node.category)),
+    ...new Set(nodes.map(group)),
   ]
 
   return (
@@ -120,7 +135,7 @@ function NodePalette({ kind, at, onPick, onClose }: { kind: GraphKind, at: { x: 
         {categories.map(category => (
           <div key={category}>
             <div className={styles.paletteCategory}>{category}</div>
-            {nodes.filter(node => node.category === category).map(node => (
+            {nodes.filter(node => group(node) === category).map(node => (
               <button key={node.type} className={styles.paletteItem} title={node.description} onClick={() => onPick(node.type)}>
                 {node.label}
               </button>
@@ -133,7 +148,7 @@ function NodePalette({ kind, at, onPick, onClose }: { kind: GraphKind, at: { x: 
   )
 }
 
-function ParameterList({ parameters, onChange }: { parameters: GraphParameter[], onChange(parameters: GraphParameter[]): void }) {
+function ParameterList({ parameters, readOnly, onChange }: { parameters: GraphParameter[], readOnly?: boolean, onChange(parameters: GraphParameter[]): void }) {
   const [name, setName] = useState('')
   const taken = parameters.some(p => p.name === name)
 
@@ -145,6 +160,7 @@ function ParameterList({ parameters, onChange }: { parameters: GraphParameter[],
           <span className={styles.parameterName}>{parameter.name}</span>
           <select
             value={parameter.type}
+            disabled={readOnly}
             onChange={(e) => {
               const type = e.target.value as PinType
               onChange(parameters.map((p, i) => i === index
@@ -158,35 +174,41 @@ function ParameterList({ parameters, onChange }: { parameters: GraphParameter[],
           >
             {PARAMETER_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
-          <button className={styles.iconButton} title="Remove" onClick={() => onChange(parameters.filter((_, i) => i !== index))}>×</button>
+          {!readOnly && <button className={styles.iconButton} title="Remove" onClick={() => onChange(parameters.filter((_, i) => i !== index))}>×</button>}
         </div>
       ))}
-      <div className={styles.parameter}>
-        <input
-          className={styles.text}
-          placeholder="name"
-          value={name}
-          onChange={e => setName(e.target.value.replace(/\W/g, ''))}
-        />
-        <button
-          disabled={!name || taken}
-          onClick={() => {
-            onChange([
-              ...parameters,
-              { name, type: 'float', default: 0 },
-            ])
-            setName('')
-          }}
-        >
-          Add
-        </button>
-      </div>
+      {readOnly && !parameters.length && <div className={styles.muted}>None</div>}
+      {!readOnly && (
+        <div className={styles.parameter}>
+          <input
+            className={styles.text}
+            placeholder="name"
+            value={name}
+            onChange={e => setName(e.target.value.replace(/\W/g, ''))}
+          />
+          <button
+            disabled={!name || taken}
+            onClick={() => {
+              onChange([
+                ...parameters,
+                { name, type: 'float', default: 0 },
+              ])
+              setName('')
+            }}
+          >
+            Add
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 /** The graph being edited: React Flow holds its nodes and edges, every change compiles it onto the scene */
-function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void }) {
+function GraphEditor({ initial, onSaved, onCopied }: { initial: GraphData, onSaved(): void, onCopied(name: string): void }) {
+  // A plugin's graph: viewed, and copied into the project to change
+  const plugin = parseGraphName(initial.name)?.plugin
+  const readOnly = !!plugin
   const flow = useMemo(() => toFlow(initial), [initial])
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(flow.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>(flow.edges)
@@ -208,6 +230,8 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
 
   // Only what changes the material compiles it again, not moving nodes around
   const analysis = useMemo(() => analyzeGraph(graph), [key])
+  // Opening a graph changes nothing: only edits restart it in the scene
+  const [openedKey] = useState(key)
   useEffect(() => {
     try {
       if (graph.kind === 'logic') {
@@ -216,7 +240,9 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
         // Also runs it, from the start, in the scene's logic graph objects using it
         setCompiled({
           issues: [],
-          running: reloadLogicGraph(graph.name, graph),
+          running: key === openedKey
+            ? logicGraphUsers(graph.name)
+            : reloadLogicGraph(graph.name, graph),
         })
       }
       else {
@@ -276,6 +302,8 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
   }
 
   const setValue = useCallback((id: string, port: string, value: GraphValue) => {
+    if (readOnly)
+      return
     setNodes(all => all.map(node => node.id === id
       ? {
           ...node,
@@ -285,7 +313,17 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
           },
         }
       : node))
-  }, [setNodes])
+  }, [setNodes, readOnly])
+
+  const copy = async () => {
+    const name = copyName(parseGraphName(graph.name)?.name ?? 'graph')
+    const error = await saveGraph(name, { ...graph, name })
+    if (error) {
+      setStatus(`Not copied: ${error}`)
+      return
+    }
+    onCopied(name)
+  }
 
   const context = useMemo<GraphEditorContext>(() => ({
     analysis,
@@ -340,6 +378,8 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
   }
 
   const save = async () => {
+    if (readOnly)
+      return
     setStatus('Saving…')
     const error = await saveGraph(graph.name, graph)
     if (error) {
@@ -359,7 +399,7 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
       void save()
       return
     }
-    if (isTyping(e.target))
+    if (isTyping(e.target) || readOnly)
       return
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const removed = new Set(nodes.filter(node => node.selected).map(node => node.id))
@@ -389,6 +429,8 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             isValidConnection={isValidConnection}
+            nodesConnectable={!readOnly}
+            edgesReconnectable={!readOnly}
             deleteKeyCode={null}
             colorMode="dark"
             fitView
@@ -396,6 +438,8 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
             onPaneClick={() => setPalette(undefined)}
             onPaneContextMenu={(e) => {
               e.preventDefault()
+              if (readOnly)
+                return
               const bounds = wrapper.current!.getBoundingClientRect()
               setPalette({
                 screen: { x: e.clientX - bounds.left, y: e.clientY - bounds.top },
@@ -410,7 +454,11 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
             <Controls showInteractive={false} />
           </ReactFlow>
           {palette && <NodePalette kind={graph.kind} at={palette.screen} onPick={addNode} onClose={() => setPalette(undefined)} />}
-          <div className={styles.hint}>Right click to add a node · Delete removes the selection</div>
+          <div className={styles.hint}>
+            {readOnly
+              ? `From the plugin ${plugin}: copy it into the project to change it`
+              : 'Right click to add a node · Delete removes the selection'}
+          </div>
         </div>
 
         <div className={styles.side}>
@@ -418,7 +466,9 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
           <div className={styles.section}>
             <div className={styles.toolbar}>
               <strong>{graph.name}</strong>
-              <button disabled={!dirty} onClick={() => void save()}>{dirty ? 'Save' : 'Saved'}</button>
+              {readOnly
+                ? <button onClick={() => void copy()}>Copy to project</button>
+                : <button disabled={!dirty} onClick={() => void save()}>{dirty ? 'Save' : 'Saved'}</button>}
             </div>
             {status && <div className={styles.muted}>{status}</div>}
           </div>
@@ -435,7 +485,7 @@ function GraphEditor({ initial, onSaved }: { initial: GraphData, onSaved(): void
               <button onClick={place}>Place in scene</button>
             </div>
           )}
-          <ParameterList parameters={parameters} onChange={setParameters} />
+          <ParameterList parameters={parameters} readOnly={readOnly} onChange={setParameters} />
           {issues.length > 0 && (
             <div className={styles.section}>
               <div className={styles.sectionTitle}>Problems</div>
@@ -533,7 +583,14 @@ export default function GraphsView() {
                     : ''}`}
                   onClick={() => setSelected({ name: graph.name, kind })}
                 >
-                  {graph.name}
+                  {graph.plugin
+                    ? (
+                        <>
+                          {parseGraphName(graph.name)?.name}
+                          <span className={styles.pluginBadge}>{graph.plugin}</span>
+                        </>
+                      )
+                    : graph.name}
                 </button>
               ))}
               {!graphs.length && <div className={styles.muted}>{empty}</div>}
@@ -564,7 +621,13 @@ export default function GraphsView() {
       {!error && !selected && <div className={styles.empty}>Pick a graph, or make a new one</div>}
       {!error && loaded && (
         <ReactFlowProvider key={loaded.name}>
-          <GraphEditor initial={loaded} onSaved={() => void materialGraphs.refreshList()} />
+          <GraphEditor
+            initial={loaded}
+            onSaved={() => void materialGraphs.refreshList()}
+            onCopied={(name) => {
+              void materialGraphs.refreshList().then(() => setSelected({ name, kind: loaded.kind }))
+            }}
+          />
         </ReactFlowProvider>
       )}
     </div>

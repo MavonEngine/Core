@@ -112,6 +112,11 @@ export function isStep(definition: NodeDefinition): boolean {
 
 const registry = new Map<string, NodeDefinition>()
 
+/** A plugin's node type key: `<package>:<type>` */
+export function pluginNodeType(pkg: string, type: string): string {
+  return `${pkg}:${type}`
+}
+
 /** Make a node type usable in graphs. Registering a type again replaces it */
 export function registerNode(definition: NodeDefinition): void {
   registry.set(definition.type, definition)

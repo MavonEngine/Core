@@ -11,6 +11,41 @@ export const GRAPHS_DIR = 'graphs'
 /** Graph file names: letters, digits, `-` and `_` */
 export const GRAPH_NAME_RE = /^[\w-]+$/
 
+/** An npm package name, scoped or not */
+const PACKAGE_RE = /^(?:@[\w.-]+\/)?[\w.-]+$/
+
+/**
+ * A graph's name split up: the project's graphs go by their file name (`lava`), a plugin's by its package and file
+ * name (`@acme/water:ocean`, from the plugin's own `graphs/`). Undefined for a name that is neither
+ */
+export function parseGraphName(name: string): { plugin?: string, name: string } | undefined {
+  const at = name.lastIndexOf(':')
+  if (at < 0) {
+    return GRAPH_NAME_RE.test(name)
+      ? { name }
+      : undefined
+  }
+  const plugin = name.slice(0, at)
+  const file = name.slice(at + 1)
+  return PACKAGE_RE.test(plugin) && GRAPH_NAME_RE.test(file)
+    ? { plugin, name: file }
+    : undefined
+}
+
+export function isGraphName(name: string): boolean {
+  return parseGraphName(name) !== undefined
+}
+
+/** Where the game fetches a graph: `/graphs/lava.graph.json`, or `/graphs/@acme/water/ocean.graph.json` for a plugin's */
+export function graphUrl(name: string): string {
+  const parsed = parseGraphName(name)
+  if (!parsed)
+    throw new Error(`Invalid graph name "${name}"`)
+  return parsed.plugin
+    ? `/${GRAPHS_DIR}/${parsed.plugin}/${parsed.name}.graph.json`
+    : `/${GRAPHS_DIR}/${parsed.name}.graph.json`
+}
+
 export type GraphKind = 'material' | 'logic'
 
 /**

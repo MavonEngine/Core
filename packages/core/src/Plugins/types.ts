@@ -5,6 +5,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type winston from 'winston'
 import type BaseGame from '../BaseGame'
 import type Game from '../Game'
+import type { TslImplementation } from '../Graph/Material/tslNodes'
+import type { NodeDefinition } from '../Graph/NodeRegistry'
 import type { AuthorizeResult, Identity } from '../Networking/identity'
 import type { AdminApi } from '../Networking/Server/Admin/types'
 import type Server from '../Networking/Server/Server'
@@ -52,6 +54,11 @@ interface PluginContextBase<TGame extends BaseGame, TApis> {
    */
   registerSceneObject<T extends GameObject>(definition: Omit<SceneObjectDefinition<T>, 'plugin'>): string
   /**
+   * Add a node type to graphs. Its key in graph files is `<package>:<type>`, which is returned. Logic nodes run where
+   * their graph runs: register them in the plugin's client and server entries both
+   */
+  registerNode(definition: Omit<NodeDefinition, 'plugin'>): string
+  /**
    * The api of another plugin on this side, what its `api()` returned. Undefined when that plugin isn't installed,
    * enabled or running, or has no api, so a plugin can work without the ones it can use:
    * `ctx.plugin('@mavonengine/mail')?.send(new Welcome(player))`. Ready from `setup()` on.
@@ -67,6 +74,11 @@ export interface ClientPluginContext extends PluginContextBase<Game, ClientPlugi
   assetUrl(path: string): string
   /** Make a prefab available in the editor's Prefabs tab */
   registerPrefab(prefab: Omit<PrefabDefinition, 'plugin'>): void
+  /**
+   * Add a node type to graphs, with its TSL implementation for material graphs (see `registerTslNode()`). Its key in
+   * graph files is `<package>:<type>`, which is returned
+   */
+  registerNode(definition: Omit<NodeDefinition, 'plugin'>, tsl?: TslImplementation): string
   /** The editor, once it has booted (dev only) */
   readonly editor?: IEditor
 }

@@ -4,7 +4,7 @@ import type { EnabledPlugin } from './ProjectConfig.js'
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import process from 'node:process'
-import { graphFilePath, readGraphFile, writeGraphFile } from '../Graph/loadGraphFile.js'
+import { graphFilePath, readGraphFile, resolveGraphFile, writeGraphFile } from '../Graph/loadGraphFile.js'
 import { GRAPH_NAME_RE, GRAPHS_DIR } from '../Graph/types.js'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
@@ -12,7 +12,7 @@ import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
 import { DevPluginHost } from './DevPluginHost.js'
 import { fromLocalhost, fromThisPage, readBody } from './devRequest.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
-import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
+import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginGraphDirs, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
 import { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
 export { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
@@ -39,7 +39,8 @@ const MAX_BODY_BYTES = 4096
 const MAX_SCENE_BYTES = 20 * 1024 * 1024
 const SCENE_URL_RE = new RegExp(`^/${SCENES_DIR}/([\\w-]+)\\.json$`)
 const GRAPH_EXT = '.graph.json'
-const GRAPH_URL_RE = new RegExp(`^/${GRAPHS_DIR}/([\\w-]+)\\.graph\\.json$`)
+// `/graphs/<name>.graph.json` for the project's, `/graphs/<package>/<name>.graph.json` for a plugin's
+const GRAPH_URL_RE = new RegExp(`^/${GRAPHS_DIR}/(?:((?:@[\\w.-]+/)?[\\w.-]+)/)?([\\w-]+)\\.graph\\.json$`)
 
 const CONTENT_TYPES: Record<string, string> = {
   '.glb': 'model/gltf-binary',
@@ -340,21 +341,30 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         }
       }
 
-      const graphs = graphsDir()
-      if (existsSync(graphs)) {
-        const files = graphFiles()
+      // The project's graphs, and the plugins' under graphs/<package>/
+      const shipped = [
+        {
+          dir: graphsDir(),
+          to: GRAPHS_DIR,
+          files: graphFiles(),
+        },
+        ...pluginGraphs().map(plugin => ({ dir: plugin.dir, to: `${GRAPHS_DIR}/${plugin.package}`, files: plugin.files })),
+      ]
+      let graphCount = 0
+      for (const { dir, to, files } of shipped) {
         for (const file of files) {
           this.emitFile({
             type: 'asset',
-            fileName: `${GRAPHS_DIR}/${file}`,
-            source: readFileSync(join(graphs, file)),
+            fileName: `${to}/${file}`,
+            source: readFileSync(join(dir, file)),
           })
+          graphCount++
         }
-        if (files.length) {
-          config.logger.info(`[mavonengine] Shipping ${files.length} graph${files.length === 1
-            ? ''
-            : 's'}`)
-        }
+      }
+      if (graphCount) {
+        config.logger.info(`[mavonengine] Shipping ${graphCount} graph${graphCount === 1
+          ? ''
+          : 's'}`)
       }
 
       const root = projectRoot()
@@ -509,9 +519,8 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
     return join(projectRoot() ?? config.root, GRAPHS_DIR)
   }
 
-  /** The graph files' names in graphs/, e.g. `lava.graph.json` */
-  function graphFiles(): string[] {
-    const dir = graphsDir()
+  /** The graph files' names in `dir` (graphs/ by default), e.g. `lava.graph.json` */
+  function graphFiles(dir = graphsDir()): string[] {
     if (!existsSync(dir))
       return []
     return readdirSync(dir)
@@ -519,10 +528,29 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
       .sort()
   }
 
+  /** The graphs the enabled plugins ship in their graphs/ */
+  function pluginGraphs(): { package: string, dir: string, files: string[] }[] {
+    const root = projectRoot()
+    return root
+      ? pluginGraphDirs(root).map(plugin => ({
+          ...plugin,
+          files: graphFiles(plugin.dir),
+        }))
+      : []
+  }
+
   /** Read from disk on every request, like scenes, so the game gets what the editor saved last */
   function serveGraph(url: string, req: IncomingMessage, res: ServerResponse): boolean {
-    const name = GRAPH_URL_RE.exec(url)![1]!
-    const file = graphFilePath(dirname(graphsDir()), name)
+    const [, plugin, name] = GRAPH_URL_RE.exec(url)!
+    let file: string
+    try {
+      file = resolveGraphFile(dirname(graphsDir()), plugin
+        ? `${plugin}:${name}`
+        : name!)
+    }
+    catch {
+      return false
+    }
     if (!existsSync(file))
       return false
 
@@ -538,21 +566,27 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
   }
 
   function handleGraphList(res: ServerResponse) {
-    const graphs = graphFiles().flatMap((file) => {
+    const listing = (dir: string, file: string, plugin?: string) => {
       try {
-        const graph = readGraphFile(join(graphsDir(), file))
+        const graph = readGraphFile(join(dir, file))
+        const name = file.slice(0, -GRAPH_EXT.length)
         return [
-          {
-            name: file.slice(0, -GRAPH_EXT.length),
-            kind: graph.kind,
-          },
+          plugin
+            ? { name: `${plugin}:${name}`, kind: graph.kind, plugin }
+            : { name, kind: graph.kind },
         ]
       }
       catch (err) {
-        config.logger.warn(`[mavonengine] Skipping graph ${file}: ${(err as Error).message}`)
+        config.logger.warn(`[mavonengine] Skipping graph ${plugin
+          ? `${plugin}:`
+          : ''}${file}: ${(err as Error).message}`)
         return []
       }
-    })
+    }
+    const graphs = [
+      ...graphFiles().flatMap(file => listing(graphsDir(), file)),
+      ...pluginGraphs().flatMap(plugin => plugin.files.flatMap(file => listing(plugin.dir, file, plugin.package))),
+    ]
     res.statusCode = 200
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Cache-Control', 'no-store')

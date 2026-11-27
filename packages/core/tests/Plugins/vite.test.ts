@@ -34,6 +34,7 @@ beforeEach(() => {
     'assets/bark.txt': 'bark',
     'assets/tree.txt': 'tree',
     'assets/rock.txt': 'rock',
+    'graphs/sway.graph.json': '{"version":1,"kind":"logic","name":"sway","nodes":[],"edges":[],"parameters":[]}',
   })
   writeConfig(root, {
     plugins: {
@@ -197,6 +198,8 @@ describe('build', () => {
     })
 
     expect(JSON.parse(readFileSync(join(outDir, 'graphs', 'lava.graph.json'), 'utf8')).kind).toBe('material')
+    // And the plugins' under graphs/<package>/
+    expect(JSON.parse(readFileSync(join(outDir, 'graphs', 'forest', 'sway.graph.json'), 'utf8')).kind).toBe('logic')
   })
 })
 
@@ -556,6 +559,18 @@ describe('dev server', () => {
 
       const list = await (await fetch(`${base}${GRAPHS_LIST_PATH}`)).json()
       expect(list.graphs).toContainEqual({ name: 'lava', kind: 'material' })
+    })
+
+    it('serves and lists the graphs plugins ship, under their package, and won\'t save over them', async () => {
+      const served = await fetch(`${base}/graphs/forest/sway.graph.json`)
+      expect(served.status).toBe(200)
+      expect((await served.json()).kind).toBe('logic')
+
+      const list = await (await fetch(`${base}${GRAPHS_LIST_PATH}`)).json()
+      expect(list.graphs).toContainEqual({ name: 'forest:sway', kind: 'logic', plugin: 'forest' })
+
+      expect((await save({ name: 'forest:sway', graph })).status).toBe(400)
+      expect((await fetch(`${base}/graphs/forest/missing.graph.json`)).headers.get('cache-control')).not.toBe('no-store')
     })
 
     it('rejects bad names and invalid graphs', async () => {

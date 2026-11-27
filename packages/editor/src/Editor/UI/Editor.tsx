@@ -1,5 +1,5 @@
 import type { Activity } from './ActivityBar'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels'
 import ActivityBar from './ActivityBar'
 import Assets from './Assets/Assets'
@@ -22,6 +22,11 @@ function Editor() {
     storage: localStorage,
   })
   const [activity, setActivity] = useState<Activity>('scene')
+  // The scene's labels hang off <body>, above the editor: hidden while a view covers the scene
+  useEffect(() => {
+    document.body.classList.toggle('editor-full-view', activity !== 'scene')
+    return () => document.body.classList.remove('editor-full-view')
+  }, [activity])
 
   return (
     <div className={styles.root}>

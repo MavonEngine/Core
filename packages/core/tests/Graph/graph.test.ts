@@ -333,3 +333,17 @@ describe('graph files', () => {
     expect(() => graphFilePath(root, '../evil')).toThrow('Invalid graph name')
   })
 })
+
+describe('graph names', () => {
+  it('tells project graphs from plugins\' and finds their URL', async () => {
+    const { parseGraphData: _, ...types } = await import('../../src/Graph/types')
+    expect(types.parseGraphName('lava')).toEqual({ name: 'lava' })
+    expect(types.parseGraphName('@acme/water:ocean')).toEqual({ plugin: '@acme/water', name: 'ocean' })
+    expect(types.parseGraphName('forest:sway')).toEqual({ plugin: 'forest', name: 'sway' })
+    expect(types.parseGraphName('../evil')).toBeUndefined()
+    expect(types.parseGraphName('a:../b')).toBeUndefined()
+    expect(types.graphUrl('lava')).toBe('/graphs/lava.graph.json')
+    expect(types.graphUrl('@acme/water:ocean')).toBe('/graphs/@acme/water/ocean.graph.json')
+    expect(() => types.graphUrl('no way')).toThrow('Invalid graph name')
+  })
+})

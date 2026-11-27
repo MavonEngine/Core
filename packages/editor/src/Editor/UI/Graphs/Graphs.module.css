@@ -334,3 +334,9 @@
 .kindSelect {
     flex-shrink: 0;
 }
+
+.pluginBadge {
+    margin-left: var(--spacing-sm);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
