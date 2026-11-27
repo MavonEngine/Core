@@ -37,6 +37,7 @@ import { publishedFile } from '../../Plugins/publish'
 import DatabaseQueueDriver, { QUEUE_PACKAGE, queueMigrations } from '../../Queue/drivers/DatabaseQueueDriver'
 import Queue from '../../Queue/Queue'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
+import { registerPrimitiveServerObjects } from '../../Scene/primitiveSceneObjects'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
 import { rememberJson, tapMessages } from '../Debug/tap'
@@ -265,6 +266,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
+    registerPrimitiveServerObjects()
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
     this.gameSocket = geckos({

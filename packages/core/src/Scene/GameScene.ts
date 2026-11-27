@@ -66,8 +66,13 @@ export default class GameScene extends EventEmitter {
    * Build the objects this side has a factory for and add them to the world
    */
   instantiate(): this {
+    const unchanged = !this.isDirty()
     this.instantiated = true
     this.entries.forEach(entry => this.build(entry))
+    // A type's serialize() may write props the file leaves out, e.g. a primitive's default params, pivot and collision.
+    // What was just built from the file is what was saved, so compare later changes against that.
+    if (unchanged)
+      this.savedSnapshot = stableStringify(this.serialize())
     return this
   }
 

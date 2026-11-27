@@ -1,7 +1,7 @@
 /**
  * End-to-end test for scenes, run against packages/multiplayer-template in dev mode:
  *
- * 1. boots the game server, which loads scenes/main.json and builds its tree field (colliders only)
+ * 1. boots the game server, which loads scenes/main.json and builds its tree field and the ground's collider (no rendering)
  * 2. a player joins: the client loads the same scene (sky, lights, ground) and renders the trees the server sends
  * 3. a second client joins and opens the editor: it keeps the connection and shows the live trees and the player,
  *    but stops being a player itself, so the metrics count one player
@@ -57,7 +57,7 @@ async function main() {
     await run('npm', ['run', 'build'], { cwd: join(template, 'server') })
     server = await startServer({ MAVONENGINE_DEV_CLIENT: '1' })
     await delay(500)
-    check(server.output().includes('Loaded scene main (1 of 4 objects on the server)'), 'the server loads scenes/main.json and builds only the tree field')
+    check(server.output().includes('Loaded scene main (2 of 4 objects on the server)'), 'the server loads scenes/main.json and builds the tree field and the ground collider')
 
     log('\n== player')
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })

@@ -256,6 +256,34 @@ describe('gameScene', () => {
     expect(scene.isDirty()).toBe(false)
   })
 
+  it('is not dirty when serialize() adds props the file leaves out', () => {
+    registerSceneObject<Crate>({
+      type: 'Crate',
+      client: data => new Crate(data.props?.weight as number),
+      serialize: crate => ({ weight: crate.weight, pivot: 'center', collision: true }),
+    })
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    }).instantiate()
+
+    expect(scene.isDirty()).toBe(false)
+    ;(scene.get('crate')!.object as Crate).weight = 7
+    expect(scene.isDirty()).toBe(true)
+  })
+
+  it('stays dirty when it was changed before it was built', () => {
+    registerTypes()
+    const scene = new GameScene(sceneData(), {
+      side: 'client',
+      world: new BaseWorld(),
+    })
+    scene.setSettings({ background: '#ffffff' })
+    scene.instantiate()
+
+    expect(scene.isDirty()).toBe(true)
+  })
+
   it('saves the current transform and props of the objects', () => {
     registerTypes()
     const scene = new GameScene(sceneData(), {
