@@ -54,6 +54,15 @@
       "engine": ">=0.0.25",
       "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/notifications",
       "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/notifications/README.md"
+    },
+    {
+      "package": "@mavonengine/polyhaven",
+      "name": "Poly Haven",
+      "description": "Browse Poly Haven's CC0 textures and models in the editor and import them, textures as ready material graphs",
+      "target": "client",
+      "engine": ">=0.0.28",
+      "homepage": "https://github.com/MavonEngine/Core/tree/main/packages/plugins/polyhaven",
+      "readme": "https://raw.githubusercontent.com/MavonEngine/Core/main/packages/plugins/polyhaven/README.md"
     }
   ]
 }

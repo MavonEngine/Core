@@ -10,6 +10,18 @@ import EventEmitter from './EventEmitter'
 
 type AssetType = GLTF | Texture | CubeTexture | AudioBuffer | SVGResult | Font
 
+/**
+ * Why a source didn't load, readable. Image loaders reject with the DOM error event, which says nothing by itself:
+ * the file is missing, or what came back isn't an image (e.g. a dev server's page instead of a file)
+ */
+function loadFailure(reason: unknown, source: Asset): string {
+  if (reason instanceof Error)
+    return reason.message
+  if (reason && typeof reason === 'object' && 'type' in reason && (reason as { type: unknown }).type === 'error')
+    return `could not load ${[source.path].flat().join(', ')}: missing, or not a ${source.type}`
+  return String(reason)
+}
+
 export default class Resources extends EventEmitter {
   sources: Asset[]
   loaded: number
@@ -108,7 +120,7 @@ export default class Resources extends EventEmitter {
       this.trigger('assetsAdded', { names })
 
     const failed = results.flatMap((result, i) => result.status === 'rejected'
-      ? [`${sources[i].name}: ${(result.reason as Error)?.message ?? result.reason}`]
+      ? [`${sources[i].name}: ${loadFailure(result.reason, sources[i])}`]
       : [])
     if (failed.length)
       throw new Error(`Could not load ${failed.join(', ')}`)

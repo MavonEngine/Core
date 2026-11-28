@@ -1,0 +1,66 @@
+{
+  "name": "@mavonengine/polyhaven",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MavonEngine plugin: browse Poly Haven's CC0 textures and models in the editor and import them, textures as material graphs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MavonEngine/Core.git",
+    "directory": "packages/plugins/polyhaven"
+  },
+  "keywords": [
+    "mavonengine",
+    "mavonengine-plugin",
+    "polyhaven",
+    "textures",
+    "pbr",
+    "assets"
+  ],
+  "exports": {
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./shared": {
+      "types": "./dist/shared.d.ts",
+      "import": "./dist/shared.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@mavonengine/core": ">=0.0.28",
+    "three": "*"
+  },
+  "devDependencies": {
+    "@mavonengine/core": "*",
+    "@types/node": "^24.0.0",
+    "@types/three": "0.187.0",
+    "jsdom": "^31.0.1",
+    "three": "0.187.0",
+    "tsup": "^9.0.0",
+    "typescript": "7.0.2",
+    "vitest": "^5.1.1"
+  },
+  "mavonengine": {
+    "target": "client",
+    "client": "./dist/client.js",
+    "dev": "./dist/dev.js",
+    "engine": ">=0.0.28",
+    "reloadOnOptions": false
+  }
+}

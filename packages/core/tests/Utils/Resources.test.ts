@@ -80,4 +80,14 @@ describe('resources.add', () => {
       names: ['tree'],
     })
   })
+
+  it('names the file when an image loader rejects with its error event', async () => {
+    const res = resources()
+    // What an <img> error hands the loader: an event, not an Error
+    res.loaders.textureLoader.loadAsync = vi.fn(() => Promise.reject(new Event('error')))
+
+    await expect(res.add([
+      { name: 'rock_diff', type: 'texture', path: '/rock/diff.jpg' },
+    ])).rejects.toThrow('Could not load rock_diff: could not load /rock/diff.jpg: missing, or not a texture')
+  })
 })
