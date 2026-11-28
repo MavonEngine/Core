@@ -48,6 +48,15 @@ vi.mock('../src/Editor/EditorCameraControls', () => ({
   }),
 }))
 
+vi.mock('../src/Editor/Brushes/BrushTool', () => ({
+  default: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.active = false
+    this.update = vi.fn()
+    this.dispose = vi.fn()
+    this.clearHistory = vi.fn()
+  }),
+}))
+
 vi.mock('three/examples/jsm/tsl/display/OutlineNode.js', async () => {
   const { float } = await import('three/tsl')
   return {

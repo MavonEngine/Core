@@ -547,6 +547,84 @@ export default defineClientPlugin({
 })
 ```
 
+### Brushes
+
+The editor's Brushes panel comes with sculpt brushes (raise, lower, smooth, flatten, noise) for a `Terrain`, paint brushes for its material layers, and scatter brushes that paint models onto anything. A plugin can add to both kinds.
+
+**Scatter brushes** are files: put `<name>.brush.json` files (made in the Brushes panel, which saves them to the project's `brushes/`) in a `brushes/` directory in the package. They go by `<package>:<name>` and are listed read-only next to the project's; *Copy* makes an editable copy.
+
+**Brush tools** are code: register them from `setup` with `ctx.registerBrush`. A brush gets one stroke at a time (the editor spaces the stamps along the drag) and returns how to undo it. Its key is `<package>:<name>`. Its `options` show in the panel and reach the stroke as `context.options`:
+
+```ts
+// client.ts
+import { defineClientPlugin } from '@mavonengine/core/Plugins/types'
+import { restoreHeights, sculpt, snapshotHeights } from '@mavonengine/core/Terrain/sculpt'
+
+export default defineClientPlugin({
+  setup(ctx) {
+    ctx.registerBrush({
+      name: 'crater',
+      label: 'Crater',
+      group: 'Sculpt',
+      target: 'terrain',
+      options: [
+        {
+          type: 'slider',
+          key: 'depth',
+          label: 'depth',
+          min: 0.1,
+          max: 5,
+          step: 0.1,
+          default: 1
+        }
+      ],
+      begin(hit, context) {
+        const terrain = hit.terrain
+        if (!terrain)
+          return undefined
+        const region = {
+          col0: 0,
+          row0: 0,
+          col1: terrain.heightmap.resolution - 1,
+          row1: terrain.heightmap.resolution - 1
+        }
+        const before = snapshotHeights(terrain.heightmap, region)
+        return {
+          stamp(at, context) {
+            const local = terrain.toLocal(at.point)
+            const changed = sculpt(terrain.heightmap, {
+              mode: 'lower',
+              x: local.x,
+              z: local.z,
+              radius: context.settings.radius,
+              falloff: 1,
+              strength: Number(context.options.depth) / 5
+            })
+            if (changed)
+              terrain.heightsChanged(changed)
+          },
+          end() {
+            const after = snapshotHeights(terrain.heightmap, region)
+            terrain.commit()
+            const put = (heights: Float32Array) => {
+              restoreHeights(terrain.heightmap, region, heights)
+              terrain.heightsChanged()
+              terrain.commit()
+            }
+            return {
+              undo: () => put(before),
+              redo: () => put(after)
+            }
+          },
+        }
+      },
+    })
+  },
+})
+```
+
+A brush with `target: 'surface'` hits any mesh, not just terrains; `context.surfaceBelow(point)`, `context.scatterLayer(true)` and `context.scatterBrush` give what the built-in scatter brushes use.
+
 ### Dev entries
 
 A plugin's `dev` entry runs in the client's Vite dev server, only in dev: tooling for the editor that has to work with the project's files, like downloading something and writing it into `client/public/`. It is never part of a build, and the game server never loads it.

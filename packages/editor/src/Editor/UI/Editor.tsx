@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels'
 import ActivityBar from './ActivityBar'
 import Assets from './Assets/Assets'
+import BrushesPanel from './Brushes/BrushesPanel'
 import CanvasPanel from './CanvasPanel'
 import DockArea from './DockArea'
 import styles from './Editor.module.css'
@@ -89,6 +90,7 @@ function Editor() {
                 location="right"
                 builtins={[
                   { id: 'properties', title: 'Properties', element: <PropertiesPanel /> },
+                  { id: 'brushes', title: 'Brushes', element: <BrushesPanel /> },
                 ]}
               />
             </Panel>

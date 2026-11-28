@@ -10,6 +10,7 @@ import type GameObject from './World/GameObject'
 import type { XROptions } from './XR'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
+import { registerBrush } from './Brushes/BrushRegistry'
 import Camera from './Camera'
 import { registerTslNode } from './Graph/Material/tslNodes'
 import { pluginNodeType, registerNode } from './Graph/NodeRegistry'
@@ -207,6 +208,7 @@ export default class Game extends BaseGame {
       },
       assetUrl: path => `${pluginAssetBase(loaded.package)}${path.replace(LEADING_SLASHES_RE, '')}`,
       registerPrefab: prefab => registerPrefab({ ...prefab, plugin: loaded.package }),
+      registerBrush: brush => registerBrush({ ...brush, plugin: loaded.package }),
       registerNode: (definition, tsl) => {
         const type = pluginNodeType(loaded.package, definition.type)
         registerNode({ ...definition, type, plugin: loaded.package })

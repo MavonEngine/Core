@@ -7,7 +7,7 @@ import { build, createServer } from 'vite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEV_CONTROL_TOKEN_HEADER, PLUGIN_INSTALL_PATH } from '../../src/Plugins/install'
 import { readConfig } from '../../src/Plugins/ProjectConfig'
-import { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
+import { BRUSHES_PATH, GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from '../../src/Plugins/types'
 import { APP_NAME_PLACEHOLDER, fillAppName, generatePluginsModule, mavonEnginePlugins } from '../../src/Plugins/vite'
 import { installPlugin, tempProject, writeConfig, writeFile } from './fixtures'
 
@@ -35,6 +35,7 @@ beforeEach(() => {
     'assets/tree.txt': 'tree',
     'assets/rock.txt': 'rock',
     'graphs/sway.graph.json': '{"version":1,"kind":"logic","name":"sway","nodes":[],"edges":[],"parameters":[]}',
+    'brushes/ferns.brush.json': '{"kind":"scatter","entries":[{"asset":"fern"}]}',
   })
   writeConfig(root, {
     plugins: {
@@ -584,6 +585,47 @@ describe('dev server', () => {
       })
       expect(res.status).toBe(400)
       expect((await res.json()).error).toContain('"kind" must be one of')
+    })
+  })
+
+  describe('brushes', () => {
+    const post = (body: unknown) => fetch(`${base}${BRUSHES_PATH}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+
+    it('saves a brush to brushes/<name>.brush.json, lists it and deletes it', async () => {
+      const res = await post({
+        name: 'forest',
+        brush: {
+          entries: [
+            { asset: 'fern', density: 8 },
+          ],
+        },
+      })
+      expect(res.status).toBe(200)
+      const file = join(root, 'brushes', 'forest.brush.json')
+      const saved = JSON.parse(readFileSync(file, 'utf8'))
+      expect(saved.name).toBe('forest')
+      expect(saved.entries[0]).toMatchObject({ asset: 'fern', density: 8, collision: true })
+
+      const list = await (await fetch(`${base}${BRUSHES_PATH}`)).json()
+      expect(list.brushes.map((b: { name: string }) => b.name)).toContain('forest')
+      expect(list.brushes).toContainEqual(expect.objectContaining({ name: 'forest:ferns', plugin: 'forest' }))
+      // A plugin's can't be saved over
+      expect((await post({ name: 'forest:ferns', brush: {} })).status).toBe(400)
+
+      expect((await post({ name: 'forest', delete: true })).status).toBe(200)
+      expect(existsSync(file)).toBe(false)
+    })
+
+    it('rejects bad names and other kinds of brush', async () => {
+      for (const name of ['../evil', 'a/b', ''])
+        expect((await post({ name, brush: {} })).status).toBe(400)
+      expect((await post({
+        name: 'x',
+        brush: { kind: 'sculpt' },
+      })).status).toBe(400)
     })
   })
 

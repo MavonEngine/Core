@@ -17,6 +17,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { outline } from 'three/examples/jsm/tsl/display/OutlineNode.js'
 import { color, vec4 } from 'three/tsl'
 import { applyShadeMode } from './Editor/applyShadeMode'
+import BrushTool from './Editor/Brushes/BrushTool'
 import { DEFAULT_SCENE_NAME, demoScene } from './Editor/demoScene'
 import EditorCameraControls from './Editor/EditorCameraControls'
 import NetworkOverlay from './Editor/Network/NetworkOverlay'
@@ -48,6 +49,9 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
 
   /** Server ghosts and sync rings in the viewport, switched on from the Network panel */
   networkOverlay!: NetworkOverlay
+
+  /** Sculpt, paint and scatter brushes, the built-in ones and the plugins', see the Brushes panel */
+  brushes!: BrushTool
 
   availableAssetCategories!: string[]
   activeAssetCategory: 'Object' | '_texture' | 'CubeTexture' | 'AudioBuffer' | 'Font' = 'Object'
@@ -134,10 +138,12 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
       () => this.focusTarget(),
     )
     this.networkOverlay = new NetworkOverlay()
+    this.brushes = new BrushTool(this)
 
     this.watchScene(Game.instance().activeScene)
     Game.instance().on('sceneLoaded', (scene: GameScene) => {
       this.deselect()
+      this.brushes.clearHistory()
       this.watchScene(scene)
       this.trigger('sceneChanged')
     })
@@ -280,8 +286,8 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   }
 
   private handleCanvasClick(ev: MouseEvent) {
-    // Alt + left drag orbits the camera around the selection, so it must not change it
-    if (ev.button === 0 && !ev.altKey) {
+    // Alt + left drag orbits the camera around the selection, so it must not change it. A brush paints instead
+    if (ev.button === 0 && !ev.altKey && !this.brushes.active) {
       if (this.transformControls && (this.transformControls.dragging || this.transformControls.axis !== null)) {
         return
       }
@@ -451,6 +457,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.updateCamera(delta)
     this.helpers.forEach(h => h.update(delta))
     this.networkOverlay.update()
+    this.brushes.update()
   }
 
   updateCamera(delta: number) {
@@ -464,6 +471,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.outlinePass.dispose()
     this.cameraControls.dispose()
     this.networkOverlay.dispose()
+    this.brushes.dispose()
     this.shadeOverrideMaterials.forEach(m => m.dispose())
     this.shadeOverrideMaterials.clear()
     this.originalMaterials.clear()

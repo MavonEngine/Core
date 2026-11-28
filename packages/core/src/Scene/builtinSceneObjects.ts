@@ -14,6 +14,10 @@ import { materialGraphs } from '../Graph/Material/MaterialGraphs'
 import { LIGHT_REGISTRY } from '../Prefab/Lights/index'
 import { getPrefab, spawnPrefab } from '../Prefab/PrefabRegistry'
 import { PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
+import { SCATTER_TYPE } from '../Scatter/scatterData'
+import ScatterLayer from '../Scatter/ScatterLayer'
+import Terrain from '../Terrain/Terrain'
+import { TERRAIN_TYPE } from '../Terrain/terrainData'
 import GameObject from '../World/GameObject'
 import { primitiveOptionsFromProps, primitiveType } from './primitiveSceneObjects'
 import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectRegistry'
@@ -31,6 +35,9 @@ import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectR
  * - `prefab:<key>` any prefab of the prefab registry, by its key
  * - `LogicGraph` props: graph, side ('client' | 'server' | 'both'), target, parameters. Runs a logic graph, see
  *   Graph/Logic/logicGraphObject (which the server registers too)
+ * - `Terrain` props: see TerrainProps. A heightmap with painted material layers; the server builds its heightfield
+ *   collider, see Terrain/terrainSceneObjects
+ * - `ScatterLayer` props: see ScatterLayerProps. Assets painted with a scatter brush; the server builds their colliders
  */
 
 export { primitiveType } from './primitiveSceneObjects'
@@ -315,6 +322,20 @@ export function registerBuiltinSceneObjects() {
     label: 'Logic Graph',
     client: (data, { scene }) => new ClientLogicGraph(data, scene),
     serialize: object => ({ ...object.props }),
+  })
+
+  registerSceneObject<Terrain>({
+    type: TERRAIN_TYPE,
+    label: 'Terrain',
+    client: data => new Terrain(data),
+    serialize: terrain => terrain.sceneProps(),
+  })
+
+  registerSceneObject<ScatterLayer>({
+    type: SCATTER_TYPE,
+    label: 'Scatter layer',
+    client: data => new ScatterLayer(data),
+    serialize: layer => layer.sceneProps(),
   })
 
   registerSceneObjectResolver((type) => {

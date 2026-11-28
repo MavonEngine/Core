@@ -43,6 +43,7 @@ import Queue from '../../Queue/Queue'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
 import { registerPrimitiveServerObjects } from '../../Scene/primitiveSceneObjects'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
+import { registerTerrainServerObjects } from '../../Terrain/terrainSceneObjects'
 import NetRecorder from '../Debug/NetRecorder'
 import { rememberJson, tapMessages } from '../Debug/tap'
 import Player from '../Entities/Player'
@@ -274,6 +275,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
     registerPrimitiveServerObjects()
+    registerTerrainServerObjects()
     registerLogicGraphServerObject()
     // Logic graphs come from the project's graphs/ and the plugins', read fresh each time a scene builds them
     setGraphSource(async (name) => {

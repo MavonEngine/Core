@@ -4,6 +4,7 @@ import type { Kysely } from 'kysely'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type winston from 'winston'
 import type BaseGame from '../BaseGame'
+import type { BrushDefinition } from '../Brushes/BrushRegistry'
 import type Game from '../Game'
 import type { TslImplementation } from '../Graph/Material/tslNodes'
 import type { NodeDefinition } from '../Graph/NodeRegistry'
@@ -74,6 +75,11 @@ export interface ClientPluginContext extends PluginContextBase<Game, ClientPlugi
   assetUrl(path: string): string
   /** Make a prefab available in the editor's Prefabs tab */
   registerPrefab(prefab: Omit<PrefabDefinition, 'plugin'>): void
+  /**
+   * Add a brush to the editor's Brushes panel, next to the built-in sculpt, paint and scatter brushes. Its key is
+   * `<package>:<name>`, which is returned. Only matters in the editor; registering it in a release does nothing
+   */
+  registerBrush(brush: Omit<BrushDefinition, 'plugin'>): string
   /**
    * Add a node type to graphs, with its TSL implementation for material graphs (see `registerTslNode()`). Its key in
    * graph files is `<package>:<type>`, which is returned
@@ -466,3 +472,9 @@ export const GRAPH_SAVE_PATH = '/__mavonengine/graph-save'
 
 /** Dev server endpoint listing the project's graphs: GET → { graphs: { name, kind }[] } */
 export const GRAPHS_LIST_PATH = '/__mavonengine/graphs'
+
+/**
+ * Dev server endpoint for the project's brushes (`brushes/<name>.brush.json`): GET → { brushes }, POST { name, brush }
+ * saves one, POST { name, delete: true } removes it
+ */
+export const BRUSHES_PATH = '/__mavonengine/brushes'

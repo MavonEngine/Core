@@ -333,6 +333,19 @@ export const PLUGIN_GRAPHS_DIR = 'graphs'
  * only graphs. Plugins that are missing or invalid are left out
  */
 export function pluginGraphDirs(root: string): { package: string, dir: string }[] {
+  return pluginDirs(root, PLUGIN_GRAPHS_DIR)
+}
+
+/** Where plugins keep the scatter brushes they ship, in their package */
+export const PLUGIN_BRUSHES_DIR = 'brushes'
+
+/** The `brushes/` directories of the enabled plugins, see `pluginGraphDirs()` */
+export function pluginBrushDirs(root: string): { package: string, dir: string }[] {
+  return pluginDirs(root, PLUGIN_BRUSHES_DIR)
+}
+
+/** A directory the enabled plugins ship in their package, for those that have it */
+function pluginDirs(root: string, subdir: string): { package: string, dir: string }[] {
   let config: ReturnType<typeof readConfig>
   try {
     config = readConfig(root)
@@ -345,7 +358,7 @@ export function pluginGraphDirs(root: string): { package: string, dir: string }[
       return []
     try {
       const installed = readPluginManifest(root, pkg)
-      const dir = installed && join(installed.dir, PLUGIN_GRAPHS_DIR)
+      const dir = installed && join(installed.dir, subdir)
       return dir && existsSync(dir)
         ? [
             { package: pkg, dir },

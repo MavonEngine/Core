@@ -6,6 +6,8 @@ import { dirname, extname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { graphFilePath, readGraphFile, resolveGraphFile, writeGraphFile } from '../Graph/loadGraphFile.js'
 import { GRAPH_NAME_RE, GRAPHS_DIR, isFunctionGraph } from '../Graph/types.js'
+import { deleteBrushFile, listBrushes, writeBrushFile } from '../Scatter/loadBrushFile.js'
+import { BRUSH_NAME_RE } from '../Scatter/scatterBrush.js'
 import { sceneFilePath, writeSceneFile } from '../Scene/loadSceneFile.js'
 import { SCENE_NAME_RE, SCENES_DIR } from '../Scene/types.js'
 import { DevBridgeHub, handleBridgeRequest } from './devBridge.js'
@@ -13,9 +15,9 @@ import { DevPluginHost } from './DevPluginHost.js'
 import { fromLocalhost, fromThisPage, readBody } from './devRequest.js'
 import { DEV_CONTROL_TOKEN_ENV, DEV_CONTROL_TOKEN_HEADER, DEV_CONTROL_URL_ENV, invalidPackages, PLUGIN_INSTALL_PATH } from './install.js'
 import { assetsDir, CONFIG_FILE, enabledPlugins, findConfigRoot, pluginGraphDirs, pluginInfos, readConfig, recordPrefabUsage, releaseAssets, resolveInside } from './ProjectConfig.js'
-import { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
+import { BRUSHES_PATH, GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, pluginAssetBase, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH } from './types.js'
 
-export { GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
+export { BRUSHES_PATH, GRAPH_SAVE_PATH, GRAPHS_LIST_PATH, PLUGIN_INSTALL_PATH, PLUGINS_INFO_PATH, PREFAB_USED_PATH, SCENE_SAVE_PATH }
 
 export const VIRTUAL_PLUGINS_ID = 'virtual:mavonengine/plugins'
 const RESOLVED_VIRTUAL_PLUGINS_ID = `\0${VIRTUAL_PLUGINS_ID}`
@@ -295,6 +297,11 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
 
         if (req.method === 'POST' && url === GRAPH_SAVE_PATH) {
           handleGraphSave(req, res)
+          return
+        }
+
+        if ((req.method === 'GET' || req.method === 'POST') && url === BRUSHES_PATH) {
+          handleBrushes(req, res)
           return
         }
 
@@ -635,6 +642,61 @@ export function mavonEnginePlugins(options: MavonEnginePluginsOptions = {}): Plu
         const written = writeGraphFile(file, graph)
         config.logger.info(`[mavonengine] Saved graph ${name} (${written.nodes.length} nodes) to ${file}`)
         reply(200, { saved: true, file, graph: written })
+      }
+      catch (err) {
+        reply(400, { error: (err as Error).message })
+      }
+    }, (err: Error) => reply(413, { error: err.message }))
+  }
+
+  /** GET: every brush of the project and the enabled plugins. POST { name, brush }: save one, POST { name, delete: true }: remove one */
+  function handleBrushes(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, body: object) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(JSON.stringify(body))
+    }
+    const root = projectRoot() ?? config.root
+
+    if (req.method === 'GET') {
+      reply(200, {
+        brushes: listBrushes(root, (file, err) => config.logger.warn(`[mavonengine] Skipping brush ${file}: ${err.message}`)),
+      })
+      return
+    }
+
+    if (!fromLocalhost(req)) {
+      reply(403, { error: 'Only available from localhost' })
+      return
+    }
+
+    readBody(req, MAX_SCENE_BYTES).then((body) => {
+      let request: { name?: unknown, brush?: unknown, delete?: unknown }
+      try {
+        request = JSON.parse(body)
+      }
+      catch {
+        reply(400, { error: 'Expected a JSON body' })
+        return
+      }
+
+      const { name } = request
+      if (typeof name !== 'string' || !BRUSH_NAME_RE.test(name)) {
+        reply(400, { error: 'Expected { name, brush } with a name of letters, digits, - and _' })
+        return
+      }
+
+      try {
+        if (request.delete === true) {
+          deleteBrushFile(root, name)
+          config.logger.info(`[mavonengine] Deleted brush ${name}`)
+          reply(200, { deleted: true })
+          return
+        }
+        const brush = writeBrushFile(root, name, request.brush)
+        config.logger.info(`[mavonengine] Saved brush ${name} (${brush.entries.length} assets)`)
+        reply(200, { saved: true, brush })
       }
       catch (err) {
         reply(400, { error: (err as Error).message })
