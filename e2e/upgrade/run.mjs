@@ -121,7 +121,8 @@ async function main() {
     check(readFileSync(indexHtml, 'utf8').includes('<title>%MAVONENGINE_APP_NAME%</title>'), 'index.html\'s title is the placeholder')
     const config = readJson(configPath)
     check(config.appName === TITLE, 'the title it had is the appName')
-    check(JSON.stringify(config.migrations) === '["0.0.22-dev-script","0.0.25-app-name-title"]', 'both migrations are recorded')
+    // Every migration the core can have is recorded, also those with nothing to change (e.g. 0.0.28-drop-three-perf)
+    check(['0.0.22-dev-script', '0.0.25-app-name-title'].every(id => config.migrations?.includes(id)), 'both migrations are recorded')
     check(result.output.includes('Checking the result: mavonengine doctor') && result.output.includes('✓ none pending'), 'doctor checks the result')
 
     log('\n== again')

@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/auth",
   "type": "module",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "MavonEngine plugin: player accounts, logins and sessions, so the game server knows who connects",
   "license": "MIT",
   "repository": {
