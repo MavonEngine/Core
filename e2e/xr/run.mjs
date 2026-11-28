@@ -266,12 +266,14 @@ async function main() {
     check(await rigYaw() === beforeHover, 'moving the mouse without dragging leaves the view alone')
 
     log('\n== mirror')
-    // The emulator reports a Quest's browser, where the page is hidden in VR: the template leaves the mirror off there
-    check(!(await page.evaluate(() => window.Game.xr.mirror)), 'the template leaves the mirror off in a standalone headset\'s browser')
-    // As on a PC headset
+    // The template leaves the mirror off: the window shows its last frame, blurred, saying the game plays in VR
+    check(!(await page.evaluate(() => window.Game.xr.mirror)), 'the template leaves the mirror off')
+    check(await page.evaluate(() => document.querySelector('.xr-backdrop')?.textContent === 'Playing in VR'), 'the window says the game plays in VR')
+    // Turned on, as for a stream
     await page.evaluate(() => window.Game.xr.mirror = true)
     const mirrored = await framesDrawn(page, 4)
     check(mirrored >= 4 && await page.evaluate(() => window.Game.renderer.instance.xr.enabled), `the session keeps rendering with the mirror on (${mirrored} frames)`)
+    check(await page.evaluate(() => !document.querySelector('.xr-backdrop')), 'the mirror shows instead of the blurred frame')
     const mirror = await page.evaluate(() => {
       const game = window.Game
       game.camera.instance.updateWorldMatrix(true, false)
@@ -290,6 +292,7 @@ async function main() {
     await waitFor(page, () => !window.Game.renderer.xrPresenting, null, 10000)
     check(await page.evaluate(() => window.Game.camera.rig.position.length() === 0 && window.Game.camera.rig.rotation.y === 0), 'the camera rig is reset for the desktop controls')
     check(await page.evaluate(() => window.Game.camera.instance.fov) === 35, 'the camera has its own field of view back, not the headset\'s')
+    check(await page.evaluate(() => !document.querySelector('.xr-backdrop')), 'the window shows the game again')
     await framesDrawn(page, 3)
     const desktop = await pose(page)
     const orbit = Math.hypot(...desktop.offset)

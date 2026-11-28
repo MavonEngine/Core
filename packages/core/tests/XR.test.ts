@@ -101,7 +101,13 @@ function setup(options?: ConstructorParameters<typeof XR>[2], { supportsLayers =
     get xrPresenting() {
       return xr.isPresenting
     },
+    // A desktop frame, through the pipeline
+    render: vi.fn(),
   }
+  // The page: the game's canvas, with its UI root before it
+  const canvas = document.createElement('canvas')
+  const uiRoot = document.createElement('div')
+  document.body.append(uiRoot, canvas)
   const game = {
     trigger: vi.fn(),
     camera: {
@@ -109,6 +115,8 @@ function setup(options?: ConstructorParameters<typeof XR>[2], { supportsLayers =
       instance: new PerspectiveCamera(35, 2, 0.1, 500),
     },
     scene: new Scene(),
+    canvas,
+    uiRoot,
     callbacks: {} as Record<string, ((event?: any) => void)[]>,
     on(name: string, callback: (event?: any) => void) {
       (this.callbacks[name] ??= []).push(callback)
@@ -128,11 +136,14 @@ function setup(options?: ConstructorParameters<typeof XR>[2], { supportsLayers =
     game,
     session,
     webgl,
+    renderer,
     renderTarget,
     depth,
     eyes,
   }
 }
+
+const backdrop = () => document.querySelector<HTMLElement>('.xr-backdrop')
 
 describe('xr', () => {
   afterEach(() => {
@@ -283,6 +294,40 @@ describe('xr', () => {
     expect(setup({
       mirror: { fov: 90 },
     }).instance.mirrorCamera.fov).toBe(90)
+  })
+
+  it('covers the page with its last frame, saying the game plays in VR, while a headset plays without the mirror', async () => {
+    const { xr, setSession, session, renderer, game } = setup()
+    // The desktop frame is drawn before three.js has the session, which clears the canvas
+    setSession.mockImplementation(async () => {
+      expect(renderer.render).toHaveBeenCalled()
+      expect(backdrop()).not.toBeNull()
+    })
+
+    await xr.setSession(session as unknown as XRSession)
+    expect(setSession).toHaveBeenCalledWith(session)
+    expect(backdrop()!.textContent).toBe('Playing in VR')
+    expect(backdrop()!.style.pointerEvents).toBe('none')
+    // Under the game's UI
+    expect(backdrop()!.nextElementSibling).toBe(game.uiRoot)
+
+    xr.dispatchEvent({ type: 'sessionend' })
+    expect(backdrop()).toBeNull()
+  })
+
+  it('leaves the page to the mirror, also when it\'s turned on during the session', async () => {
+    const mirrored = setup({ mirror: true })
+    await mirrored.xr.setSession(mirrored.session as unknown as XRSession)
+    expect(backdrop()).toBeNull()
+    expect(mirrored.renderer.render).not.toHaveBeenCalled()
+
+    document.body.innerHTML = ''
+    const { instance, xr, session } = setup()
+    await xr.setSession(session as unknown as XRSession)
+    expect(backdrop()).not.toBeNull()
+    instance.mirror = true
+    instance.renderMirror()
+    expect(backdrop()).toBeNull()
   })
 
   it('mirrors the headset to the page from the head, shaped like the window, without touching the headset', () => {

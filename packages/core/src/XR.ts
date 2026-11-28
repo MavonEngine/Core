@@ -26,8 +26,9 @@ export interface XROptions {
   /**
    * Keep drawing the game in the browser window while a headset plays, from the player's head, e.g. for someone
    * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`.
-   * Drawing to the page can tie the session to the monitor's refresh: a Valve Index through SteamVR in Chrome on
-   * Linux ran at the monitor's 60 Hz with it, and at the headset's rate without
+   * It costs the headset frames: three.js rebuilds every object's render pipeline each time the camera changes
+   * between the headset's eyes and the mirror's (a Valve Index in Chrome on Windows ran at 45 Hz with it, at 90
+   * without). Without it, the window shows its last frame, blurred, saying the game is playing in VR
    */
   mirror?: boolean | XRMirrorOptions
 }
@@ -70,6 +71,9 @@ export default class XR {
   /** The camera's field of view before the session, which three.js replaces with the headset's */
   private desktopFov?: number
 
+  /** Over the page's canvas while a headset plays without the mirror: its last frame, blurred, saying so */
+  private backdrop?: HTMLElement
+
   constructor(
     private readonly renderer: Renderer,
     private readonly game: Game,
@@ -79,6 +83,14 @@ export default class XR {
     xr.enabled = true
     patchRenderer(renderer.instance)
     xr.setReferenceSpaceType(options.referenceSpace ?? 'local-floor')
+
+    // Taken before three.js has the session: it resizes the canvas for the headset, which clears it
+    const setSession = xr.setSession.bind(xr)
+    xr.setSession = (session: XRSession) => {
+      if (session && !this.mirror)
+        this.showBackdrop()
+      return setSession(session)
+    }
 
     this.sessionInit = {
       ...options.sessionInit,
@@ -102,6 +114,7 @@ export default class XR {
       game.trigger('xrSessionStart', xr.getSession())
     })
     xr.addEventListener('sessionend', () => {
+      this.hideBackdrop()
       // three.js gave the camera the headset's field of view, which would stay on the desktop
       if (this.desktopFov !== undefined)
         game.camera.instance.fov = this.desktopFov
@@ -176,6 +189,8 @@ export default class XR {
    * every frame while presenting and `mirror` is on
    */
   renderMirror() {
+    // Turned on during the session: the mirror shows instead
+    this.hideBackdrop()
     const three = this.renderer.instance
     const camera = this.game.camera.instance
     const near = camera.near
@@ -227,6 +242,39 @@ export default class XR {
       three.setOutputRenderTarget(output)
       three.setRenderTarget(target)
     }
+  }
+
+  /**
+   * Cover the page's canvas with its last frame, blurred, saying the game plays in VR: otherwise it stays on a
+   * cleared canvas while the headset plays. Placed before the UI root, so the game's UI still shows over it
+   */
+  private showBackdrop() {
+    this.hideBackdrop()
+    const canvas = this.game.canvas
+    // A frame drawn now and copied in the same task: WebGL clears the canvas once a frame is shown. Small, as it's
+    // blurred anyway
+    this.renderer.render()
+    const snapshot = document.createElement('canvas')
+    snapshot.width = Math.max(1, Math.round(canvas.width / 4))
+    snapshot.height = Math.max(1, Math.round(canvas.height / 4))
+    snapshot.getContext('2d')?.drawImage(canvas, 0, 0, snapshot.width, snapshot.height)
+    snapshot.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;filter:blur(12px) brightness(0.55);transform:scale(1.06)'
+
+    const label = document.createElement('div')
+    label.textContent = 'Playing in VR'
+    label.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font:600 32px system-ui,sans-serif;letter-spacing:0.04em;text-shadow:0 2px 12px rgba(0,0,0,0.5)'
+
+    const backdrop = document.createElement('div')
+    backdrop.className = 'xr-backdrop'
+    backdrop.style.cssText = 'position:fixed;inset:0;overflow:hidden;pointer-events:none;background:#111'
+    backdrop.append(snapshot, label)
+    this.game.uiRoot.before(backdrop)
+    this.backdrop = backdrop
+  }
+
+  private hideBackdrop() {
+    this.backdrop?.remove()
+    this.backdrop = undefined
   }
 
   /** Whether this browser and device can run immersive VR */
