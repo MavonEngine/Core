@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/sqlite",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MavonEngine plugin: a SQLite database for the game server and its plugins, on Node's built-in node:sqlite",
   "license": "MIT",
   "repository": {
@@ -43,7 +43,7 @@
     "@mavonengine/core": ">=0.0.24"
   },
   "dependencies": {
-    "kysely": "^0.29.8"
+    "kysely": "^0.29.9"
   },
   "devDependencies": {
     "@mavonengine/core": "*",

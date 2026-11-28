@@ -8,6 +8,8 @@ export type PropertyField
   = | { type: 'color', label: string, getValue(): string, setValue(v: string): void }
     | { type: 'slider', label: string, min: number, max: number, step: number, getValue(): number, setValue(v: number): void }
     | { type: 'checkbox', label: string, getValue(): boolean, setValue(v: boolean): void }
+    /** A choice from a list. `refresh` updates the options, called when the field shows */
+    | { type: 'select', label: string, options(): { value: string, label: string }[], getValue(): string, setValue(v: string): void, refresh?(): Promise<unknown> }
 
 export interface EditorHelperAttachment {
   addBindings?(folder: ContainerApi): void

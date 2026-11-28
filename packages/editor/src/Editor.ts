@@ -6,17 +6,19 @@ import type GameObjectInterface from '@mavonengine/core/World/GameObjectInterfac
 import type { Root } from 'react-dom/client'
 import type { Material, MeshBasicMaterial, Object3DEventMap } from 'three'
 import type { TransformControlsMode } from 'three/examples/jsm/controls/TransformControls.js'
+import type { FocusTarget } from './Editor/EditorCameraControls'
 import type { EditorPanelDefinition } from './Editor/panels'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import Game from '@mavonengine/core/Game'
 import { SCENE_SAVE_PATH } from '@mavonengine/core/Plugins/types'
 import EventEmitter from '@mavonengine/core/Utils/EventEmitter'
-import { Matrix4, Mesh, Object3D, Vector2, Vector3 } from 'three'
-import { FlyControls } from 'three/examples/jsm/controls/FlyControls.js'
+import { Box3, Mesh, Object3D, Sphere, Vector3 } from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
-import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js'
+import { outline } from 'three/examples/jsm/tsl/display/OutlineNode.js'
+import { color, vec4 } from 'three/tsl'
 import { applyShadeMode } from './Editor/applyShadeMode'
 import { DEFAULT_SCENE_NAME, demoScene } from './Editor/demoScene'
+import EditorCameraControls from './Editor/EditorCameraControls'
 import NetworkOverlay from './Editor/Network/NetworkOverlay'
 import { registerEditorPanel, unregisterEditorPanel } from './Editor/panels'
 
@@ -26,10 +28,12 @@ export { registerEditorPanel, unregisterEditorPanel } from './Editor/panels'
 export type ShadeMode = 'solid' | 'flat' | 'wireframe'
 
 export default class Editor extends EventEmitter implements IEditor, GameObjectInterface {
-  flyControls!: FlyControls
+  cameraControls!: EditorCameraControls
   reactRoot!: Root
   activeItem?: Object3D<Object3DEventMap> | null
-  outlinePass!: OutlinePass
+  /** Outlines the selection, as a render effect */
+  outlinePass!: ReturnType<typeof outline>
+  private removeOutline?: () => void
   activeToolMode: TransformControlsMode = 'translate'
   transformControls?: TransformControls
   private shadeMode: ShadeMode = 'solid'
@@ -118,15 +122,17 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     Game.instance().camera.instance.rotateY((Math.PI / 360) * 90)
     Game.instance().camera.instance.rotateX((Math.PI / 360) * -45)
 
-    this.outlinePass = new OutlinePass(
-      new Vector2(Game.instance().sizes.width, Game.instance().sizes.height),
-      Game.instance().scene,
+    this.outlinePass = outline(Game.instance().scene, Game.instance().camera.instance, { selectedObjects: [] })
+    // White where the selection shows, a dim orange where something hides it: three's old OutlinePass colors
+    const { visibleEdge, hiddenEdge } = this.outlinePass
+    const edges = visibleEdge.mul(color(1, 1, 1)).add(hiddenEdge.mul(color(0.1, 0.04, 0.02))).mul(3)
+    this.removeOutline = Game.instance().renderer.addEffect('editor-outline', input => input.add(vec4(edges, 0)))
+
+    this.cameraControls = new EditorCameraControls(
       Game.instance().camera.instance,
+      Game.instance().canvas,
+      () => this.focusTarget(),
     )
-
-    Game.instance().renderer.composer.addPass(this.outlinePass)
-
-    this.initFlyControls()
     this.networkOverlay = new NetworkOverlay()
 
     this.watchScene(Game.instance().activeScene)
@@ -196,12 +202,23 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     applyShadeMode(Game.instance().scene, mode, this.originalMaterials, this.shadeOverrideMaterials, this.flatColors)
   }
 
-  private initFlyControls() {
-    this.flyControls = new FlyControls(Game.instance().camera.instance, Game.instance().canvas)
-    this.flyControls.autoForward = false
-    this.flyControls.dragToLook = true
-    this.flyControls.movementSpeed = 10
-    this.flyControls.rollSpeed = 0.5
+  /** The selection's bounds, for the camera to frame (F) and orbit around (Alt + drag) */
+  private focusTarget(): FocusTarget | undefined {
+    if (!this.activeItem)
+      return undefined
+
+    const box = new Box3().setFromObject(this.activeItem)
+    if (box.isEmpty()) {
+      return {
+        center: this.activeItem.getWorldPosition(new Vector3()),
+        radius: 1,
+      }
+    }
+    const sphere = box.getBoundingSphere(new Sphere())
+    return {
+      center: sphere.center,
+      radius: sphere.radius,
+    }
   }
 
   private handleItemDelete() {
@@ -263,7 +280,8 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   }
 
   private handleCanvasClick(ev: MouseEvent) {
-    if (ev.button === 0) {
+    // Alt + left drag orbits the camera around the selection, so it must not change it
+    if (ev.button === 0 && !ev.altKey) {
       if (this.transformControls && (this.transformControls.dragging || this.transformControls.axis !== null)) {
         return
       }
@@ -286,15 +304,7 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
         Game.instance().canvas,
       )
       this.transformControls.addEventListener('dragging-changed', (event) => {
-        this.flyControls.enabled = !event.value
-        if (!event.value) {
-          /**
-           * Bit of a hack but it was needed because the fly controls camera would move with the mounter after
-           * releasing the transfom controls. Maybe a better way here instead of initializing whole
-           * new flyControls again
-           */
-          this.initFlyControls()
-        }
+        this.cameraControls.enabled = !event.value
       })
       const tcHelper = this.transformControls.getHelper()
       tcHelper.userData.isEditorInternal = true
@@ -414,6 +424,20 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
     this.lightHelpers = this.lightHelpers.filter(h => h !== helper)
   }
 
+  /** Whether the game has a physics world whose colliders can be shown */
+  get physicsAvailable(): boolean {
+    return !!window.Game.physicsDebugRender
+  }
+
+  get showPhysics(): boolean {
+    return window.Game.physicsDebugRender?.enabled ?? false
+  }
+
+  /** Draws the physics world's colliders over the scene */
+  setShowPhysics(visible: boolean): void {
+    window.Game.physicsDebugRender?.toggleVisible(visible)
+  }
+
   setShowHelpers(visible: boolean): void {
     this._showHelpers = visible
     this.helpers.forEach((h) => {
@@ -430,23 +454,15 @@ export default class Editor extends EventEmitter implements IEditor, GameObjectI
   }
 
   updateCamera(delta: number) {
-    this.flyControls.update(delta)
-
-    /**
-     * Keep the camera flat on the horizon.
-     */
-    const camera = Game.instance().camera.instance
-    const forward = new Vector3()
-    camera.getWorldDirection(forward)
-    camera.quaternion.setFromRotationMatrix(
-      new Matrix4().lookAt(new Vector3(), forward, new Vector3(0, 1, 0)),
-    )
+    this.cameraControls.update(delta)
   }
 
   destroy(): void {
     this.abort.abort()
     this.reactRoot.unmount()
+    this.removeOutline?.()
     this.outlinePass.dispose()
+    this.cameraControls.dispose()
     this.networkOverlay.dispose()
     this.shadeOverrideMaterials.forEach(m => m.dispose())
     this.shadeOverrideMaterials.clear()

@@ -1,29 +1,33 @@
 import type { ContainerApi } from '@tweakpane/core'
 import type { BufferGeometry } from 'three'
 import type { GLTF } from 'three/examples/jsm/Addons.js'
+import type { MeshBasicNodeMaterial } from 'three/webgpu'
+import type { GrassUniforms } from './grassMaterial'
 import {
   Box3,
-  DoubleSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
-  ShaderMaterial,
   Sphere,
   Vector3,
 } from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { WithEditorHelper } from '../../Editor/WithEditorHelper'
 import Game from '../../Game'
+import { PushPoints } from '../../Shaders/Nodes/pushPoints'
 import { randRange } from '../../Utils/Math'
 import Entity3D from '../../World/Entity3D'
-import FragmentShader from './Fragment.glsl'
-import VertexShader from './Vertex.glsl'
+import { createGrassMaterial, createGrassUniforms } from './grassMaterial'
 
 const MAX_PUSH_POINTS = 150
 
 export default class Grass extends WithEditorHelper(Entity3D) {
-  material?: ShaderMaterial
-  lowResMaterial?: ShaderMaterial
+  material?: MeshBasicNodeMaterial
+  lowResMaterial?: MeshBasicNodeMaterial
+  /** Shared by both materials, so they sway together */
+  readonly uniforms: GrassUniforms = createGrassUniforms()
+  /** Shared by both materials */
+  readonly pushPoints = new PushPoints(MAX_PUSH_POINTS)
   instancePositions: Float32Array
   mesh?: Mesh
   lowResMesh?: Mesh
@@ -128,20 +132,7 @@ export default class Grass extends WithEditorHelper(Entity3D) {
       )
       geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new Sphere())
 
-      const material = new ShaderMaterial({
-        vertexShader: VertexShader,
-        fragmentShader: FragmentShader,
-        side: DoubleSide,
-        uniforms: {
-          uTime: { value: 0 },
-          pushPositions: {
-            value: Array.from({ length: MAX_PUSH_POINTS }, () => new Vector3()),
-          },
-          pushRadii: {
-            value: Array.from({ length: MAX_PUSH_POINTS }).fill(0),
-          },
-        },
-      })
+      const material = createGrassMaterial(this.pushPoints, this.uniforms)
 
       const mesh = new Mesh(geometry, material)
       mesh.position.copy(position)
@@ -219,27 +210,11 @@ export default class Grass extends WithEditorHelper(Entity3D) {
   }
 
   setPushPoints(points: { position: Vector3, radius: number }[]) {
-    const materials = [this.material, this.lowResMaterial].filter(
-      (m): m is ShaderMaterial => !!m,
-    )
-    if (!materials.length)
-      return
-
-    for (let i = 0; i < MAX_PUSH_POINTS; i++) {
-      if (points[i]) {
-        materials.forEach((mat) => {
-          mat.uniforms.pushPositions.value[i].copy(points[i].position)
-          mat.uniforms.pushRadii.value[i] = points[i].radius
-        })
-      }
-    }
+    this.pushPoints.set(points)
   }
 
   update(delta: number): void {
-    [this.material, this.lowResMaterial].forEach((mat) => {
-      if (mat)
-        mat.uniforms.uTime.value += delta
-    })
+    this.uniforms.uTime.value += delta
 
     const cameraPos = Game.instance().camera.worldPosition
     const distance = cameraPos.distanceTo(this.mesh!.position)

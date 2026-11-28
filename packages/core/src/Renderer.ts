@@ -1,15 +1,26 @@
 import type { FpsGraphBladeApi } from '@tweakpane/plugin-essentials'
-import type { Object3D, WebGLRendererParameters } from 'three'
-import { Mesh, PCFSoftShadowMap, SkeletonHelper, SkinnedMesh, WebGLRenderer } from 'three'
-import { ThreePerf } from 'three-perf'
-import { EffectComposer, OutputPass, RenderPass } from 'three/examples/jsm/Addons.js'
+import type { Node, Object3D, WebGPURendererParameters } from 'three/webgpu'
+import { Inspector } from 'three/examples/jsm/inspector/Inspector.js'
+import { pass } from 'three/tsl'
+import { InspectorBase, Mesh, PCFShadowMap, RenderPipeline, SkeletonHelper, SkinnedMesh, WebGPURenderer } from 'three/webgpu'
 import Game from './Game'
 import FrameLimiter from './Utils/FrameLimiter'
 import SkeletonAxesHelper from './Utils/SkeletonAxesHelper'
 
+/**
+ * A post-processing step: gets the picture so far (the scene, then each earlier effect) and returns the new one.
+ * See `Renderer.addEffect()`
+ */
+export type RenderEffect = (input: Node<'vec4'>) => Node<'vec4'>
+
+export type RendererParameters = WebGPURendererParameters
+
 export default class Renderer {
-  instance: WebGLRenderer
-  composer: EffectComposer
+  instance: WebGPURenderer
+  /** Draws the scene pass through the effects added with `addEffect()`, then tone maps and converts the color space */
+  pipeline: RenderPipeline
+  /** The scene rendered from the game's camera: the effects' first input */
+  scenePass: ReturnType<typeof pass>
   fpsGraph: FpsGraphBladeApi | undefined
 
   options = {
@@ -18,11 +29,15 @@ export default class Renderer {
     armature: false,
   }
 
-  perf?: ThreePerf
+  /** three.js's inspector (frame timings, draw calls, memory), while one is attached. See `attachInspector()` */
+  inspector?: Inspector
   armatureHelpers: Object3D[] = []
 
   fps = 0
+  /** Frames drawn since the game started, in a VR headset too */
+  frames = 0
   private frameLimiter = new FrameLimiter()
+  private effects: { name: string, effect: RenderEffect }[] = []
 
   /**
    * The most frames to render per second, 0 for no limit. Only throttles rendering:
@@ -39,52 +54,37 @@ export default class Renderer {
   private _fpsFrameCount = 0
   private _fpsElapsed = 0
 
-  constructor(parameters?: WebGLRendererParameters) {
-    this.instance = new WebGLRenderer(parameters)
+  constructor(parameters: RendererParameters = {}) {
+    // WebGL 2 unless asked otherwise: the same devices as before, while the WebGPU backend gets tested
+    this.instance = new WebGPURenderer({ forceWebGL: true, ...parameters })
 
-    this.composer = new EffectComposer(this.instance)
-    this.composer.addPass(
-      new RenderPass(
-        Game.instance().scene,
-        Game.instance().camera.instance,
-      ),
-    )
-    this.composer.addPass(new OutputPass())
+    this.scenePass = pass(Game.instance().scene, Game.instance().camera.instance)
+    this.pipeline = new RenderPipeline(this.instance, this.scenePass)
 
     this.instance.shadowMap.enabled = true
-    this.instance.shadowMap.type = PCFSoftShadowMap
+    this.instance.shadowMap.type = PCFShadowMap
     this.instance.setSize(
       Game.instance().sizes.width,
       Game.instance().sizes.height,
     )
     this.instance.setClearColor('#181818')
     this.instance.setPixelRatio(Game.instance().sizes.pixelRatio)
-    this.composer.setPixelRatio(Game.instance().sizes.pixelRatio)
-    this.composer.setSize(
-      Game.instance().sizes.width,
-      Game.instance().sizes.height,
-    )
+    // The pipeline renders several times a frame (the scene, the effects), so `info` counts whole frames: reset in
+    // update() rather than by every render
+    this.instance.info.autoReset = false
 
     const renderDebug = Game.instance().debug.ui?.addFolder({ title: 'Render' })
 
     if (renderDebug) {
-      this.perf = new ThreePerf({
-        anchorX: 'right',
-        anchorY: 'bottom',
-        memory: true,
-        // Count the frames actually rendered. Overclocking estimates the FPS the GPU could reach from idle time,
-        // which reads above maxFps (or the refresh rate) when frames are capped
-        overClock: false,
-        guiVisible: false,
-        domElement: document.body,
-        renderer: this.instance,
-      })
-
       renderDebug.addBinding(this, 'maxFps', {
         label: 'max fps (0 = off)',
         min: 0,
         max: 240,
         step: 1,
+      })
+
+      renderDebug.addBinding(this.options, 'perf', { label: 'inspector' }).on('change', () => {
+        this.setInspector(this.options.perf)
       })
 
       renderDebug.addBinding(this.options, 'wireframe').on('change', () => {
@@ -120,6 +120,82 @@ export default class Renderer {
     }
   }
 
+  /** Whether the WebGPU backend renders, rather than the WebGL 2 fallback */
+  get isWebGPU(): boolean {
+    return (this.instance.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true
+  }
+
+  /**
+   * Add a post-processing step after the scene and the effects added before it. Adding one with a name that is taken
+   * replaces it in place. Returns a function that removes it again.
+   *
+   * ```ts
+   * renderer.addEffect('bloom', input => input.add(bloom(input)))
+   * ```
+   */
+  addEffect(name: string, effect: RenderEffect): () => void {
+    const entry = { name, effect }
+    const index = this.effects.findIndex(e => e.name === name)
+    if (index >= 0)
+      this.effects[index] = entry
+    else
+      this.effects.push(entry)
+    this.rebuildPipeline()
+
+    return () => this.removeEffect(name, entry)
+  }
+
+  removeEffect(name: string, only?: { name: string, effect: RenderEffect }) {
+    const index = this.effects.findIndex(e => e.name === name && (!only || e === only))
+    if (index < 0)
+      return
+    this.effects.splice(index, 1)
+    this.rebuildPipeline()
+  }
+
+  /** The names of the effects, in the order they apply */
+  get effectNames(): string[] {
+    return this.effects.map(e => e.name)
+  }
+
+  private rebuildPipeline() {
+    let output = this.scenePass as unknown as Node<'vec4'>
+    for (const { effect } of this.effects)
+      output = effect(output)
+    this.pipeline.outputNode = output
+    this.pipeline.needsUpdate = true
+  }
+
+  /**
+   * Start three.js's inspector: frame and GPU timings, draw calls, memory, the shaders. Its UI goes into `container`,
+   * or floats over the page next to the canvas without one. Replaces an inspector that runs already.
+   */
+  attachInspector(container?: HTMLElement): Inspector {
+    this.detachInspector()
+    const inspector = new Inspector()
+    // Placed before the renderer gets it, which otherwise puts it next to the canvas
+    container?.appendChild(inspector.domElement)
+    this.inspector = inspector
+    this.instance.inspector = inspector
+    return inspector
+  }
+
+  /** Stop the inspector and remove its UI, so its GPU timing no longer costs anything */
+  detachInspector() {
+    if (!this.inspector)
+      return
+    this.inspector = undefined
+    // Swapping it out disposes the old one
+    this.instance.inspector = new InspectorBase()
+  }
+
+  private setInspector(visible: boolean) {
+    if (visible)
+      this.attachInspector()
+    else
+      this.detachInspector()
+  }
+
   /** Whether a WebXR session is rendering to a headset */
   get xrPresenting(): boolean {
     return this.instance.xr.isPresenting
@@ -136,11 +212,6 @@ export default class Renderer {
       Game.instance().sizes.height,
     )
     this.instance.setPixelRatio(Game.instance().sizes.pixelRatio)
-    this.composer.setPixelRatio(Game.instance().sizes.pixelRatio)
-    this.composer.setSize(
-      Game.instance().sizes.width,
-      Game.instance().sizes.height,
-    )
   }
 
   /**
@@ -155,13 +226,11 @@ export default class Renderer {
     return this.frameLimiter.shouldRender(now)
   }
 
-  update(delta: number) {
-    this.perf?.begin()
-    // Before rendering so uniforms holding it (rain, smoke) see this frame's camera
-    Game.instance().camera.updateWorldPosition()
+  /** Draw one frame: through the pipeline, or straight to the headset in XR */
+  render() {
     if (this.xrPresenting) {
-      // EffectComposer renders a single view, so in XR render straight to the headset's stereo cameras.
-      // The renderer's toneMapping and outputColorSpace stand in for the OutputPass
+      // The pipeline renders a single view, so in XR render straight to the headset's stereo cameras.
+      // The renderer's toneMapping and outputColorSpace stand in for the pipeline's output transform
       this.instance.render(Game.instance().scene, Game.instance().camera.instance)
       // The browser window otherwise stays on its last frame (black, mostly) while the headset plays
       const xr = Game.instance().xr
@@ -169,10 +238,17 @@ export default class Renderer {
         xr.renderMirror()
     }
     else {
-      this.composer.render(delta)
+      this.pipeline.render()
     }
+  }
+
+  update(delta: number) {
+    this.frames++
+    this.instance.info.reset()
+    // Before rendering so uniforms holding it (rain, smoke) see this frame's camera
+    Game.instance().camera.updateWorldPosition()
+    this.render()
     Game.instance().camera.afterRender()
-    this.perf?.end()
 
     this._fpsFrameCount++
     this._fpsElapsed += delta

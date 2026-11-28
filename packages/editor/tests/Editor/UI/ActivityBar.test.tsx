@@ -13,10 +13,15 @@ vi.mock('../../../src/Editor/UI/ActivityBar.module.css', () => ({
 afterEach(cleanup)
 
 describe('activityBar', () => {
-  it('offers the scene editor, then the server and the plugins', () => {
+  it('offers the scene editor, then graphs, the server and the plugins', () => {
     render(<ActivityBar active="scene" onSelect={() => {}} />)
 
-    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Scene', 'Server', 'Plugins'])
+    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      'Scene',
+      'Graphs',
+      'Server',
+      'Plugins',
+    ])
   })
 
   it('marks the active view', () => {

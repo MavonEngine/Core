@@ -22,11 +22,15 @@ import type { DatabaseSource } from './Stats/DatabaseInspector'
 import type { ServerMetricsOptions, ServerMetricsSource } from './Stats/ServerMetrics'
 import type { WorldInspectorSource } from './Stats/WorldInspector'
 import { Buffer } from 'node:buffer'
-import { watch } from 'node:fs'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { existsSync, watch } from 'node:fs'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import geckos from '@geckos.io/server'
 import BaseGame from '../../BaseGame'
+import { readGraph } from '../../Graph/loadGraphFile'
+import { logicGraphUsers, registerLogicGraphServerObject, reloadLogicGraph, setGraphSource } from '../../Graph/Logic/logicGraphObject'
+import { pluginNodeType, registerNode } from '../../Graph/NodeRegistry'
+import { GRAPHS_DIR } from '../../Graph/types'
 import { currentNotifier, setNotifier } from '../../Notifications/Notifiable'
 import { hasMigrations, runPluginMigrations } from '../../Plugins/Database/migrate'
 import { tableName } from '../../Plugins/Database/tables'
@@ -37,6 +41,7 @@ import { publishedFile } from '../../Plugins/publish'
 import DatabaseQueueDriver, { QUEUE_PACKAGE, queueMigrations } from '../../Queue/drivers/DatabaseQueueDriver'
 import Queue from '../../Queue/Queue'
 import { readSceneFile, sceneFilePath, sceneNameOf } from '../../Scene/loadSceneFile'
+import { registerPrimitiveServerObjects } from '../../Scene/primitiveSceneObjects'
 import { registerSceneObject, sceneObjectKey } from '../../Scene/SceneObjectRegistry'
 import NetRecorder from '../Debug/NetRecorder'
 import { rememberJson, tapMessages } from '../Debug/tap'
@@ -177,6 +182,8 @@ const MAX_SYNC_EVENT_IDS = 20
 
 const vec = ({ x, y, z }: { x: number, y: number, z: number }) => ({ x, y, z })
 
+const GRAPH_FILE_EXT = '.graph.json'
+
 export default abstract class Server<TClient extends GameObject> implements ServerMetricsSource, WorldInspectorSource, NetDebugSource, DatabaseSource {
   game: BaseGame
 
@@ -207,6 +214,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private lastStates = new Map<string, SyncStateSummary>()
   /** The transport's byte counters per channel, as they were when bandwidth was last recorded */
   private transportBytes = new Map<string, { sent: number, received: number }>()
+  /** When each connection opened and when its client was last heard from (ping or command), for the disconnect log */
+  private peerTimes = new Map<string, { connectedAt: number, lastHeardAt: number }>()
 
   private onHttpCallback?: (httpServer: Express) => void
   private options: ServerOptions
@@ -218,6 +227,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   private dashboardWatching = false
   private timers: ReturnType<typeof setInterval>[] = []
   private sceneWatcher?: FSWatcher
+  private graphWatcher?: FSWatcher
 
   /** File of the scene last opened with `openScene()` */
   activeSceneFile?: string
@@ -263,6 +273,15 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.game = new BaseGame(logger, phyicsWorld)
     this.game.world = new ServerWorld()
+    registerPrimitiveServerObjects()
+    registerLogicGraphServerObject()
+    // Logic graphs come from the project's graphs/ and the plugins', read fresh each time a scene builds them
+    setGraphSource(async (name) => {
+      const root = this.projectRoot
+      if (!root)
+        throw new Error('Set the server\'s `root` option to load logic graphs')
+      return readGraph(root, name)
+    })
 
     // Asked for every connection, before it gets a channel: what is returned becomes the channel's userData
     this.gameSocket = geckos({
@@ -305,6 +324,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       // Before anything is sent or listened to, so the game's own messages are recorded too
       this.tapChannel(channel)
 
+      const connectedAt = Date.now()
+      this.peerTimes.set(channel.id!, { connectedAt, lastHeardAt: connectedAt })
+      const heard = () => {
+        const times = this.peerTimes.get(channel.id!)
+        if (times)
+          times.lastHeardAt = Date.now()
+      }
+
       const client = this.onConnection(channel)
       if (client instanceof Player)
         client.channel = channel
@@ -317,6 +344,7 @@ export default abstract class Server<TClient extends GameObject> implements Serv
       channel.on(ClientCommand.CL_EDITOR, () => this.attachEditor(channel))
 
       channel.on('ping', () => {
+        heard()
         const pong = () => channel.emit('pong')
 
         if (this.latencySimulator) {
@@ -327,17 +355,34 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         }
       })
 
-      channel.onDisconnect(() => {
+      // geckos passes the peer connection's state: 'disconnected' (packets stopped), 'failed', or 'closed' (on purpose)
+      channel.onDisconnect((reason?: string) => {
         const playerId = channel.id!
+        const now = Date.now()
+        const times = this.peerTimes.get(playerId)
+        this.peerTimes.delete(playerId)
+        const connectedFor = times
+          ? now - times.connectedAt
+          : null
+        const lastHeardAgo = times
+          ? now - times.lastHeardAt
+          : null
+        const seconds = (ms: number | null) => ms === null
+          ? 'n/a'
+          : `${(ms / 1000).toFixed(1)}s`
+        const summary = `${reason ?? 'unknown'} after ${seconds(connectedFor)}, last heard from ${seconds(lastHeardAgo)} ago`
 
-        this.net.event('disconnect', { peer: playerId })
+        this.net.event('disconnect', {
+          peer: playerId,
+          info: { reason: reason ?? null, connectedFor, lastHeardAgo },
+        })
         this.lastStates.delete(playerId)
         // Count what it sent and received since the last sample before its counters are gone
         this.recordTransportBytes(channel)
         this.transportBytes.delete(playerId)
 
         if (this.editorChannels.delete(playerId)) {
-          this.logger.info(`Editor disconnected: ${playerId}`)
+          this.logger.info(`Editor disconnected: ${playerId} (${summary})`)
           return
         }
 
@@ -373,11 +418,14 @@ export default abstract class Server<TClient extends GameObject> implements Serv
           }
         })
 
-        this.logger.info('Disconnected', playerId)
+        this.logger.info(`Disconnected: ${playerId} (${summary})`)
         this.logger.info(`${(this.game.world as ServerWorld).players.length - 1} total players connected`)
       })
 
-      channel.on('command', data => this.bufferIncomingCommand(channel, data))
+      channel.on('command', (data) => {
+        heard()
+        this.bufferIncomingCommand(channel, data)
+      })
     })
 
     this.game.onUpdate(delta => this.tick(delta))
@@ -884,6 +932,11 @@ export default abstract class Server<TClient extends GameObject> implements Serv
         registerSceneObject({ ...definition, plugin: loaded.package })
         return sceneObjectKey({ ...definition, plugin: loaded.package })
       },
+      registerNode: (definition) => {
+        const type = pluginNodeType(loaded.package, definition.type)
+        registerNode({ ...definition, type, plugin: loaded.package })
+        return type
+      },
     }), this.logger, 'server')
     return host
   }
@@ -1279,8 +1332,10 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
-    if (options.watch ?? !!this.options.client?.dev)
+    if (options.watch ?? !!this.options.client?.dev) {
       this.watchScene(file)
+      this.watchGraphs()
+    }
 
     return loaded
   }
@@ -1321,6 +1376,42 @@ export default abstract class Server<TClient extends GameObject> implements Serv
   }
 
   /**
+   * Logic graphs running here pick up their graph file's changes (the editor saved it), from the start. Only the
+   * project's graphs/: plugins' graphs change when the plugin is updated, which restarts the server anyway
+   */
+  private watchGraphs() {
+    const root = this.projectRoot
+    if (this.graphWatcher || !root)
+      return
+    const dir = join(root, GRAPHS_DIR)
+    if (!existsSync(dir))
+      return
+
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
+    this.graphWatcher = watch(dir, (_event, changed) => {
+      if (!changed?.endsWith(GRAPH_FILE_EXT))
+        return
+      const name = changed.slice(0, -GRAPH_FILE_EXT.length)
+      clearTimeout(timers.get(name))
+      timers.set(name, setTimeout(() => {
+        timers.delete(name)
+        if (!logicGraphUsers(name))
+          return
+        try {
+          const reached = reloadLogicGraph(name, readGraph(root, name))
+          this.logger.info(`Logic graph ${name} changed, restarted it in ${reached} object${reached === 1
+            ? ''
+            : 's'}`)
+        }
+        catch (err) {
+          this.logger.error(`Logic graph ${name} changed but can't run, keeping the current one: ${(err as Error).message}`)
+        }
+      }, 50))
+    })
+    this.graphWatcher.on('error', err => this.logger.warn(`Stopped watching graphs: ${err.message}`))
+  }
+
+  /**
    * Stop the metric sampling and logging timers, the scene watcher, the queue and the plugins, then close the database
    * once the running jobs and plugins' `destroy()` finished.
    * The returned promise settles once the database is closed, and never rejects.
@@ -1335,6 +1426,8 @@ export default abstract class Server<TClient extends GameObject> implements Serv
 
     this.sceneWatcher?.close()
     this.sceneWatcher = undefined
+    this.graphWatcher?.close()
+    this.graphWatcher = undefined
 
     const draining = this.queue.stop()
 

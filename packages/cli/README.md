@@ -380,7 +380,7 @@ Client tools, for the game tabs open while Vite serves the client in dev:
 | `network_timeline` | The server's records for one tab and the tab's own, merged by time |
 | `client_logs` | Console output, uncaught errors and unhandled rejections, filtered by level and text |
 | `client_screenshot` | What the tab renders, as an image (the WebGL canvas, without HTML UI) |
-| `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, composer passes, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
+| `client_trace` | Records a few seconds of the tab and analyses it: frame times, render CPU vs GPU, the render pipeline and its effects, ticks, WebGL work per frame, the bottleneck, and the worst hitches with their causes. Saves a flame chart trace file |
 | `compare_entity` | One entity on the server next to a tab's copy: position / rotation / scale deltas and differing fields |
 
 Plugin tools:
@@ -427,7 +427,7 @@ The server scene and entity tools read `GET /api/game/dev/*` on the game server.
 
 The client tools go through the dev bridge of the Vite plugin in `@mavonengine/core/vite.config` (Vite 8). In dev it adds a small module to the page that answers over Vite's hot-reload WebSocket, and serves `GET /__mavonengine/clients` to localhost, or with `MAVONENGINE_METRICS_TOKEN` as bearer token when that is set for the dev server. Builds never include it. Turn it off with `mavonEnginePlugins({ devBridge: false })`.
 
-`client_trace` patches the tab only while it records and puts everything back afterwards. It times every frame and composer pass, counts the WebGL calls on the context, keeps slow single calls (shader compiles, texture uploads, `readPixels` / `getError` stalls), long animation frames with the scripts that ran, and your own `performance.measure()` spans. GPU time per frame needs `EXT_disjoint_timer_query_webgl2` (Chrome and Edge on most GPUs; the three-perf panel pauses while tracing since it uses the same queries). JS call stacks come from the [JS Self-Profiling API](https://wicg.github.io/js-self-profiling/) in Chromium browsers: the Vite plugin serves dev pages with `Document-Policy: js-profiling` for it, so reload tabs opened before you updated. The trace file is [Chrome Trace Event](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) JSON with tracks for frames, passes, GPU time, ticks, JS samples and slow WebGL calls: open it in [Perfetto](https://ui.perfetto.dev), `chrome://tracing` or [speedscope](https://www.speedscope.app). Keep the tab in the foreground while it records, browsers throttle hidden tabs.
+`client_trace` patches the tab only while it records and puts everything back afterwards. It times every frame and the render pipeline, counts the WebGL calls on the context (so it needs the WebGL 2 backend, the default), keeps slow single calls (shader compiles, texture uploads, `readPixels` / `getError` stalls), long animation frames with the scripts that ran, and your own `performance.measure()` spans. GPU time per frame needs `EXT_disjoint_timer_query_webgl2` (Chrome and Edge on most GPUs; the inspector's GPU timing pauses while tracing since it uses the same queries). JS call stacks come from the [JS Self-Profiling API](https://wicg.github.io/js-self-profiling/) in Chromium browsers: the Vite plugin serves dev pages with `Document-Policy: js-profiling` for it, so reload tabs opened before you updated. The trace file is [Chrome Trace Event](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU) JSON with tracks for frames, passes, GPU time, ticks, JS samples and slow WebGL calls: open it in [Perfetto](https://ui.perfetto.dev), `chrome://tracing` or [speedscope](https://www.speedscope.app). Keep the tab in the foreground while it records, browsers throttle hidden tabs.
 
 The network tools read what both sides record while developing: every message through the game socket, the engine's and your own, with its size, and events such as `connect`, `disconnect`, `dropped` (the transport dropped a message), `sync_enter` / `sync_leave` (entities coming into or leaving a player's sync distance) and, on a client, `state_gap` (state updates that never arrived) and `state_out_of_order`. Each side keeps its last 2000 records, and 8 MB of their payloads. The server records when `NODE_ENV` is not `production` and serves them on `GET /api/game/dev/net/packets`, `/packets/:id` and `/sync`; a tab records while the dev bridge or the editor runs. Nothing is recorded, and the socket is left untouched, in a production build. `network_timeline` orders the two sides by their own clocks, which line up on one machine.
 
@@ -511,6 +511,41 @@ export default defineServerPlugin({
 ```
 
 A hook that throws is logged and turned off for that plugin, and the game keeps running.
+
+### Graphs and nodes
+
+A plugin can ship material and logic graphs: put `<name>.graph.json` files (made in the editor's Graphs view, then copied over) in a `graphs/` directory in the package. They go by `<package>:<name>`, e.g. `my-custom-plugin:ocean`, wherever a graph is picked: a primitive's material graph, a Logic Graph object's graph. They are served at `/graphs/<package>/<name>.graph.json`, shipped in every release, and the server reads them from the package. The editor lists them under the project's graphs, read-only: *Copy to project* makes an editable copy.
+
+It can also add node types, from `setup`. Their key in graph files is `<package>:<type>`, which `registerNode` returns. Material nodes take their TSL implementation as a second argument; logic nodes need registering in the server entry too, for graphs that run there:
+
+```ts
+// client.ts
+import { defineClientPlugin } from '@mavonengine/core/Plugins/types'
+import { sin, time } from 'three/tsl'
+
+export default defineClientPlugin({
+  setup(ctx) {
+    ctx.registerNode({
+      type: 'wobble',
+      label: 'Wobble',
+      category: 'Math',
+      kinds: ['material', 'logic'],
+      inputs: {
+        speed: { type: 'float', default: 1 }
+      },
+      outputs: {
+        value: { type: 'float' }
+      },
+      // In logic graphs
+      eval: ({ speed }, { time }) => ({
+        value: Math.sin(time * Number(speed))
+      }),
+    }, ({ speed }) => ({
+      value: sin(time.mul(speed))
+    }))
+  },
+})
+```
 
 ### Dev entries
 

@@ -12,7 +12,7 @@
   "dependencies": {
     "@geckos.io/client": "^3.0.2",
     "@template/server": "*",
-    "vue": "^3.5.15"
+    "vue": "^3.5.46"
   },
   "devDependencies": {
     "@tweakpane/plugin-essentials": "^0.2.1",
@@ -20,7 +20,6 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "0.187.0",
-    "three-perf": "^1.0.11",
     "tweakpane": "^4.0.5",
     "typescript": "7.0.2",
     "vite": "^8.3.8",

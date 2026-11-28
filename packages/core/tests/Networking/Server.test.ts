@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import winston from 'winston'
+import { _resetLogicGraphs } from '../../src/Graph/Logic/logicGraphObject'
 import Player from '../../src/Networking/Entities/Player'
 import { ClientCommand, ServerCommand } from '../../src/Networking/Server/Commands'
 import Server from '../../src/Networking/Server/Server'
@@ -98,6 +99,23 @@ describe('server', () => {
 
     expect((server.game.world as ServerWorld).players).toHaveLength(0)
     expect(server.game.world.entities.items.has(randomId)).toBe(false)
+  })
+  it('logs why a player disconnected', () => {
+    const server = new TestServer(logger)
+    const info = vi.spyOn(server.logger, 'info')
+
+    let disconnectCallback: (reason?: string) => void = () => { }
+    mockGeckosOnConnection.mock.calls[0][0]({
+      id: 'p-reason',
+      on: vi.fn(),
+      onDisconnect: (cb: (reason?: string) => void) => {
+        disconnectCallback = cb
+      },
+    })
+
+    disconnectCallback('disconnected')
+
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/^Disconnected: p-reason \(disconnected after .*s, last heard from .*s ago\)$/))
   })
 
   it('should respond with pong', () => {
@@ -1101,7 +1119,11 @@ describe('server', () => {
           peer: 'p1',
           tick: undefined,
           sequenceId: undefined,
-          info: undefined,
+          info: {
+            reason: null,
+            connectedFor: expect.any(Number),
+            lastHeardAgo: expect.any(Number),
+          },
         },
       ])
 
@@ -1299,6 +1321,55 @@ describe('server', () => {
       expect([
         ...server.game.world.entities.items.keys(),
       ]).toEqual(['crate2'])
+    })
+
+    it('restarts the logic graphs running here when their graph file changes', async () => {
+      _resetLogicGraphs()
+      const graph = (x: number) => JSON.stringify({
+        kind: 'logic',
+        name: 'mover',
+        nodes: [
+          { id: 'tick', type: 'event.tick' },
+          {
+            id: 'put',
+            type: 'entity.setPosition',
+            values: {
+              position: [x, 0, 0],
+            },
+          },
+        ],
+        edges: [
+          {
+            from: { node: 'tick', port: 'then' },
+            to: { node: 'put', port: 'run' },
+          },
+        ],
+      })
+      writeFile(join(root, 'graphs', 'mover.graph.json'), graph(1))
+      writeFile(join(root, 'scenes', 'main.json'), JSON.stringify({
+        objects: [
+          {
+            id: 'brain',
+            type: 'LogicGraph',
+            props: { graph: 'mover', side: 'server' },
+          },
+        ],
+      }))
+      const server = new TestServer(logger, undefined, { root })
+      server.openScene('main', { watch: true })
+      const brain = () => server.game.world.entities.items.get('brain')!
+      await vi.waitFor(() => {
+        server.game.update(0.1)
+        expect(brain().position.x).toBe(1)
+      }, { timeout: 3000 })
+
+      writeFile(join(root, 'graphs', 'mover.graph.json'), graph(5))
+
+      await vi.waitFor(() => {
+        server.game.update(0.1)
+        expect(brain().position.x).toBe(5)
+      }, { timeout: 3000 })
+      server.stop()
     })
 
     it('keeps the current scene when the changed file is invalid', async () => {

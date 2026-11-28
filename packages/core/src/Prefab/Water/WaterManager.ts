@@ -57,7 +57,7 @@ export default class WaterManager {
       label: 'Height',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uBigWavesElevation.value = value
+        w.uniforms.uBigWavesElevation.value = value
       })
     })
 
@@ -68,7 +68,7 @@ export default class WaterManager {
       label: 'FrequencyX',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uBigWavesFrequency.value.setX(value)
+        w.uniforms.uBigWavesFrequency.value.setX(value)
       })
     })
 
@@ -79,7 +79,7 @@ export default class WaterManager {
       label: 'FrequencyY',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uBigWavesFrequency.value.setY(value)
+        w.uniforms.uBigWavesFrequency.value.setY(value)
       })
     })
 
@@ -90,7 +90,7 @@ export default class WaterManager {
       label: 'Speed',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uBigWavesSpeed.value = value
+        w.uniforms.uBigWavesSpeed.value = value
       })
     })
 
@@ -99,7 +99,7 @@ export default class WaterManager {
       view: 'color',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uSurfaceColor.value.set(value)
+        w.uniforms.uSurfaceColor.value.set(value)
       })
     })
 
@@ -108,7 +108,7 @@ export default class WaterManager {
       view: 'color',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uDepthColor.value.set(value)
+        w.uniforms.uDepthColor.value.set(value)
       })
     })
 
@@ -119,7 +119,7 @@ export default class WaterManager {
       label: 'uColorOffset',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uColorOffset.value = value
+        w.uniforms.uColorOffset.value = value
       })
     })
 
@@ -130,7 +130,7 @@ export default class WaterManager {
       label: 'uColorMultiplier',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uColorMultiplier.value = value
+        w.uniforms.uColorMultiplier.value = value
       })
     })
 
@@ -141,7 +141,7 @@ export default class WaterManager {
       label: 'Sun Reflection',
     }).on('change', ({ value }) => {
       this.waters.forEach((w) => {
-        w.material.uniforms.uSunReflectionStrength.value = value
+        w.uniforms.uSunReflectionStrength.value = value
       })
     })
   }

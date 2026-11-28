@@ -1,7 +1,7 @@
 {
   "name": "@mavonengine/chat",
   "type": "module",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "MavonEngine plugin: in-game text chat with rate limiting, mutes, proximity chat and an admin API",
   "license": "MIT",
   "repository": {
@@ -53,7 +53,7 @@
     "@types/node": "^24.0.0",
     "express": "5.3.0",
     "jsdom": "^31.0.1",
-    "kysely": "^0.29.8",
+    "kysely": "^0.29.9",
     "tsup": "^9.0.0",
     "typescript": "7.0.2",
     "vitest": "^5.1.1"

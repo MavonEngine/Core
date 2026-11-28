@@ -1,4 +1,5 @@
-import type { Intersection, Object3D, Raycaster, WebXRManager, XRGripSpace, XRTargetRaySpace } from 'three'
+import type { Intersection, Object3D, Raycaster, XRGripSpace, XRTargetRaySpace } from 'three'
+import type { WebGPURenderer } from 'three/webgpu'
 import { BufferGeometry, Line, LineBasicMaterial, Matrix4, Vector2, Vector3 } from 'three'
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js'
 import { applyRadialDeadzone } from './GamepadManager'
@@ -193,7 +194,7 @@ export default class XRInput extends EventEmitter {
   /** The controllers by the slot three.js gives them, which isn't tied to a hand */
   private readonly slots: { ray: XRTargetRaySpace, grip: XRGripSpace, controller?: XRController }[] = []
 
-  constructor(xr: WebXRManager, rig: Object3D, options: XRInputOptions = {}) {
+  constructor(xr: Pick<WebGPURenderer['xr'], 'getController' | 'getControllerGrip'>, rig: Object3D, options: XRInputOptions = {}) {
     super()
 
     const modelFactory = options.controllerModels === false

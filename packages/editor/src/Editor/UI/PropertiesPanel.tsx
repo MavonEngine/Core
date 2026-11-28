@@ -2,7 +2,7 @@ import type { ContainerApi } from '@tweakpane/core'
 import type { Object3D } from 'three'
 import EditorHelper from '@mavonengine/core/Editor/EditorHelper'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mesh, PlaneGeometry } from 'three'
+import { Mesh } from 'three'
 import { Pane } from 'tweakpane'
 import styles from './PropertiesPanel.module.css'
 
@@ -133,6 +133,40 @@ function ReadonlyRow({ label, value }: { label: string, value: string }) {
   )
 }
 
+function SelectRow({ label, value, options, onChange, refresh }: {
+  label: string
+  value: string
+  options: { value: string, label: string }[]
+  onChange(v: string): void
+  refresh?(): Promise<unknown>
+}) {
+  // Re-render once the options are refreshed
+  const [, setVersion] = useState(0)
+  useEffect(() => {
+    let live = true
+    refresh?.().then(() => live && setVersion(v => v + 1), () => {})
+    return () => {
+      live = false
+    }
+  }, [refresh])
+
+  // The current value stays choosable even when the list doesn't have it (not loaded yet, or removed)
+  const all = options.some(option => option.value === value)
+    ? options
+    : [
+        ...options,
+        { value, label: value },
+      ]
+  return (
+    <div className={styles.propertyRow}>
+      <span className={styles.propertyLabelWide}>{label}</span>
+      <select className={styles.select} value={value} onChange={e => onChange(e.target.value)}>
+        {all.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </div>
+  )
+}
+
 function SliderRow({ label, value, min, max, step, onChange }: { label: string, value: number, min: number, max: number, step?: number, onChange(v: number): void }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const s = step ?? 1
@@ -218,7 +252,6 @@ export default function PropertiesPanel() {
   const [expandTransform, setExpandTransform] = useState(true)
   const [expandInfo, setExpandInfo] = useState(true)
   const [expandMaterial, setExpandMaterial] = useState(true)
-  const [expandGeometry, setExpandGeometry] = useState(true)
   const [expandLight, setExpandLight] = useState(true)
 
   /* listen for selection */
@@ -283,7 +316,6 @@ export default function PropertiesPanel() {
         ? object.material
         : [object.material])
     : []
-  const isPlane = isMesh && object.geometry instanceof PlaneGeometry
   const helperProperties = EditorHelper.from(object)?.attachment?.properties ?? null
 
   return (
@@ -388,75 +420,7 @@ export default function PropertiesPanel() {
         </>
       )}
 
-      {/* Geometry (plane only) */}
-      {isPlane && (
-        <>
-          <div className={styles.divider} />
-          <SectionHeader title="Geometry" expanded={expandGeometry} onToggle={() => setExpandGeometry(v => !v)} />
-          {expandGeometry && (
-            <>
-              <SliderRow
-                label="Width"
-                min={0.1}
-                max={100}
-                step={0.1}
-                value={(object as Mesh & { geometry: PlaneGeometry }).geometry.parameters.width}
-                onChange={(v) => {
-                  const mesh = object as Mesh & { geometry: PlaneGeometry }
-                  const { height, widthSegments, heightSegments } = mesh.geometry.parameters
-                  mesh.geometry.dispose()
-                  mesh.geometry = new PlaneGeometry(v, height, widthSegments, heightSegments)
-                  tick()
-                }}
-              />
-              <SliderRow
-                label="W Segments"
-                min={1}
-                max={128}
-                step={1}
-                value={(object as Mesh & { geometry: PlaneGeometry }).geometry.parameters.widthSegments}
-                onChange={(v) => {
-                  const mesh = object as Mesh & { geometry: PlaneGeometry }
-                  const { width, height, heightSegments } = mesh.geometry.parameters
-                  mesh.geometry.dispose()
-                  mesh.geometry = new PlaneGeometry(width, height, v, heightSegments)
-                  tick()
-                }}
-              />
-              <SliderRow
-                label="Height"
-                min={0.1}
-                max={100}
-                step={0.1}
-                value={(object as Mesh & { geometry: PlaneGeometry }).geometry.parameters.height}
-                onChange={(v) => {
-                  const mesh = object as Mesh & { geometry: PlaneGeometry }
-                  const { width, widthSegments, heightSegments } = mesh.geometry.parameters
-                  mesh.geometry.dispose()
-                  mesh.geometry = new PlaneGeometry(width, v, widthSegments, heightSegments)
-                  tick()
-                }}
-              />
-              <SliderRow
-                label="H Segments"
-                min={1}
-                max={128}
-                step={1}
-                value={(object as Mesh & { geometry: PlaneGeometry }).geometry.parameters.heightSegments}
-                onChange={(v) => {
-                  const mesh = object as Mesh & { geometry: PlaneGeometry }
-                  const { width, height, widthSegments } = mesh.geometry.parameters
-                  mesh.geometry.dispose()
-                  mesh.geometry = new PlaneGeometry(width, height, widthSegments, v)
-                  tick()
-                }}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      {/* Helper properties (e.g. lights) */}
+      {/* Helper properties (e.g. lights, primitive material and geometry) */}
       {helperProperties && (
         <>
           <div className={styles.divider} />
@@ -484,6 +448,21 @@ export default function PropertiesPanel() {
                   max={field.max}
                   step={field.step}
                   value={field.getValue()}
+                  onChange={(v) => {
+                    field.setValue(v)
+                    tick()
+                  }}
+                />
+              )
+            }
+            if (field.type === 'select') {
+              return (
+                <SelectRow
+                  key={field.label}
+                  label={field.label}
+                  value={field.getValue()}
+                  options={field.options()}
+                  refresh={field.refresh}
                   onChange={(v) => {
                     field.setValue(v)
                     tick()

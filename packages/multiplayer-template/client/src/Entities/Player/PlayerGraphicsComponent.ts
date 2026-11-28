@@ -1,11 +1,10 @@
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import type Character from '../Player'
 import Game from '@mavonengine/core/Game'
 import Entity3D from '@mavonengine/core/World/Entity3D'
 import { Vector3 } from 'three'
 
-/** The model's feet sit this far below the character's position, the center of its collider */
-const FOOT_OFFSET = 0.8
+/** The player's model's feet sit this far below the player's position, the center of its collider */
+const PLAYER_FOOT_OFFSET = 0.8
 /**
  * How quickly the model catches up with the character's position, per second. The position only changes with each
  * tick and network update, 30 times a second and unevenly; following it smoothly every rendered frame keeps the model
@@ -15,26 +14,44 @@ const FOLLOW_RATE = 12
 /** Further than this from the character and the model jumps there instead, e.g. after a respawn */
 const SNAP_DISTANCE = 3
 
+/** What the model follows: its position and rotation, which the network moves */
+export interface ModelSubject {
+  position: Vector3
+  rotation: Vector3
+}
+
+export interface CharacterModelOptions {
+  /** How far below the subject's position its feet are. Default the player's, whose position is its middle */
+  footOffset?: number
+  /** Once the model has loaded and its animations can play */
+  onReady?(): void
+}
+
+/**
+ * The character model (the `character` resource), following a subject smoothly: a player, or an NPC that uses the
+ * same model
+ */
 export default class PlayerGraphicsComponent extends Entity3D {
-  private player: Character
+  private readonly subject: ModelSubject
+  private readonly footOffset: number
+  private readonly onReady?: () => void
   private placed = false
   private readonly target = new Vector3()
 
   private readonly onFrame = (delta: number) => this.follow(delta)
 
-  constructor(player: Character) {
+  constructor(subject: ModelSubject, options: CharacterModelOptions = {}) {
     super()
-    this.player = player
+    this.subject = subject
+    this.footOffset = options.footOffset ?? PLAYER_FOOT_OFFSET
+    this.onReady = options.onReady
     Game.instance().on('beforeRender', this.onFrame)
   }
 
   init() {
     const onLoaded = () => {
       this.initModel(Game.instance().resources.items.character as GLTF)
-
-      // Re-enter the current state so animations start now that the model is ready
-      const currentState = this.player.state.at(-1)
-      currentState?.enter()
+      this.onReady?.()
     }
 
     if (Game.instance().resources.loaded) {
@@ -54,8 +71,8 @@ export default class PlayerGraphicsComponent extends Entity3D {
     if (!this.instance)
       return
 
-    this.target.set(this.player.position.x, this.player.position.y - FOOT_OFFSET, this.player.position.z)
-    const targetYaw = this.player.rotation.y + Math.PI
+    this.target.set(this.subject.position.x, this.subject.position.y - this.footOffset, this.subject.position.z)
+    const targetYaw = this.subject.rotation.y + Math.PI
 
     if (!this.placed || this.instance.position.distanceTo(this.target) > SNAP_DISTANCE) {
       this.instance.position.copy(this.target)

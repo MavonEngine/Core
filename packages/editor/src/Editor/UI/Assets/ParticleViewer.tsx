@@ -2,7 +2,8 @@ import type { Object3D } from 'three'
 import Game from '@mavonengine/core/Game'
 import { getPreviewMap } from '@mavonengine/core/Particles/System/ParticlePreviewRegistry'
 import { useEffect, useRef } from 'react'
-import { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { PerspectiveCamera, Scene } from 'three'
+import { WebGPURenderer } from 'three/webgpu'
 import styles from './ModelViewer.module.css'
 
 function createEmitter(particleName: string, previewScene: Scene) {
@@ -48,13 +49,16 @@ export default ({ particleName }: { particleName: string }) => {
     camera.position.set(...cfg.cameraPosition)
     camera.lookAt(...cfg.cameraTarget)
 
-    const renderer = new WebGLRenderer({ canvas, antialias: true })
+    // The particles' materials are TSL, which only this renderer draws. On the game's backend
+    const renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL: !Game.instance().renderer.isWebGPU })
     renderer.setPixelRatio(Game.instance().sizes.pixelRatio)
     renderer.setClearColor('#181818')
+    void renderer.init()
 
     const onUpdate = (delta: number) => {
       emitter.update(delta)
-      renderer.render(previewScene, camera)
+      if (renderer.hasInitialized())
+        renderer.render(previewScene, camera)
     }
     Game.instance().onUpdate(onUpdate)
 

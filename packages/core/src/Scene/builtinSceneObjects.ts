@@ -1,29 +1,39 @@
 import type { Group, Light, LightShadow } from 'three'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { LogicGraphProps, LogicGraphSide } from '../Graph/Logic/logicGraphObject'
 import type { LightPrimitive } from '../Prefab/Lights/index'
 import type { Primitive } from '../Prefab/Primitives/index'
+import type GameScene from './GameScene'
+import type { SceneObjectData } from './types'
 import { Mesh, MeshStandardMaterial, OrthographicCamera, Vector3 } from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { WithEditorHelper } from '../Editor/WithEditorHelper'
 import Game from '../Game'
+import { LOGIC_GRAPH_TYPE, LogicGraphObject, runsOn } from '../Graph/Logic/logicGraphObject'
+import { materialGraphs } from '../Graph/Material/MaterialGraphs'
 import { LIGHT_REGISTRY } from '../Prefab/Lights/index'
 import { getPrefab, spawnPrefab } from '../Prefab/PrefabRegistry'
-import { PlanePrimitive, PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
+import { PRIMITIVE_REGISTRY } from '../Prefab/Primitives/index'
 import GameObject from '../World/GameObject'
+import { primitiveOptionsFromProps, primitiveType } from './primitiveSceneObjects'
 import { registerSceneObject, registerSceneObjectResolver } from './SceneObjectRegistry'
 
 /**
  * The client side of the scene object types that come with the engine. None of them exist on the server,
  * they are visuals only; a project registers `server` factories for what the server needs.
  *
- * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow (+ width, height for Plane)
+ * - `Primitive:<Box|Sphere|…>` props: color, roughness, metalness, wireframe, castShadow, receiveShadow, materialGraph, plus the primitive's
+ *   geometry params (see PRIMITIVE_DEFINITIONS, e.g. width/height/depth for Box, radius for Sphere) pivot ('center' | 'base') and collision.
+ *   Missing params use their defaults, a missing pivot is 'center', collision is on unless false.
+ *   The server builds their colliders, see primitiveSceneObjects
  * - `Light:<AmbientLight|DirectionalLight|…>` props: color, intensity, castShadow, shadowMapSize (+ shadowArea, shadowFar for directional lights)
  * - `Model` props: resource (name of a loaded gltfModel), castShadow, receiveShadow
  * - `prefab:<key>` any prefab of the prefab registry, by its key
+ * - `LogicGraph` props: graph, side ('client' | 'server' | 'both'), target, parameters. Runs a logic graph, see
+ *   Graph/Logic/logicGraphObject (which the server registers too)
  */
 
-export function primitiveType(name: string) {
-  return `Primitive:${name}`
-}
+export { primitiveType } from './primitiveSceneObjects'
 
 export function lightType(name: string) {
   return `Light:${name}`
@@ -54,22 +64,21 @@ function bool(v: unknown) {
 }
 
 function primitiveProps(primitive: Primitive): Props {
-  const props: Props = {}
+  const props: Props = { ...primitive.params, pivot: primitive.pivot, collision: primitive.collision }
   const mesh = primitive.instance
   if (mesh instanceof Mesh) {
     props.castShadow = mesh.castShadow
     props.receiveShadow = mesh.receiveShadow
-    if (mesh.material instanceof MeshStandardMaterial) {
-      props.color = `#${mesh.material.color.getHexString()}`
-      props.roughness = mesh.material.roughness
-      props.metalness = mesh.material.metalness
-      if (mesh.material.wireframe)
+    const material = primitive.baseMaterial
+    if (material instanceof MeshStandardMaterial) {
+      props.color = `#${material.color.getHexString()}`
+      props.roughness = material.roughness
+      props.metalness = material.metalness
+      if (material.wireframe)
         props.wireframe = true
     }
-  }
-  if (primitive instanceof PlanePrimitive) {
-    props.width = primitive.width
-    props.height = primitive.height
+    if (primitive.materialGraph)
+      props.materialGraph = primitive.materialGraph
   }
   return props
 }
@@ -80,14 +89,16 @@ function applyPrimitiveProps(primitive: Primitive, props: Props = {}) {
     return
   mesh.castShadow = bool(props.castShadow) ?? mesh.castShadow
   mesh.receiveShadow = bool(props.receiveShadow) ?? mesh.receiveShadow
-  if (mesh.material instanceof MeshStandardMaterial) {
+  const material = primitive.baseMaterial
+  if (material instanceof MeshStandardMaterial) {
     const color = str(props.color)
     if (color)
-      mesh.material.color.set(color)
-    mesh.material.roughness = num(props.roughness) ?? mesh.material.roughness
-    mesh.material.metalness = num(props.metalness) ?? mesh.material.metalness
-    mesh.material.wireframe = bool(props.wireframe) ?? false
+      material.color.set(color)
+    material.roughness = num(props.roughness) ?? material.roughness
+    material.metalness = num(props.metalness) ?? material.metalness
+    material.wireframe = bool(props.wireframe) ?? false
   }
+  primitive.setMaterialGraph(str(props.materialGraph))
 }
 
 /** Only some lights have a shadow */
@@ -187,6 +198,66 @@ export class ModelObject extends GameObject {
   }
 }
 
+const SIDES: LogicGraphSide[] = ['client', 'server', 'both']
+
+/**
+ * A logic graph on the client, with an editor helper to select, move and set it up by. It runs here only when its
+ * side includes the client, but is always built so the editor shows it
+ */
+class ClientLogicGraph extends WithEditorHelper(LogicGraphObject) {
+  constructor(data: SceneObjectData, scene: GameScene | undefined) {
+    const props = data.props as LogicGraphProps | undefined
+    // Not running on this side: no graph to load
+    super(runsOn(props?.side, 'client')
+      ? data
+      : {
+          ...data,
+          props: { ...props, graph: undefined },
+        }, scene, 'client')
+    this.props.graph = props?.graph
+
+    const setProp = (changes: Partial<LogicGraphProps>) => this.scene?.setProps(this.id, {
+      ...this.props,
+      ...changes,
+    })
+    this.registerEditorHelper(this.position.clone(), `Logic: ${props?.graph || 'no graph'}`, {
+      onMove: delta => this.position.add(delta),
+      properties: [
+        {
+          type: 'select',
+          label: 'graph',
+          options: () => [
+            { value: '', label: 'None' },
+            ...materialGraphs.list.filter(graph => graph.kind === 'logic' && !graph.function).map(graph => ({ value: graph.name, label: graph.name })),
+          ],
+          getValue: () => this.props.graph ?? '',
+          setValue: v => setProp({ graph: v || undefined }),
+          refresh: () => materialGraphs.refreshList(),
+        },
+        {
+          type: 'select',
+          label: 'runs on',
+          options: () => SIDES.map(side => ({ value: side, label: side })),
+          getValue: () => this.props.side ?? 'client',
+          setValue: v => setProp({ side: v as LogicGraphSide }),
+        },
+        {
+          type: 'select',
+          label: 'self',
+          options: () => [
+            { value: '', label: 'This object' },
+            ...(this.scene?.getEntries() ?? [])
+              .filter(entry => entry.data.id !== this.id)
+              .map(entry => ({ value: entry.data.id, label: entry.data.name ?? entry.data.id })),
+          ],
+          getValue: () => this.props.target ?? '',
+          setValue: v => setProp({ target: v || undefined }),
+        },
+      ],
+    })
+  }
+}
+
 let registered = false
 
 export function registerBuiltinSceneObjects() {
@@ -200,9 +271,7 @@ export function registerBuiltinSceneObjects() {
       label: name,
       client(data) {
         const position = new Vector3(...data.transform.position)
-        const primitive = PrimitiveClass === PlanePrimitive
-          ? new PlanePrimitive(position, num(data.props?.width) ?? 1, num(data.props?.height) ?? 1)
-          : new PrimitiveClass(position)
+        const primitive = new PrimitiveClass(position, data.props as Record<string, number> | undefined, primitiveOptionsFromProps(data.props))
         applyPrimitiveProps(primitive, data.props)
         return primitive
       },
@@ -239,6 +308,13 @@ export function registerBuiltinSceneObjects() {
       return model
     },
     serialize: model => ({ resource: model.resource, castShadow: model.castShadow, receiveShadow: model.receiveShadow }),
+  })
+
+  registerSceneObject<ClientLogicGraph>({
+    type: LOGIC_GRAPH_TYPE,
+    label: 'Logic Graph',
+    client: (data, { scene }) => new ClientLogicGraph(data, scene),
+    serialize: object => ({ ...object.props }),
   })
 
   registerSceneObjectResolver((type) => {

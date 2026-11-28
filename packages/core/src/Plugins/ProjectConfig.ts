@@ -325,6 +325,39 @@ export function resolveInside(base: string, path: string): string | undefined {
     : undefined
 }
 
+/** Where plugins keep the graphs they ship, in their package */
+export const PLUGIN_GRAPHS_DIR = 'graphs'
+
+/**
+ * The `graphs/` directories of the plugins enabled in mavonengine.json, on whichever side they run: a plugin can ship
+ * only graphs. Plugins that are missing or invalid are left out
+ */
+export function pluginGraphDirs(root: string): { package: string, dir: string }[] {
+  let config: ReturnType<typeof readConfig>
+  try {
+    config = readConfig(root)
+  }
+  catch {
+    return []
+  }
+  return Object.entries(config.plugins).flatMap(([pkg, entry]) => {
+    if (entry?.enabled === false)
+      return []
+    try {
+      const installed = readPluginManifest(root, pkg)
+      const dir = installed && join(installed.dir, PLUGIN_GRAPHS_DIR)
+      return dir && existsSync(dir)
+        ? [
+            { package: pkg, dir },
+          ]
+        : []
+    }
+    catch {
+      return []
+    }
+  })
+}
+
 export function assetsDir(plugin: InstalledPlugin): string {
   return resolve(plugin.dir, plugin.manifest.assets?.dir ?? 'assets')
 }

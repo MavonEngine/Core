@@ -21,7 +21,7 @@ function templateZip(files: Record<string, string>) {
   const zip = new AdmZip()
   for (const [path, content] of Object.entries(files))
     zip.addFile(path, Buffer.from(content))
-  return zip.toBuffer()
+  return zip.toBuffer() as Buffer<ArrayBuffer>
 }
 
 const template = {

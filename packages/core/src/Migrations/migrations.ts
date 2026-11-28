@@ -118,4 +118,38 @@ const appNameTitle: Migration = {
 }
 
 /** Every migration, oldest first */
-export const MIGRATIONS: Migration[] = [devScript, appNameTitle]
+/** The package.json files a project's dependencies can be in: the client's, or the root's for a project without one */
+const PACKAGE_JSONS = ['client/package.json', 'package.json']
+const THREE_PERF = 'three-perf'
+
+/**
+ * Core renders with three's WebGPURenderer since 0.0.28 and shows frame stats with three's inspector, so the
+ * three-perf panel (which only works with WebGLRenderer) is gone and the template no longer installs it
+ */
+const dropThreePerf: Migration = {
+  id: '0.0.28-drop-three-perf',
+  since: '0.0.28',
+  description: 'Remove three-perf, which core no longer uses: frame stats come from three\'s inspector',
+
+  applies({ files }) {
+    return PACKAGE_JSONS.some((path) => {
+      const pkg = files.readJson(path)
+      return !!(pkg?.dependencies?.[THREE_PERF] || pkg?.devDependencies?.[THREE_PERF])
+    })
+  },
+
+  run({ files }) {
+    for (const path of PACKAGE_JSONS) {
+      const pkg = files.readJson(path)
+      if (!pkg?.dependencies?.[THREE_PERF] && !pkg?.devDependencies?.[THREE_PERF])
+        continue
+      for (const field of ['dependencies', 'devDependencies'] as const) {
+        if (pkg[field]?.[THREE_PERF])
+          delete pkg[field][THREE_PERF]
+      }
+      files.writeJson(path, pkg)
+    }
+  },
+}
+
+export const MIGRATIONS: Migration[] = [devScript, appNameTitle, dropThreePerf]

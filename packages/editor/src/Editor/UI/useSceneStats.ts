@@ -46,7 +46,7 @@ export function useSceneStats(intervalMs = 500): SceneStats {
       setStats({
         fps: game.renderer.fps,
         triangles: info.render.triangles,
-        drawCalls: info.render.calls,
+        drawCalls: info.render.drawCalls,
         objects: objectCount,
         materials: materialSet.size,
         textures: info.memory.textures,

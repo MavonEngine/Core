@@ -494,9 +494,11 @@ export function analyzeTrace(capture: TraceCapture, { maxHitches = 10 } = {}): T
     findings.push(`${totals.syncCalls} GPU sync calls (${totals.syncMs}ms): readPixels / getError stall the pipeline. renderer.debug.checkShaderErrors = true calls getError after compiles, and picking with readPixels each frame stalls too`)
   if (bottleneck.verdict === 'gpu-bound') {
     findings.push(`GPU-bound at ${capture.canvas.width}x${capture.canvas.height} (pixel ratio ${capture.canvas.pixelRatio}): lower the pixel ratio (cap it at 1.5–2), shadow map size or shadow-casting lights, and look at the most expensive passes`)
-    const heavyPasses = passes.filter(p => p.name !== 'RenderPass' && p.name !== 'OutputPass')
-    if (heavyPasses.length)
-      findings.push(`Post-processing passes cost GPU fill rate on every pixel: ${heavyPasses.map(p => p.name).join(', ')}`)
+    // The render pipeline's effects, or the composer passes past the scene's (engines before the WebGPU renderer)
+    const effects = capture.effects
+      ?? passes.map(p => p.name).filter(name => name !== 'RenderPass' && name !== 'OutputPass')
+    if (effects.length)
+      findings.push(`Post-processing effects cost GPU fill rate on every pixel: ${effects.join(', ')}`)
   }
   if (tickStats && budgetMs && tickStats.p95 > budgetMs / 2) {
     findings.push(`Game ticks are slow (p95 ${tickStats.p95}ms${tickStats.physics
@@ -578,7 +580,7 @@ const TRACKS = {
 } as const
 const TRACK_NAMES: Record<number, string> = {
   [TRACKS.frames]: 'Frames (render CPU)',
-  [TRACKS.passes]: 'Composer passes',
+  [TRACKS.passes]: 'Render passes',
   [TRACKS.gpu]: 'GPU time per frame (duration, not GPU clock)',
   [TRACKS.ticks]: 'Game ticks',
   [TRACKS.js]: 'JS samples',

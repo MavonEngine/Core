@@ -50,11 +50,45 @@ function vec(value: unknown): Vec3 {
 
 let instance: NetworkManager | undefined
 
+function seconds(ms: number | null): string {
+  return ms === null
+    ? 'n/a'
+    : `${(ms / 1000).toFixed(1)}s`
+}
+
+/** One line for the log, e.g. `connection disconnected (ice disconnected) after 312.4s, last state 6.1s ago, …` */
+export function describeDisconnect(info: DisconnectInfo): string {
+  const cause = info.closedByClient
+    ? 'closed by this client'
+    : `connection ${info.connectionState ?? 'unknown'} (ice ${info.iceConnectionState ?? 'unknown'})`
+  return `${cause} after ${seconds(info.connectedFor)}, last state ${seconds(info.lastStateAgo)} ago, `
+    + `last pong ${seconds(info.lastPongAgo)} ago, ping ${info.ping}ms, ${info.missedStates} states missed`
+}
+
 /** Why connecting failed. `status` is the HTTP status the server turned the client away with, e.g. 401 from its auth plugin */
 export interface ConnectError {
   message: string
   status?: number
   statusText?: string
+}
+
+/** What the client knew when its connection dropped, to tell a network drop from a close */
+export interface DisconnectInfo {
+  /** Whether this client closed the connection itself, through `destroy()` */
+  closedByClient: boolean
+  /** State of the WebRTC peer connection: `disconnected` (packets stopped), `failed`, `closed` (closed on purpose) */
+  connectionState: string | null
+  iceConnectionState: string | null
+  /** How long the connection was up, in ms. Null when it never connected */
+  connectedFor: number | null
+  /** How long before the drop the last sv_state arrived, in ms. Seconds mean the packets stopped before the drop */
+  lastStateAgo: number | null
+  /** How long before the drop the last pong arrived, in ms */
+  lastPongAgo: number | null
+  /** Round trip of the last ping, in ms */
+  ping: number
+  /** States missed over the whole connection */
+  missedStates: number
 }
 
 function clientPlugins(): PluginHost<ClientPlugin, ClientPluginContext> | undefined {
@@ -73,6 +107,10 @@ export default class NetworkManager extends EventEmitter {
   private _connected = false
   private _connectError: ConnectError | null = null
   private _editorMode = false
+  private _closing = false
+  private connectedAt: number | null = null
+  private lastPongAt: number | null = null
+  private pingInterval: ReturnType<typeof setInterval> | undefined
 
   private currentSequenceId = 0
 
@@ -138,6 +176,7 @@ export default class NetworkManager extends EventEmitter {
       Game.instance().logger?.info(`Socket connection established: ${this._socket.id}`)
       this._connected = true
       this._connectError = null
+      this.connectedAt = performance.now()
       this.net.event('connect', {
         info: { id: this._socket.id },
       })
@@ -147,11 +186,22 @@ export default class NetworkManager extends EventEmitter {
     })
 
     this._socket.onDisconnect(() => {
-      Game.instance().logger?.info('Socket disconnected')
+      const info = this.disconnectInfo()
+      const logger = Game.instance().logger
+      const summary = `Socket disconnected: ${describeDisconnect(info)}`
+      if (info.closedByClient)
+        logger?.info(summary)
+      else
+        logger?.warn(summary)
 
+      clearInterval(this.pingInterval)
+      this.pingInterval = undefined
       this._connected = false
-      this.net.event('disconnect')
-      this.onDisconnect()
+      this.net.event('disconnect', {
+        info: { ...info },
+      })
+      this.onDisconnect(info)
+      this.trigger('disconnect', info)
     })
 
     /**
@@ -249,17 +299,48 @@ export default class NetworkManager extends EventEmitter {
   }
 
   protected onConnect() {
-    setInterval(() => this.pingCheck(), 1000)
+    clearInterval(this.pingInterval)
+    this.pingInterval = setInterval(() => this.pingCheck(), 1000)
 
     this._socket.on('pong', () => {
-      this.ping = Math.ceil(performance.now() - this.pingNow)
+      this.lastPongAt = performance.now()
+      this.ping = Math.ceil(this.lastPongAt - this.pingNow)
       this.onPong()
     })
   }
 
+  /**
+   * What the client knows about the connection right now. Passed to `onDisconnect()` and the `disconnect` event
+   * when it drops
+   */
+  disconnectInfo(): DisconnectInfo {
+    const now = performance.now()
+    const peer = (this._socket as unknown as {
+      peerConnection?: { localPeerConnection?: { connectionState?: string, iceConnectionState?: string } }
+    }).peerConnection?.localPeerConnection
+    const since = (at: number | null) => at === null
+      ? null
+      : Math.round(now - at)
+
+    return {
+      closedByClient: this._closing,
+      connectionState: peer?.connectionState ?? null,
+      iceConnectionState: peer?.iceConnectionState ?? null,
+      connectedFor: since(this.connectedAt),
+      lastStateAgo: since(this.serverView.receivedAt),
+      lastPongAgo: since(this.lastPongAt),
+      ping: this.ping,
+      missedStates: this.serverView.missedStates,
+    }
+  }
+
   destroy() {
-    if (this._connected)
+    clearInterval(this.pingInterval)
+    this.pingInterval = undefined
+    if (this._connected) {
+      this._closing = true
       this._socket.close()
+    }
 
     this._connected = false
     instance = undefined
@@ -285,7 +366,8 @@ export default class NetworkManager extends EventEmitter {
 
   protected onPong() { }
 
-  protected onDisconnect() { }
+  /** The connection dropped or was closed. `info` tells which, see `DisconnectInfo` */
+  protected onDisconnect(_info: DisconnectInfo) { }
 
   /**
    * Connecting failed, e.g. the server's auth plugin turned the client away (`error.status` 401, 403, …).

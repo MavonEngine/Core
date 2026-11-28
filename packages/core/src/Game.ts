@@ -1,6 +1,7 @@
 import type { World } from '@dimforge/rapier3d-compat'
 import type NetworkManager from './Networking/Client/NetworkManager'
 import type { ClientPlugin, ClientPluginContext, LoadedPlugin } from './Plugins/types'
+import type { RendererParameters } from './Renderer'
 import type GameScene from './Scene/GameScene'
 import type { SceneData, SceneSettings, SceneSide } from './Scene/types'
 import type { Asset } from './Types/Asset'
@@ -10,6 +11,8 @@ import type { XROptions } from './XR'
 import * as THREE from 'three'
 import BaseGame from './BaseGame'
 import Camera from './Camera'
+import { registerTslNode } from './Graph/Material/tslNodes'
+import { pluginNodeType, registerNode } from './Graph/NodeRegistry'
 import InputManager from './InputManager'
 import ParticleSystem from './Particles/System/ParticleSystem'
 import PluginHost from './Plugins/PluginHost'
@@ -97,7 +100,7 @@ export default class Game extends BaseGame {
   constructor(
     sources: Asset[],
     physicsWorld?: World,
-    renderParameters: THREE.WebGLRendererParameters = {},
+    renderParameters: RendererParameters = {},
   ) {
     super(
       // eslint-disable-next-line node/prefer-global/process
@@ -166,6 +169,7 @@ export default class Game extends BaseGame {
     this.renderer.instance.setAnimationLoop((now: number) => {
       if (this.renderer.shouldRender(now)) {
         // Measured since the last rendered frame, so the skipped frames' time isn't lost
+        this.clock.update(now)
         const delta = this.clock.getDelta()
 
         this.particleSystem.update(delta)
@@ -203,6 +207,13 @@ export default class Game extends BaseGame {
       },
       assetUrl: path => `${pluginAssetBase(loaded.package)}${path.replace(LEADING_SLASHES_RE, '')}`,
       registerPrefab: prefab => registerPrefab({ ...prefab, plugin: loaded.package }),
+      registerNode: (definition, tsl) => {
+        const type = pluginNodeType(loaded.package, definition.type)
+        registerNode({ ...definition, type, plugin: loaded.package })
+        if (tsl)
+          registerTslNode(type, tsl)
+        return type
+      },
       plugin: (pkg: string) => host.api(pkg) as any,
       registerSceneObject: (definition) => {
         registerSceneObject({ ...definition, plugin: loaded.package })

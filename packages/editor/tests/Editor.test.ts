@@ -38,26 +38,27 @@ beforeAll(() => {
   }
 })
 
-vi.mock('three/examples/jsm/controls/FlyControls.js', () => ({
-  FlyControls: vi.fn().mockImplementation(function () {
+vi.mock('../src/Editor/EditorCameraControls', () => ({
+  default: vi.fn().mockImplementation(function () {
     return {
-      autoForward: false,
-      dragToLook: false,
-      movementSpeed: 0,
-      rollSpeed: 0,
+      enabled: true,
       update: vi.fn(),
-    }
-  }),
-}))
-
-vi.mock('three/examples/jsm/postprocessing/OutlinePass.js', () => ({
-  OutlinePass: vi.fn().mockImplementation(function () {
-    return {
-      selectedObjects: [] as Object3D[],
       dispose: vi.fn(),
     }
   }),
 }))
+
+vi.mock('three/examples/jsm/tsl/display/OutlineNode.js', async () => {
+  const { float } = await import('three/tsl')
+  return {
+    outline: vi.fn(() => ({
+      selectedObjects: [] as Object3D[],
+      visibleEdge: float(0),
+      hiddenEdge: float(0),
+      dispose: vi.fn(),
+    })),
+  }
+})
 
 vi.mock('three/examples/jsm/controls/TransformControls.js', () => ({
   TransformControls: vi.fn().mockImplementation(function () {
@@ -146,9 +147,7 @@ function createMockGame() {
       },
     },
     renderer: {
-      composer: {
-        addPass: vi.fn(),
-      },
+      addEffect: vi.fn(() => vi.fn()),
     },
     sizes: { width: 800, height: 600 },
     canvas: {
@@ -272,10 +271,10 @@ describe('editor', () => {
       expect(mockGame.contextMenuAbort.abort).toHaveBeenCalled()
     })
 
-    it('adds the outline pass to the renderer composer', () => {
+    it('adds the selection outline as a render effect', () => {
       const _editor = new Editor()
 
-      expect(mockGame.renderer.composer.addPass).toHaveBeenCalled()
+      expect(mockGame.renderer.addEffect).toHaveBeenCalledWith('editor-outline', expect.any(Function))
     })
 
     it('sets the camera position', () => {
@@ -301,12 +300,12 @@ describe('editor', () => {
   })
 
   describe('update', () => {
-    it('delegates to flyControls.update with the given delta', () => {
+    it('delegates to cameraControls.update with the given delta', () => {
       const editor = new Editor()
 
       editor.update(0.016)
 
-      expect(editor.flyControls.update).toHaveBeenCalledWith(0.016)
+      expect(editor.cameraControls.update).toHaveBeenCalledWith(0.016)
     })
   })
 

@@ -1,11 +1,12 @@
 import type { Activity } from './ActivityBar'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels'
 import ActivityBar from './ActivityBar'
 import Assets from './Assets/Assets'
 import CanvasPanel from './CanvasPanel'
 import DockArea from './DockArea'
 import styles from './Editor.module.css'
+import GraphsView from './Graphs/GraphsView'
 import PanelHeader from './PanelHeader'
 import PluginsPanel from './Plugins/PluginsPanel'
 import PropertiesPanel from './PropertiesPanel'
@@ -21,6 +22,11 @@ function Editor() {
     storage: localStorage,
   })
   const [activity, setActivity] = useState<Activity>('scene')
+  // The scene's labels hang off <body>, above the editor: hidden while a view covers the scene
+  useEffect(() => {
+    document.body.classList.toggle('editor-full-view', activity !== 'scene')
+    return () => document.body.classList.remove('editor-full-view')
+  }, [activity])
 
   return (
     <div className={styles.root}>
@@ -28,7 +34,12 @@ function Editor() {
         <ActivityBar active={activity} onSelect={setActivity} />
         <div className={styles.workspace}>
           {/* Covers the editor rather than replacing it, so the viewport and the docks keep their state underneath */}
-          {activity !== 'scene' && (
+          {activity === 'graphs' && (
+            <div className={`${styles.panel} ${styles.fullView}`}>
+              <GraphsView />
+            </div>
+          )}
+          {(activity === 'server' || activity === 'plugins') && (
             <div className={`${styles.panel} ${styles.fullView}`}>
               <div className={styles.panelContent}>
                 <PanelHeader title={activity === 'server'

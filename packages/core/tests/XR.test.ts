@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { EventDispatcher, Group, Matrix4, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget } from 'three'
+import { DirectionalLight, EventDispatcher, Group, Matrix4, PerspectiveCamera, RenderTarget, Scene, Vector4 } from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import XR, { reverseDepthMatrix } from '../src/XR'
 
@@ -38,7 +38,8 @@ vi.mock('../src/XRInput', () => ({
   }),
 }))
 
-function setup(options?: ConstructorParameters<typeof XR>[2]) {
+/** `supportsLayers`: whether three found the browser's Layers API when the renderer was made */
+function setup(options?: ConstructorParameters<typeof XR>[2], { supportsLayers = true } = {}) {
   const session = {
     end: vi.fn().mockResolvedValue(undefined),
   }
@@ -46,39 +47,67 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
     new PerspectiveCamera(),
     new PerspectiveCamera(),
   ]
+  // three's own, which the XR wraps
+  const setSession = vi.fn().mockResolvedValue(undefined)
   const xr = Object.assign(new EventDispatcher<any>(), {
     enabled: false,
     isPresenting: false,
+    _supportsLayers: supportsLayers,
     setReferenceSpaceType: vi.fn(),
-    setSession: vi.fn().mockResolvedValue(undefined),
+    setSession,
     getSession: vi.fn((): any => null),
     updateCamera: vi.fn(),
     getCamera: () => ({ cameras: eyes }),
     getFrame: vi.fn((): any => ({})),
   })
-  const depth = { reversed: false }
   const draw = vi.fn()
-  const renderTarget = { current: null as WebGLRenderTarget | null }
+  const renderTarget = { current: null as RenderTarget | null }
+  // While presenting, three's output render target is the headset's and its canvas target has the headset's size
+  const viewport = new Vector4()
   const webgl = {
     xr,
-    shadowMap: { autoUpdate: true },
-    getRenderTarget: vi.fn(() => renderTarget.current),
-    setRenderTarget: vi.fn((target: WebGLRenderTarget | null) => renderTarget.current = target),
-    state: {
-      buffers: {
-        depth: {
-          getReversed: () => depth.reversed,
-        },
-      },
+    reversedDepthBuffer: false,
+    outputRenderTarget: null as RenderTarget | null,
+    _canvasTarget: {
+      _width: 4032,
+      _height: 2240,
     },
+    domElement: {
+      width: 2560,
+      height: 1440,
+    },
+    getRenderTarget: vi.fn(() => renderTarget.current),
+    setRenderTarget: vi.fn((target: RenderTarget | null) => renderTarget.current = target),
+    getOutputRenderTarget: () => webgl.outputRenderTarget,
+    setOutputRenderTarget: (target: RenderTarget | null) => webgl.outputRenderTarget = target,
+    getViewport: (target: Vector4) => target.copy(viewport),
+    setViewport: (x: number | Vector4, y?: number, width?: number, height?: number) => typeof x === 'number'
+      ? viewport.set(x, y!, width!, height!)
+      : viewport.copy(x),
+    viewport,
     render: draw,
+  }
+  // Toggles the renderer's reversed depth buffer
+  const depth = {
+    get reversed() {
+      return webgl.reversedDepthBuffer
+    },
+    set reversed(value: boolean) {
+      webgl.reversedDepthBuffer = value
+    },
   }
   const renderer = {
     instance: webgl,
     get xrPresenting() {
       return xr.isPresenting
     },
+    // A desktop frame, through the pipeline
+    render: vi.fn(),
   }
+  // The page: the game's canvas, with its UI root before it
+  const canvas = document.createElement('canvas')
+  const uiRoot = document.createElement('div')
+  document.body.append(uiRoot, canvas)
   const game = {
     trigger: vi.fn(),
     camera: {
@@ -86,6 +115,8 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
       instance: new PerspectiveCamera(35, 2, 0.1, 500),
     },
     scene: new Scene(),
+    canvas,
+    uiRoot,
     callbacks: {} as Record<string, ((event?: any) => void)[]>,
     on(name: string, callback: (event?: any) => void) {
       (this.callbacks[name] ??= []).push(callback)
@@ -101,17 +132,18 @@ function setup(options?: ConstructorParameters<typeof XR>[2]) {
   return {
     instance,
     xr,
+    setSession,
     game,
     session,
-    // with the mock render, which XR wraps
-    webgl: { ...webgl, render: draw },
-    // with XR's wrapped render
-    patched: webgl,
+    webgl,
+    renderer,
     renderTarget,
     depth,
     eyes,
   }
 }
+
+const backdrop = () => document.querySelector<HTMLElement>('.xr-backdrop')
 
 describe('xr', () => {
   afterEach(() => {
@@ -163,7 +195,7 @@ describe('xr', () => {
   })
 
   it('enters an immersive VR session with the floor features and the extra ones asked for', async () => {
-    const { instance, xr, session } = setup({
+    const { instance, xr, setSession, session } = setup({
       sessionInit: {
         optionalFeatures: ['hand-tracking'],
       },
@@ -177,7 +209,7 @@ describe('xr', () => {
     expect(requestSession).toHaveBeenCalledWith('immersive-vr', {
       optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
     })
-    expect(xr.setSession).toHaveBeenCalledWith(session)
+    expect(setSession).toHaveBeenCalledWith(session)
 
     xr.getSession.mockReturnValue(session)
     await instance.exit()
@@ -264,10 +296,48 @@ describe('xr', () => {
     }).instance.mirrorCamera.fov).toBe(90)
   })
 
+  it('covers the page with its last frame, saying the game plays in VR, while a headset plays without the mirror', async () => {
+    const { xr, setSession, session, renderer, game } = setup()
+    // The desktop frame is drawn before three.js has the session, which clears the canvas
+    setSession.mockImplementation(async () => {
+      expect(renderer.render).toHaveBeenCalled()
+      expect(backdrop()).not.toBeNull()
+    })
+
+    await xr.setSession(session as unknown as XRSession)
+    expect(setSession).toHaveBeenCalledWith(session)
+    expect(backdrop()!.textContent).toBe('Playing in VR')
+    expect(backdrop()!.style.pointerEvents).toBe('none')
+    // Under the game's UI
+    expect(backdrop()!.nextElementSibling).toBe(game.uiRoot)
+
+    xr.dispatchEvent({ type: 'sessionend' })
+    expect(backdrop()).toBeNull()
+  })
+
+  it('leaves the page to the mirror, also when it\'s turned on during the session', async () => {
+    const mirrored = setup({ mirror: true })
+    await mirrored.xr.setSession(mirrored.session as unknown as XRSession)
+    expect(backdrop()).toBeNull()
+    expect(mirrored.renderer.render).not.toHaveBeenCalled()
+
+    document.body.innerHTML = ''
+    const { instance, xr, session } = setup()
+    await xr.setSession(session as unknown as XRSession)
+    expect(backdrop()).not.toBeNull()
+    instance.mirror = true
+    instance.renderMirror()
+    expect(backdrop()).toBeNull()
+  })
+
   it('mirrors the headset to the page from the head, shaped like the window, without touching the headset', () => {
     const { instance, game, webgl, renderTarget } = setup({ mirror: true })
-    const headsetTarget = new WebGLRenderTarget(1, 1)
+    const headsetTarget = new RenderTarget(1, 1)
     renderTarget.current = headsetTarget
+    const sun = new DirectionalLight()
+    sun.castShadow = true
+    const unshadowed = new DirectionalLight()
+    game.scene.add(sun, unshadowed)
     // Where the headset's frame put the camera, in the rig like the real one
     game.camera.rig.add(game.camera.instance)
     game.camera.rig.position.set(10, 0, 0)
@@ -275,9 +345,20 @@ describe('xr', () => {
     game.camera.instance.rotation.set(0, Math.PI / 2, 0)
     game.camera.rig.updateMatrixWorld(true)
 
-    let during: { xr: boolean, shadows: boolean, target: unknown } | undefined
+    const headsetOutput = new RenderTarget(4032, 2240)
+    webgl.outputRenderTarget = headsetOutput
+    webgl.viewport.set(0, 0, 4032, 2240)
+
+    let during: { xr: boolean, shadows: boolean, target: unknown, output: unknown, canvas: number[], viewport: number[] } | undefined
     webgl.render.mockImplementation(() => {
-      during = { xr: webgl.xr.enabled, shadows: webgl.shadowMap.autoUpdate, target: renderTarget.current }
+      during = {
+        xr: webgl.xr.enabled,
+        shadows: sun.shadow.autoUpdate,
+        target: renderTarget.current,
+        output: webgl.outputRenderTarget,
+        canvas: [webgl._canvasTarget._width, webgl._canvasTarget._height],
+        viewport: webgl.viewport.toArray(),
+      }
     })
     webgl.xr.enabled = true
     instance.renderMirror()
@@ -290,15 +371,28 @@ describe('xr', () => {
     expect(camera.aspect).toBeCloseTo(1600 / 900)
     expect(camera.far).toBe(500)
 
-    // Drawn to the page with XR off and the headset's shadow maps, then everything put back
-    expect(during).toEqual({ xr: false, shadows: false, target: null })
+    // Drawn to the page, at the page's size, with XR off and the headset's shadow maps, then everything put back
+    expect(during).toEqual({
+      xr: false,
+      shadows: false,
+      target: null,
+      output: null,
+      canvas: [2560, 1440],
+      viewport: [0, 0, 2560, 1440],
+    })
     expect(webgl.xr.enabled).toBe(true)
-    expect(webgl.shadowMap.autoUpdate).toBe(true)
+    expect(sun.shadow.autoUpdate).toBe(true)
+    expect(unshadowed.shadow.autoUpdate).toBe(true)
     expect(renderTarget.current).toBe(headsetTarget)
+    expect(webgl.outputRenderTarget).toBe(headsetOutput)
+    expect([webgl._canvasTarget._width, webgl._canvasTarget._height]).toEqual([4032, 2240])
+    expect(webgl.viewport.toArray()).toEqual([0, 0, 4032, 2240])
   })
 
-  it('puts XR back on even when the mirror\'s render throws', () => {
+  it('puts XR and the headset\'s output back on even when the mirror\'s render throws', () => {
     const { instance, webgl } = setup({ mirror: true })
+    const headsetOutput = new RenderTarget(4032, 2240)
+    webgl.outputRenderTarget = headsetOutput
     webgl.xr.enabled = true
     webgl.render.mockImplementation(() => {
       throw new Error('lost context')
@@ -306,22 +400,70 @@ describe('xr', () => {
 
     expect(() => instance.renderMirror()).toThrow('lost context')
     expect(webgl.xr.enabled).toBe(true)
+    expect(webgl.outputRenderTarget).toBe(headsetOutput)
+    expect([webgl._canvasTarget._width, webgl._canvasTarget._height]).toEqual([4032, 2240])
   })
 
   describe('renderer fixes', () => {
-    it('renders into a render target with the camera it\'s given while presenting, into the headset\'s through it', () => {
-      const { xr, webgl, patched, renderTarget } = setup()
-      xr.isPresenting = true
-      const during: boolean[] = []
-      webgl.render.mockImplementation(() => during.push(xr.enabled))
+    it('draws to a projection layer only in a session given the layers feature', async () => {
+      const { xr, setSession } = setup()
+      const granted = {
+        enabledFeatures: ['local-floor', 'layers'],
+      } as unknown as XRSession
+      const refused = {
+        enabledFeatures: ['local-floor'],
+      } as unknown as XRSession
 
-      renderTarget.current = new WebGLRenderTarget(1, 1)
-      patched.render(new Scene(), new PerspectiveCamera())
-      renderTarget.current = Object.assign(new WebGLRenderTarget(1, 1), { isXRRenderTarget: true })
-      patched.render(new Scene(), new PerspectiveCamera())
+      // Chrome on Windows has the Layers API but doesn't grant the feature
+      await xr.setSession(refused)
+      expect(xr._supportsLayers).toBe(false)
+      expect(setSession).toHaveBeenLastCalledWith(refused)
 
-      expect(during).toEqual([false, true])
-      expect(xr.enabled).toBe(true)
+      await xr.setSession(granted)
+      expect(xr._supportsLayers).toBe(true)
+      expect(setSession).toHaveBeenLastCalledWith(granted)
+    })
+
+    it('never draws to a projection layer where the browser has no Layers API', async () => {
+      const { xr } = setup({}, { supportsLayers: false })
+
+      await xr.setSession({
+        enabledFeatures: ['layers'],
+      } as unknown as XRSession)
+      expect(xr._supportsLayers).toBe(false)
+    })
+
+    it('lets the headset\'s layer draw to the default framebuffer, which WebXR gives as null', () => {
+      const { xr, webgl } = setup()
+      const drawBuffers = vi.fn()
+      const state = { drawBuffers }
+      Object.assign(webgl, {
+        backend: { state },
+      })
+      const framebuffer = {} as WebGLFramebuffer
+
+      xr.dispatchEvent({ type: 'sessionstart' })
+      xr.dispatchEvent({ type: 'sessionstart' })
+      state.drawBuffers({
+        textures: ['color'],
+      }, framebuffer)
+      state.drawBuffers({
+        textures: ['color'],
+      }, null)
+
+      // A framebuffer of its own goes through as it was, the default one as no render target
+      expect(drawBuffers.mock.calls).toEqual([
+        [
+          {
+            textures: ['color'],
+          },
+          framebuffer,
+        ],
+        [
+          { textures: null },
+          null,
+        ],
+      ])
     })
 
     it('gives the eyes and the camera the reversed form of the headset\'s projection with a reversed depth buffer', () => {

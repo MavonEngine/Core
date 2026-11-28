@@ -288,3 +288,14 @@
     flex-direction: column;
     gap: 4px;
 }
+
+.select {
+    flex: 1;
+    min-width: 0;
+    height: 20px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}

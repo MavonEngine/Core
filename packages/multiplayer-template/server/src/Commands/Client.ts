@@ -12,6 +12,7 @@ export enum LocalClientCommand {
   CL_INIT = 'cl_init',
   CL_MOVE = 'cl_move',
   CL_CHAT = 'cl_chat',
+  CL_NPC_CLICK = 'cl_npc_click',
 }
 
 export const ClientCommand = {
@@ -33,4 +34,9 @@ export type CL_MOVE = CommandPacket<LocalClientCommand.CL_MOVE> & {
 
 export type CL_CHAT = CommandPacket<LocalClientCommand.CL_CHAT> & {
   message: string
+}
+
+export type CL_NPC_CLICK = CommandPacket<LocalClientCommand.CL_NPC_CLICK> & {
+  /** The id of the NPC the player clicked */
+  npcId: string
 }

@@ -1,10 +1,11 @@
-import type { Matrix4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import type { Light, LightShadow, Matrix4 } from 'three'
+import type { WebGPURenderer } from 'three/webgpu'
 import type Game from './Game'
 import type Renderer from './Renderer'
 import type XRPanel from './ui/XRPanel'
 import type { XRInputOptions } from './XRInput'
 import type { XRLocomotionOptions } from './XRLocomotion'
-import { PerspectiveCamera } from 'three'
+import { PerspectiveCamera, Vector4 } from 'three'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
 import XRInput from './XRInput'
 import XRLocomotion from './XRLocomotion'
@@ -25,8 +26,9 @@ export interface XROptions {
   /**
    * Keep drawing the game in the browser window while a headset plays, from the player's head, e.g. for someone
    * watching or a stream. Renders the scene once more every frame. Off by default, toggled with `xr.mirror`.
-   * Drawing to the page can tie the session to the monitor's refresh: a Valve Index through SteamVR in Chrome on
-   * Linux ran at the monitor's 60 Hz with it, and at the headset's rate without
+   * It costs the headset frames: three.js rebuilds every object's render pipeline each time the camera changes
+   * between the headset's eyes and the mirror's (a Valve Index in Chrome on Windows ran at 45 Hz with it, at 90
+   * without). Without it, the window shows its last frame, blurred, saying the game is playing in VR
    */
   mirror?: boolean | XRMirrorOptions
 }
@@ -40,7 +42,7 @@ export interface XRMirrorOptions {
  * Plays the game in a VR headset through WebXR. Created by `Game.enableXR()`.
  *
  * While a session runs, the headset drives `camera.instance`'s position and rotation, rendering skips the
- * EffectComposer and `renderer.maxFps` is ignored.
+ * render pipeline and `renderer.maxFps` is ignored.
  */
 export default class XR {
   /** The "Enter VR" button, unless `button: false` was passed */
@@ -69,6 +71,9 @@ export default class XR {
   /** The camera's field of view before the session, which three.js replaces with the headset's */
   private desktopFov?: number
 
+  /** Over the page's canvas while a headset plays without the mirror: its last frame, blurred, saying so */
+  private backdrop?: HTMLElement
+
   constructor(
     private readonly renderer: Renderer,
     private readonly game: Game,
@@ -78,6 +83,14 @@ export default class XR {
     xr.enabled = true
     patchRenderer(renderer.instance)
     xr.setReferenceSpaceType(options.referenceSpace ?? 'local-floor')
+
+    // Taken before three.js has the session: it resizes the canvas for the headset, which clears it
+    const setSession = xr.setSession.bind(xr)
+    xr.setSession = (session: XRSession) => {
+      if (session && !this.mirror)
+        this.showBackdrop()
+      return setSession(session)
+    }
 
     this.sessionInit = {
       ...options.sessionInit,
@@ -101,6 +114,7 @@ export default class XR {
       game.trigger('xrSessionStart', xr.getSession())
     })
     xr.addEventListener('sessionend', () => {
+      this.hideBackdrop()
       // three.js gave the camera the headset's field of view, which would stay on the desktop
       if (this.desktopFov !== undefined)
         game.camera.instance.fov = this.desktopFov
@@ -175,7 +189,9 @@ export default class XR {
    * every frame while presenting and `mirror` is on
    */
   renderMirror() {
-    const webgl = this.renderer.instance
+    // Turned on during the session: the mirror shows instead
+    this.hideBackdrop()
+    const three = this.renderer.instance
     const camera = this.game.camera.instance
     const near = camera.near
     const far = camera.far
@@ -190,19 +206,75 @@ export default class XR {
 
     // With XR off for this one render, three.js draws to the page's canvas instead of the headset
     // The headset's frame already updated the shadow maps, so they're reused rather than rendered again
-    const target = webgl.getRenderTarget()
-    const shadowsAutoUpdate = webgl.shadowMap.autoUpdate
-    webgl.xr.enabled = false
-    webgl.shadowMap.autoUpdate = false
+    const target = three.getRenderTarget()
+    const shadows: LightShadow[] = []
+    this.game.scene.traverseVisible((object) => {
+      const light = object as Light & { shadow?: LightShadow }
+      const shadow = light.shadow
+      if (light.isLight && light.castShadow && shadow?.autoUpdate) {
+        shadow.autoUpdate = false
+        shadows.push(shadow)
+      }
+    })
+    // The session points the renderer's output render target at the headset's, which is drawn to whatever the render
+    // target, and gives the canvas the headset's size: the mirror would be drawn over both eyes. For this one render,
+    // the output is the canvas again, at its own size
+    const output = three.getOutputRenderTarget()
+    const canvas = (three as unknown as { _canvasTarget: { _width: number, _height: number } })._canvasTarget
+    const headsetSize = { width: canvas._width, height: canvas._height }
+    const viewport = three.getViewport(new Vector4())
+    three.xr.enabled = false
     try {
-      webgl.setRenderTarget(null)
-      webgl.render(this.game.scene, this.mirrorCamera)
+      three.setOutputRenderTarget(null)
+      canvas._width = three.domElement.width
+      canvas._height = three.domElement.height
+      three.setViewport(0, 0, canvas._width, canvas._height)
+      three.setRenderTarget(null)
+      three.render(this.game.scene, this.mirrorCamera)
     }
     finally {
-      webgl.xr.enabled = true
-      webgl.shadowMap.autoUpdate = shadowsAutoUpdate
-      webgl.setRenderTarget(target)
+      three.xr.enabled = true
+      for (const shadow of shadows)
+        shadow.autoUpdate = true
+      canvas._width = headsetSize.width
+      canvas._height = headsetSize.height
+      three.setViewport(viewport)
+      three.setOutputRenderTarget(output)
+      three.setRenderTarget(target)
     }
+  }
+
+  /**
+   * Cover the page's canvas with its last frame, blurred, saying the game plays in VR: otherwise it stays on a
+   * cleared canvas while the headset plays. Placed before the UI root, so the game's UI still shows over it
+   */
+  private showBackdrop() {
+    this.hideBackdrop()
+    const canvas = this.game.canvas
+    // A frame drawn now and copied in the same task: WebGL clears the canvas once a frame is shown. Small, as it's
+    // blurred anyway
+    this.renderer.render()
+    const snapshot = document.createElement('canvas')
+    snapshot.width = Math.max(1, Math.round(canvas.width / 4))
+    snapshot.height = Math.max(1, Math.round(canvas.height / 4))
+    snapshot.getContext('2d')?.drawImage(canvas, 0, 0, snapshot.width, snapshot.height)
+    snapshot.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;filter:blur(12px) brightness(0.55);transform:scale(1.06)'
+
+    const label = document.createElement('div')
+    label.textContent = 'Playing in VR'
+    label.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font:600 32px system-ui,sans-serif;letter-spacing:0.04em;text-shadow:0 2px 12px rgba(0,0,0,0.5)'
+
+    const backdrop = document.createElement('div')
+    backdrop.className = 'xr-backdrop'
+    backdrop.style.cssText = 'position:fixed;inset:0;overflow:hidden;pointer-events:none;background:#111'
+    backdrop.append(snapshot, label)
+    this.game.uiRoot.before(backdrop)
+    this.backdrop = backdrop
+  }
+
+  private hideBackdrop() {
+    this.backdrop?.remove()
+    this.backdrop = undefined
   }
 
   /** Whether this browser and device can run immersive VR */
@@ -246,25 +318,42 @@ export default class XR {
 }
 
 /**
- * Fixes for what three.js's WebXR leaves to the game:
+ * Fixes for what three.js's WebXR leaves to the game, with a reversed depth buffer (`reversedDepthBuffer: true`):
  *
- * - **Reversed depth** (`reversedDepthBuffer: true`): three gives each eye the headset's projection, which maps depth
- *   the GL way (-1 near, 1 far). Seeing a reversed depth buffer the renderer takes the eyes for cameras not yet set up
- *   for it and recomputes their projection from their default 50 degree fov, once, and from then on renders the
- *   headset's GL projection into the reversed buffer: the depth test inverted, the far side drawn over the near.
- *   After three found the view's frustum from the GL projections (it reads the near and far planes off them), the
- *   eyes, and the game's camera that three gives their union, get the reversed form instead.
+ * - **The eyes' projection**: three gives each eye the headset's projection, which maps depth the GL way (-1 near,
+ *   1 far), and renders it into the reversed buffer as it is: the depth test inverted, the far side drawn over the
+ *   near. After three found the view's frustum from the GL projections (it reads the near and far planes off them),
+ *   the eyes, and the game's camera that three gives their union, get the reversed form instead.
  * - **Reversed depth for the compositor**: the headset reads the depth buffer to correct the picture for the head's
  *   movement since it was rendered (positional timewarp, space warp), by the session's depthNear and depthFar. Read
  *   the GL way, a reversed buffer puts the far landscape right at the eyes, and it jitters as the head moves. The
  *   session is given them swapped (WebXR lets depthNear be the larger), which is how reversed depth reads, and the
  *   headset's projections come with the near plane at +1: they're turned the GL way for three first.
- * - **Off-screen renders**: while presenting, `render()` draws through the headset's cameras whatever it's given,
- *   into a render target too, e.g. an environment map, a lookup table or a mirror. Renders into a target that isn't
- *   the headset's render with the camera they were given, as three's own Reflector does it.
+ *
+ * Renders into a render target while presenting (environment maps, mirrors) need no fix: the renderer only uses the
+ * headset's cameras for the canvas.
+ *
+ * And, with any depth buffer:
+ *
+ * - **Layers only when granted**: three draws to the headset through a WebXR Layers projection layer wherever the
+ *   browser has the API (XRWebGLBinding.createProjectionLayer), whether or not the session was given the 'layers'
+ *   feature (three's #30112). Chrome on Windows (158, SteamVR) has the API but doesn't grant the feature: the layer is
+ *   taken, no frame ever comes and SteamVR says the page isn't responding. A session without the feature gets the
+ *   WebGL layer (XRWebGLLayer) instead.
  */
-function patchRenderer(renderer: WebGLRenderer) {
+function patchRenderer(renderer: WebGPURenderer) {
   const xr = renderer.xr
+
+  // three decides once, when the renderer is made, and reads it again every frame: so it's set for each session
+  const layers = xr as unknown as { _supportsLayers: boolean }
+  const supportsLayers = layers._supportsLayers
+  const setSession = xr.setSession.bind(xr)
+  xr.setSession = (session: XRSession) => {
+    if (session)
+      layers._supportsLayers = supportsLayers && !!session.enabledFeatures?.includes('layers')
+    return setSession(session)
+  }
+
   const updateCamera = xr.updateCamera.bind(xr)
   // The eyes' GL projections this frame, as three reads them: updateCamera can run more than once a frame
   let frame: XRFrame | null = null
@@ -272,12 +361,12 @@ function patchRenderer(renderer: WebGLRenderer) {
   let requested = ''
 
   xr.updateCamera = (camera: PerspectiveCamera) => {
-    if (!renderer.state.buffers.depth.getReversed()) {
+    if (!renderer.reversedDepthBuffer) {
       updateCamera(camera)
       return
     }
 
-    const eyes = xr.getCamera().cameras
+    const eyes = xr.getCamera().cameras as PerspectiveCamera[]
     if (xr.getFrame() !== frame) {
       frame = xr.getFrame()
       eyes.forEach((eye, i) => (glEyes[i] ??= eye.projectionMatrix.clone()).copy(glDepthOrder(eye.projectionMatrix, camera.near)))
@@ -301,21 +390,25 @@ function patchRenderer(renderer: WebGLRenderer) {
     requested = ''
   })
 
-  const render = renderer.render.bind(renderer)
-  renderer.render = (scene, camera) => {
-    const target = renderer.getRenderTarget() as (WebGLRenderTarget & { isXRRenderTarget?: boolean }) | null
-    if (!xr.enabled || !xr.isPresenting || !target || target.isXRRenderTarget) {
-      render(scene, camera)
+  // The headset's layer may draw to the default framebuffer: WebXR gives its framebuffer as null then (emulators do,
+  // like iwer). three's WebGL backend keys its draw buffer state by the framebuffer and throws on null. The default
+  // framebuffer only has the back buffer, which is what it sets up for no render target, so null goes that way
+  xr.addEventListener('sessionstart', () => {
+    const state = (renderer.backend as { state?: GLDrawBufferState } | undefined)?.state
+    if (!state || state.drawBuffers.allowsNullFramebuffer)
       return
-    }
-    xr.enabled = false
-    try {
-      render(scene, camera)
-    }
-    finally {
-      xr.enabled = true
-    }
-  }
+    const drawBuffers = state.drawBuffers.bind(state)
+    const patched = ((context, framebuffer) => framebuffer
+      ? drawBuffers(context, framebuffer)
+      : drawBuffers({ ...context, textures: null }, framebuffer)) as GLDrawBufferState['drawBuffers']
+    patched.allowsNullFramebuffer = true
+    state.drawBuffers = patched
+  })
+}
+
+/** The part of three's WebGL backend state that sets which buffers a framebuffer draws to */
+interface GLDrawBufferState {
+  drawBuffers: ((context: { textures: unknown }, framebuffer: WebGLFramebuffer | null) => void) & { allowsNullFramebuffer?: boolean }
 }
 
 /**

@@ -52,12 +52,30 @@ export default class InputManager extends EventEmitter {
         releaseAll()
     })
 
-    window.addEventListener('mousemove', (ev) => {
-      this.cursor.set(
-        ev.clientX / Game.instance().sizes.width * 2 - 1,
-        -(ev.clientY / Game.instance().sizes.height * 2 - 1),
-      )
-    })
+    window.addEventListener('mousemove', ev => this.updateCursor(ev))
+    // Also on press, so a click without a move before it (e.g. a touch tap) picks where it happened
+    window.addEventListener('pointerdown', ev => this.updateCursor(ev))
+  }
+
+  /**
+   * The cursor in normalized device coordinates (-1 to 1) of the canvas, not the window:
+   * in the editor the canvas is a panel that doesn't start at the window's corner.
+   */
+  updateCursor(ev: { clientX: number, clientY: number }) {
+    const rect = Game.instance().canvas?.getBoundingClientRect()
+    const hasRect = !!rect && rect.width > 0 && rect.height > 0
+    const left = hasRect ? rect.left : 0
+    const top = hasRect ? rect.top : 0
+    const width = hasRect
+      ? rect.width
+      : Game.instance().sizes.width
+    const height = hasRect
+      ? rect.height
+      : Game.instance().sizes.height
+    this.cursor.set(
+      (ev.clientX - left) / width * 2 - 1,
+      -((ev.clientY - top) / height * 2 - 1),
+    )
   }
 
   /**

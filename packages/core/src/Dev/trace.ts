@@ -2,7 +2,7 @@ import type Game from '../Game'
 
 /**
  * Records a few seconds of a game tab for the dev bridge `trace` query: every rendered frame (CPU time, GPU time, the
- * composer passes, the WebGL calls it made), game ticks, slow WebGL calls (shader compiles, uploads, GPU syncs),
+ * render pipeline, the WebGL calls it made), game ticks, slow WebGL calls (shader compiles, uploads, GPU syncs),
  * long animation frames, `performance.measure()` spans and, where the browser has it, a JS sampling profile.
  * Everything it patches is put back when it ends. Only used in dev, through the bridge.
  */
@@ -43,11 +43,11 @@ export interface TraceFrame {
   start: number
   /** ms since the previous frame began, null for the first */
   interval: number | null
-  /** ms on the CPU in Renderer.update (the composer and its passes) */
+  /** ms on the CPU in Renderer.update (the render pipeline) */
   cpu: number
   /** ms on the GPU, null when not measured */
   gpu: number | null
-  /** [start, duration] of each composer pass, in the order of `passes`, null for passes that didn't render */
+  /** [start, duration] of each timed render step, in the order of `passes`, null for those that didn't render */
   passes: ([number, number] | null)[]
   /** three.js renderer.info for the frame */
   calls: number
@@ -91,8 +91,10 @@ export interface TraceCapture {
   canvas: { width: number, height: number, pixelRatio: number }
   /** renderer.maxFps while tracing, 0 when frames aren't capped */
   maxFps: number
-  /** Composer pass names, the order of TraceFrame.passes */
+  /** The timed render steps, the order of TraceFrame.passes */
   passes: string[]
+  /** The renderer's post-processing effects (`renderer.addEffect()`), in the order they apply */
+  effects?: string[]
   gpuTiming: { enabled: boolean, note?: string }
   jsProfile: { enabled: boolean, note?: string }
   programs: number
@@ -218,6 +220,9 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
   try {
     const renderer = game.renderer
     const three = renderer.instance
+    // The calls are counted on the WebGL context, which the WebGPU backend doesn't have
+    if (renderer.isWebGPU)
+      throw new Error('Tracing counts WebGL calls, so it needs the WebGL 2 backend: start the game with forceWebGL')
     const gl = three.getContext() as WebGL2RenderingContext
     const t0 = performance.now()
     const now = () => performance.now() - t0
@@ -233,10 +238,11 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
         pixelRatio: three.getPixelRatio(),
       },
       maxFps: renderer.maxFps ?? 0,
-      passes: renderer.composer.passes.map(pass => pass.constructor.name || 'Pass'),
+      passes: ['RenderPipeline'],
+      effects: renderer.effectNames,
       gpuTiming: { enabled: false },
       jsProfile: { enabled: false },
-      programs: three.info.programs?.length ?? 0,
+      programs: three.info.memory.programs,
       frames: [],
       ticks: [],
       spans: [],
@@ -306,7 +312,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
       counts.syncMs += ms
     }))
 
-    // ---- GPU time per frame. three-perf times frames with the same extension and only one query can run at a time
+    // ---- GPU time per frame. Only one timer query can run at a time
     const timer = options.gpu
       ? gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number, GPU_DISJOINT_EXT: number } | null
       : null
@@ -319,13 +325,14 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     }
     else {
       capture.gpuTiming.enabled = true
-      if (renderer.perf) {
-        const perf = renderer.perf
-        renderer.perf = undefined
+      // three's backend times passes with the same extension once the inspector turns it on
+      const backend = renderer.instance.backend as unknown as { trackTimestamp: boolean }
+      if (backend.trackTimestamp) {
+        backend.trackTimestamp = false
         restore.push(() => {
-          renderer.perf = perf
+          backend.trackTimestamp = true
         })
-        capture.gpuTiming.note = 'The three-perf panel was paused while tracing, it times the GPU with the same extension'
+        capture.gpuTiming.note = 'The inspector\'s GPU timing was paused while tracing, it times the GPU with the same extension'
       }
     }
 
@@ -354,7 +361,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     })
 
     let passTimes: ([number, number] | null)[] = []
-    renderer.composer.passes.forEach((pass, index) => patch(pass, 'render', original => (...args: unknown[]) => {
+    ;[renderer.pipeline].forEach((pass, index) => patch(pass, 'render', original => (...args: unknown[]) => {
       const start = performance.now()
       const result = original(...args)
       passTimes[index] = [
@@ -375,7 +382,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
       // Calls since the previous frame (loading, game logic) belong to this one
       const frameCounts = counts
       info.reset()
-      passTimes = renderer.composer.passes.map(() => null)
+      passTimes = [null]
 
       const query = timer && gl.createQuery()
       if (query)
@@ -397,7 +404,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
           cpu: round(now() - start),
           gpu: null,
           passes: passTimes,
-          calls: info.render.calls,
+          calls: info.render.drawCalls,
           triangles: info.render.triangles,
           gl: {
             ...frameCounts,
@@ -575,7 +582,7 @@ export async function recordTrace(game: Game, options: TraceOptions): Promise<Tr
     }
     pendingQueries.forEach(({ query }) => gl.deleteQuery(query))
 
-    capture.programs = three.info.programs?.length ?? 0
+    capture.programs = three.info.memory.programs
     return capture
   }
   finally {
