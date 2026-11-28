@@ -5,7 +5,7 @@ import type Renderer from './Renderer'
 import type XRPanel from './ui/XRPanel'
 import type { XRInputOptions } from './XRInput'
 import type { XRLocomotionOptions } from './XRLocomotion'
-import { PerspectiveCamera } from 'three'
+import { PerspectiveCamera, Vector4 } from 'three'
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js'
 import XRInput from './XRInput'
 import XRLocomotion from './XRLocomotion'
@@ -201,8 +201,19 @@ export default class XR {
         shadows.push(shadow)
       }
     })
+    // The session points the renderer's output render target at the headset's, which is drawn to whatever the render
+    // target, and gives the canvas the headset's size: the mirror would be drawn over both eyes. For this one render,
+    // the output is the canvas again, at its own size
+    const output = three.getOutputRenderTarget()
+    const canvas = (three as unknown as { _canvasTarget: { _width: number, _height: number } })._canvasTarget
+    const headsetSize = { width: canvas._width, height: canvas._height }
+    const viewport = three.getViewport(new Vector4())
     three.xr.enabled = false
     try {
+      three.setOutputRenderTarget(null)
+      canvas._width = three.domElement.width
+      canvas._height = three.domElement.height
+      three.setViewport(0, 0, canvas._width, canvas._height)
       three.setRenderTarget(null)
       three.render(this.game.scene, this.mirrorCamera)
     }
@@ -210,6 +221,10 @@ export default class XR {
       three.xr.enabled = true
       for (const shadow of shadows)
         shadow.autoUpdate = true
+      canvas._width = headsetSize.width
+      canvas._height = headsetSize.height
+      three.setViewport(viewport)
+      three.setOutputRenderTarget(output)
       three.setRenderTarget(target)
     }
   }
@@ -269,9 +284,28 @@ export default class XR {
  *
  * Renders into a render target while presenting (environment maps, mirrors) need no fix: the renderer only uses the
  * headset's cameras for the canvas.
+ *
+ * And, with any depth buffer:
+ *
+ * - **Layers only when granted**: three draws to the headset through a WebXR Layers projection layer wherever the
+ *   browser has the API (XRWebGLBinding.createProjectionLayer), whether or not the session was given the 'layers'
+ *   feature (three's #30112). Chrome on Windows (158, SteamVR) has the API but doesn't grant the feature: the layer is
+ *   taken, no frame ever comes and SteamVR says the page isn't responding. A session without the feature gets the
+ *   WebGL layer (XRWebGLLayer) instead.
  */
 function patchRenderer(renderer: WebGPURenderer) {
   const xr = renderer.xr
+
+  // three decides once, when the renderer is made, and reads it again every frame: so it's set for each session
+  const layers = xr as unknown as { _supportsLayers: boolean }
+  const supportsLayers = layers._supportsLayers
+  const setSession = xr.setSession.bind(xr)
+  xr.setSession = (session: XRSession) => {
+    if (session)
+      layers._supportsLayers = supportsLayers && !!session.enabledFeatures?.includes('layers')
+    return setSession(session)
+  }
+
   const updateCamera = xr.updateCamera.bind(xr)
   // The eyes' GL projections this frame, as three reads them: updateCamera can run more than once a frame
   let frame: XRFrame | null = null
